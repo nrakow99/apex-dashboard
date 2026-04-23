@@ -1,0 +1,84 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    /* Lucid-style premium dark theme */
+    --background: 220 16% 4%;
+    --foreground: 210 40% 98%;
+    --card: 220 16% 7%;
+    --card-foreground: 210 40% 98%;
+    --popover: 220 16% 7%;
+    --popover-foreground: 210 40% 98%;
+    --primary: 142 72% 42%;
+    --primary-foreground: 210 40% 98%;
+    --secondary: 220 14% 10%;
+    --secondary-foreground: 210 40% 98%;
+    --muted: 220 14% 10%;
+    --muted-foreground: 215 16% 50%;
+    --accent: 220 14% 12%;
+    --accent-foreground: 210 40% 98%;
+    --destructive: 0 72% 51%;
+    --destructive-foreground: 210 40% 98%;
+    --border: 220 12% 12%;
+    --input: 220 12% 12%;
+    --ring: 142 72% 42%;
+    --radius: 0.5rem;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+  body {
+    @apply bg-background text-foreground antialiased;
+  }
+}
+
+/* Custom scrollbar - minimal */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: hsl(var(--border));
+  border-radius: 3px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: hsl(var(--muted-foreground) / 0.3);
+}
+
+/* Subtle glow effects */
+.glow-success {
+  box-shadow: 0 0 30px hsl(142 72% 42% / 0.1);
+}
+
+.glow-danger {
+  box-shadow: 0 0 30px hsl(0 72% 51% / 0.1);
+}
+
+/* Font smoothing */
+html {
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* Tabular numbers for proper alignment */
+.font-mono {
+  font-variant-numeric: tabular-nums;
+}
+
+/* Number display class for consistent formatting */
+.num {
+  font-family: var(--font-mono), 'JetBrains Mono', monospace;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.025em;
+}
