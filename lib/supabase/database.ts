@@ -281,3 +281,75 @@ export async function deletePayout(payoutId: string): Promise<{ error: Error | n
 
   return { error: null }
 }
+
+// Update an account
+export async function updateAccount(
+  accountId: string,
+  updates: {
+    name?: string
+    type?: "Eval" | "PA" | "Live"
+    status?: "Active" | "Inactive" | "Breached" | "Passed"
+    startingBalance?: number
+    profitTarget?: number | null
+    maxDrawdown?: number
+    dailyLossLimit?: number
+  }
+): Promise<{ data: Account | null; error: Error | null }> {
+  const supabase = createClient()
+
+  const updateData: Record<string, unknown> = {}
+  if (updates.name !== undefined) updateData.name = updates.name
+  if (updates.type !== undefined) updateData.type = updates.type
+  if (updates.status !== undefined) updateData.status = updates.status
+  if (updates.startingBalance !== undefined) updateData.starting_balance = updates.startingBalance
+  if (updates.profitTarget !== undefined) updateData.profit_target = updates.profitTarget
+  if (updates.maxDrawdown !== undefined) updateData.max_drawdown = updates.maxDrawdown
+  if (updates.dailyLossLimit !== undefined) updateData.daily_loss_limit = updates.dailyLossLimit
+
+  const { data, error } = await supabase
+    .from("accounts")
+    .update(updateData)
+    .eq("id", accountId)
+    .select()
+    .single()
+
+  if (error) {
+    return { data: null, error: new Error(error.message) }
+  }
+
+  return { data: rowToAccount(data as AccountRow), error: null }
+}
+
+// Update a trade
+export async function updateTrade(
+  tradeId: string,
+  updates: {
+    date?: string
+    accountId?: string
+    symbol?: string
+    pnl?: number
+    notes?: string | null
+  }
+): Promise<{ data: Trade | null; error: Error | null }> {
+  const supabase = createClient()
+
+  const updateData: Record<string, unknown> = {}
+  if (updates.date !== undefined) updateData.date = updates.date
+  if (updates.accountId !== undefined) updateData.account_id = updates.accountId
+  if (updates.symbol !== undefined) updateData.symbol = updates.symbol
+  if (updates.pnl !== undefined) updateData.pnl = updates.pnl
+  if (updates.notes !== undefined) updateData.notes = updates.notes
+
+  const { data, error } = await supabase
+    .from("trades")
+    .update(updateData)
+    .eq("id", tradeId)
+    .select()
+    .single()
+
+  if (error) {
+    return { data: null, error: new Error(error.message) }
+  }
+
+  return { data: rowToTrade(data as TradeRow), error: null }
+}
