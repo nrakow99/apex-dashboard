@@ -1,5 +1,6 @@
 "use client"
 
+import type { ReactNode } from "react"
 import { Card } from "@/components/ui/card"
 import { cn } from "@/lib/utils"
 
@@ -16,17 +17,22 @@ interface MetricsCardProps {
     isGood: boolean
   }
   subValue?: string // Optional secondary value (e.g., projected floor)
+  /** e.g. manual edit control aligned with title row */
+  titleAction?: ReactNode
 }
 
-export function MetricsCard({ title, value, change, status, subValue }: MetricsCardProps) {
+export function MetricsCard({ title, value, change, status, subValue, titleAction }: MetricsCardProps) {
   return (
-    <Card className="p-3 sm:p-4 bg-card/50 backdrop-blur border-border/50">
-      <div className="space-y-0.5 sm:space-y-1">
-        <p className="text-[10px] sm:text-[11px] font-medium text-muted-foreground uppercase tracking-wider truncate">
-          {title}
-        </p>
+    <Card className="p-3 sm:p-3.5 rounded-[20px] glass-card glass-card-hover">
+      <div className="space-y-1">
+        <div className="flex items-start justify-between gap-1.5">
+          <p className="text-[10px] sm:text-[11px] font-medium text-slate-400 uppercase tracking-[0.14em] min-w-0 flex-1 truncate">
+            {title}
+          </p>
+          {titleAction ? <span className="shrink-0">{titleAction}</span> : null}
+        </div>
         <p className={cn(
-          "text-lg sm:text-[22px] font-semibold font-mono tracking-tight leading-tight truncate",
+          "text-[17px] sm:text-[20px] font-semibold font-mono tracking-tight leading-tight truncate",
           value.startsWith("+") && "text-emerald-500",
           value.startsWith("-") && "text-red-500"
         )}>
@@ -34,7 +40,7 @@ export function MetricsCard({ title, value, change, status, subValue }: MetricsC
         </p>
         {change && (
           <p className={cn(
-            "text-xs font-mono",
+            "text-[11px] sm:text-xs font-mono",
             change.isPositive ? "text-emerald-500/80" : "text-red-500/80"
           )}>
             {change.value}

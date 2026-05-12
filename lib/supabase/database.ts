@@ -16,6 +16,9 @@ interface AccountRow {
   profit_target: number | null
   max_drawdown: number
   daily_loss_limit: number | null
+  manual_intraday_floor?: number | null
+  manual_drawdown_remaining?: number | null
+  manual_drawdown_updated_at?: string | null
   created_at: string
   updated_at: string
 }
@@ -60,6 +63,11 @@ function rowToAccount(row: AccountRow): Account {
     profitTarget: row.profit_target ?? undefined,
     maxDrawdown: row.max_drawdown,
     dailyLossLimit: row.daily_loss_limit ?? 0,
+    manualIntradayFloor:
+      row.manual_intraday_floor != null ? Number(row.manual_intraday_floor) : null,
+    manualDrawdownRemaining:
+      row.manual_drawdown_remaining != null ? Number(row.manual_drawdown_remaining) : null,
+    manualDrawdownUpdatedAt: row.manual_drawdown_updated_at ?? null,
   }
 }
 
@@ -251,6 +259,9 @@ export async function updateAccount(
     profitTarget?: number | null
     maxDrawdown?: number
     dailyLossLimit?: number | null
+    manualIntradayFloor?: number | null
+    manualDrawdownRemaining?: number | null
+    manualDrawdownUpdatedAt?: string | null
   }
 ): Promise<{ data: Account | null; error: Error | null }> {
   const supabase = createClient()
@@ -265,6 +276,12 @@ export async function updateAccount(
   if (updates.profitTarget !== undefined) updateData.profit_target = updates.profitTarget
   if (updates.maxDrawdown !== undefined) updateData.max_drawdown = updates.maxDrawdown
   if (updates.dailyLossLimit !== undefined) updateData.daily_loss_limit = updates.dailyLossLimit
+  if (updates.manualIntradayFloor !== undefined)
+    updateData.manual_intraday_floor = updates.manualIntradayFloor
+  if (updates.manualDrawdownRemaining !== undefined)
+    updateData.manual_drawdown_remaining = updates.manualDrawdownRemaining
+  if (updates.manualDrawdownUpdatedAt !== undefined)
+    updateData.manual_drawdown_updated_at = updates.manualDrawdownUpdatedAt
 
   const { data, error } = await supabase
     .from("accounts")

@@ -38,18 +38,18 @@ export function TradeHistoryTable({ trades, onEditTrade, onDeleteTrade }: TradeH
   }, [trades])
 
   return (
-    <Card className="bg-card/50 backdrop-blur border-border/50 overflow-hidden">
-      <div className="px-4 sm:px-5 py-3 sm:py-4 border-b border-border/50">
+    <Card className="rounded-[24px] glass-card overflow-hidden">
+      <div className="px-3.5 sm:px-[18px] py-3 sm:py-3.5 border-b border-white/10">
         <h2 className="text-base sm:text-lg font-semibold">Trade History</h2>
       </div>
       <div className="overflow-x-auto">
         <Table>
           <TableHeader>
-            <TableRow className="border-border/50 hover:bg-transparent">
-              <TableHead className="text-muted-foreground text-[10px] sm:text-xs uppercase tracking-wider px-3 sm:px-4">Date</TableHead>
-              <TableHead className="text-muted-foreground text-[10px] sm:text-xs uppercase tracking-wider px-3 sm:px-4">Symbol</TableHead>
-              <TableHead className="text-muted-foreground text-[10px] sm:text-xs uppercase tracking-wider text-right px-3 sm:px-4">PnL</TableHead>
-              <TableHead className="text-muted-foreground text-[10px] sm:text-xs uppercase tracking-wider px-3 sm:px-4 hidden sm:table-cell">Notes</TableHead>
+              <TableRow className="border-white/10 hover:bg-transparent">
+              <TableHead className="px-3 sm:px-4">Date</TableHead>
+              <TableHead className="px-3 sm:px-4">Symbol</TableHead>
+              <TableHead className="text-right px-3 sm:px-4">PnL</TableHead>
+              <TableHead className="px-3 sm:px-4 hidden sm:table-cell">Notes</TableHead>
               {(onEditTrade || onDeleteTrade) && (
                 <TableHead className="text-muted-foreground text-[10px] sm:text-xs uppercase tracking-wider px-3 sm:px-4 w-12"></TableHead>
               )}
@@ -59,15 +59,15 @@ export function TradeHistoryTable({ trades, onEditTrade, onDeleteTrade }: TradeH
             {sortedTrades.map((trade) => (
               <TableRow
                 key={trade.id}
-                className="border-border/50 hover:bg-muted/50 transition-colors group"
+                className="border-white/10 hover:bg-white/[0.03] transition-colors group"
               >
-                <TableCell className="font-medium py-2.5 sm:py-3.5 px-3 sm:px-4 text-xs sm:text-sm">
+                <TableCell className="font-medium py-3 sm:py-3.5 px-3 sm:px-4 text-xs sm:text-sm">
                   {formatDate(trade.date)}
                 </TableCell>
                 <TableCell className="px-3 sm:px-4">
                   <span className="font-mono font-semibold text-xs sm:text-sm">{trade.symbol}</span>
                 </TableCell>
-                <TableCell className="text-right py-2.5 sm:py-3.5 px-3 sm:px-4">
+                <TableCell className="text-right py-3 sm:py-3.5 px-3 sm:px-4">
                   <span className={cn(
                     "font-mono font-semibold text-xs sm:text-sm",
                     trade.pnl > 0 ? "text-emerald-500" : trade.pnl < 0 ? "text-red-500" : "text-muted-foreground"
@@ -87,7 +87,7 @@ export function TradeHistoryTable({ trades, onEditTrade, onDeleteTrade }: TradeH
                         <Button 
                           variant="ghost" 
                           size="icon" 
-                          className="h-8 w-8 opacity-0 group-hover:opacity-100 transition-opacity"
+                          className="h-9 w-9 opacity-0 group-hover:opacity-100 focus-visible:opacity-100 transition-opacity"
                         >
                           <MoreHorizontal className="h-4 w-4" />
                           <span className="sr-only">Open menu</span>
@@ -119,7 +119,7 @@ export function TradeHistoryTable({ trades, onEditTrade, onDeleteTrade }: TradeH
         </Table>
       </div>
       {trades.length === 0 && (
-        <div className="p-6 sm:p-10 text-center text-sm sm:text-base text-muted-foreground">
+        <div className="p-5 sm:p-7 text-center text-sm sm:text-base text-muted-foreground">
           No trades recorded yet
         </div>
       )}

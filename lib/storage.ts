@@ -1,6 +1,7 @@
 import type { Account, Trade, Payout, DailyPnL } from "./types"
 import { EOD_CONSTANTS } from "./types"
 import { getAccountRules } from "./rules"
+import { lucidFlexActiveFloor } from "./lucid-flex-floor"
 
 // ─── EOD Time Utilities ───────────────────────────────────────────────────────
 
@@ -101,9 +102,29 @@ export function calculateAccountStats(
     ? Math.max(highestCompletedEodBalance, currentBalance)
     : highestCompletedEodBalance
 
-  const activeEodFloor = peakBalance - account.maxDrawdown
+  const rules = getAccountRules(account)
+
+  let activeEodFloor = peakBalance - account.maxDrawdown
   const projectedHighest = Math.max(highestCompletedEodBalance, currentBalance)
-  const projectedEodFloor = projectedHighest - account.maxDrawdown
+  let projectedEodFloor = projectedHighest - account.maxDrawdown
+
+  if (
+    rules.lucidFlexFloor &&
+    account.firm === "Lucid" &&
+    account.type === "PA"
+  ) {
+    activeEodFloor = lucidFlexActiveFloor(
+      peakBalance,
+      account.maxDrawdown,
+      rules.lucidFlexFloor,
+    )
+    projectedEodFloor = lucidFlexActiveFloor(
+      projectedHighest,
+      account.maxDrawdown,
+      rules.lucidFlexFloor,
+    )
+  }
+
   const drawdownRemaining = currentBalance - activeEodFloor
 
   return {
@@ -111,6 +132,8 @@ export function calculateAccountStats(
     totalPnL,
     totalPayouts,
     maxBalance: Math.max(highestCompletedEodBalance, currentBalance),
+    /** Peak balance used for floor calculation (EOD: completed-day peak; intraday: includes live) */
+    floorPeakBalance: peakBalance,
     minBalance: activeEodFloor,
     drawdownRemaining,
     tradingDays: dailyData.filter((d) => d.tradesCount > 0).length,

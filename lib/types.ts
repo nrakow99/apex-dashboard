@@ -17,6 +17,11 @@ export interface Account {
   profitTarget?: number
   maxDrawdown: number
   dailyLossLimit: number
+  /** Intraday only: manual active floor from Tradovate (optional) */
+  manualIntradayFloor?: number | null
+  /** Intraday only: manual distance to floor (optional) */
+  manualDrawdownRemaining?: number | null
+  manualDrawdownUpdatedAt?: string | null
 }
 
 export interface Trade {

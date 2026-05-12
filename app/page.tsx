@@ -14,6 +14,20 @@ import { EditTradeModal } from "@/components/edit-trade-modal"
 import { EditAccountModal } from "@/components/edit-account-modal"
 import { DeleteConfirmationModal } from "@/components/delete-confirmation-modal"
 import { LiveClock } from "@/components/live-clock"
+import { AccountRangeCard, shouldShowAccountRangeCard } from "@/components/account-range-card"
+import {
+  ManualIntradayDrawdownModal,
+  type ManualDrawdownMode,
+} from "@/components/manual-intraday-drawdown-modal"
+import {
+  applyIntradayManualDrawdownToStats,
+  hasIntradayManualDrawdown,
+} from "@/lib/intraday-manual-drawdown"
+import {
+  getFloorDisplayTitle,
+  getFloorMetricStatusLabel,
+  shouldShowEodProjectedFloorSubValue,
+} from "@/lib/floor-display-labels"
 import { Button } from "@/components/ui/button"
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import {
@@ -66,6 +80,8 @@ export default function Dashboard() {
   const [deletingTrade, setDeletingTrade] = useState<Trade | null>(null)
   const [editingAccount, setEditingAccount] = useState<Account | null>(null)
   const [deletingAccount, setDeletingAccount] = useState<Account | null>(null)
+  const [manualIntradayModalOpen, setManualIntradayModalOpen] = useState(false)
+  const [manualIntradayModalMode, setManualIntradayModalMode] = useState<ManualDrawdownMode>("remaining")
 
   // Load data from Supabase on mount
   const loadData = useCallback(async () => {
@@ -136,17 +152,149 @@ export default function Dashboard() {
     return calculateAccountStats(selectedAccount, allTrades, allPayouts)
   }, [selectedAccount, allTrades, allPayouts])
 
+  /** Display-only floor/drawdown for intraday manual Tradovate overrides; payout logic uses raw accountStats */
+  const displayAccountStats = useMemo(() => {
+    if (!selectedAccount || !accountStats) return null
+    return applyIntradayManualDrawdownToStats(selectedAccount, accountStats)
+  }, [selectedAccount, accountStats])
+
   const consistencyInfo = useMemo(() => {
     if (!selectedAccount) return null
     const rules = getAccountRules(selectedAccount)
-    if (!rules.hasConsistency) return null
-    return getConsistencyInfo(selectedAccount.id, allTrades, selectedAccount, allPayouts)
+    if (rules.hasConsistency)
+      return getConsistencyInfo(selectedAccount.id, allTrades, selectedAccount, allPayouts)
+    // LucidFlex PA: qualifying profit-day count (no Apex-style consistency rule)
+    if (
+      selectedAccount.firm === "Lucid" &&
+      selectedAccount.type === "PA" &&
+      rules.minProfitDays > 0
+    ) {
+      return getConsistencyInfo(selectedAccount.id, allTrades, selectedAccount, allPayouts)
+    }
+    return null
   }, [selectedAccount, allTrades, allPayouts])
 
   const payoutEligibility = useMemo(() => {
     if (!selectedAccount || selectedAccount.type !== "PA") return null
     return getPayoutEligibility(selectedAccount.id, allTrades, selectedAccount, allPayouts)
   }, [selectedAccount, allTrades, allPayouts])
+
+  /** Fourth top metric: qualifying days (PA), profit/consistency (Eval), or trading days (Live). Display-only; counts match rules/payout helpers. */
+  const fourthStatMetric = useMemo(() => {
+    if (!selectedAccount || !accountStats) return null
+    const rules = getAccountRules(selectedAccount)
+
+    if (selectedAccount.type === "PA") {
+      const minReq = rules.minProfitDays
+      const minDaily = rules.minDailyProfit
+
+      if (selectedAccount.firm === "Lucid" && payoutEligibility?.firm === "Lucid") {
+        const count = payoutEligibility.cycleProfitDays
+        return {
+          title: "Qualifying Days",
+          value: count.toString(),
+          change: {
+            value: `${count} / ${minReq} required`,
+            isPositive: count >= minReq,
+          },
+          subValue: `$${minDaily.toLocaleString()}+ profit days (this payout cycle)`,
+        }
+      }
+
+      if (selectedAccount.firm === "Apex") {
+        const count = accountDailyData.filter((d) => d.pnl >= rules.minDailyProfit).length
+        return {
+          title: "Qualifying Days",
+          value: count.toString(),
+          change: {
+            value: `${count} / ${minReq} required`,
+            isPositive: count >= minReq,
+          },
+          subValue: `$${minDaily.toLocaleString()}+ profit days`,
+        }
+      }
+    }
+
+    if (selectedAccount.type === "Eval") {
+      const pt =
+        selectedAccount.profitTarget ??
+        (rules.hasProfitTarget ? rules.profitTarget : null)
+
+      if (rules.hasProfitTarget && pt != null && pt > 0) {
+        return {
+          title: "Profit Target",
+          value: formatCurrency(accountStats.totalPnL),
+          change: {
+            value: `of ${formatCurrency(pt)} goal`,
+            isPositive: accountStats.totalPnL >= pt,
+          },
+        }
+      }
+
+      if (rules.hasConsistency && consistencyInfo) {
+        return {
+          title: "Consistency",
+          value: consistencyInfo.isValid ? "Compliant" : "Review",
+          change: {
+            value: `${rules.consistencyPercent}% largest-day vs total profit`,
+            isPositive: consistencyInfo.isValid,
+          },
+        }
+      }
+
+      if (rules.minTradingDays > 0) {
+        return {
+          title: "Trading Days",
+          value: accountStats.tradingDays.toString(),
+          change: {
+            value: `${rules.minTradingDays} required`,
+            isPositive: accountStats.tradingDays >= rules.minTradingDays,
+          },
+        }
+      }
+
+      return {
+        title: "Days Traded",
+        value: accountStats.tradingDays.toString(),
+        change: {
+          value: "Days with executed trades",
+          isPositive: accountStats.tradingDays > 0,
+        },
+      }
+    }
+
+    if (
+      selectedAccount.type === "Live" &&
+      rules.minProfitDays > 0 &&
+      rules.minDailyProfit > 0
+    ) {
+      const count = accountDailyData.filter((d) => d.pnl >= rules.minDailyProfit).length
+      return {
+        title: "Qualifying Days",
+        value: count.toString(),
+        change: {
+          value: `${count} / ${rules.minProfitDays} required`,
+          isPositive: count >= rules.minProfitDays,
+        },
+        subValue: `$${rules.minDailyProfit.toLocaleString()}+ profit days`,
+      }
+    }
+
+    return {
+      title: "Trading Days",
+      value: accountStats.tradingDays.toString(),
+      change: {
+        value: "Days with trades",
+        isPositive: accountStats.tradingDays > 0,
+      },
+    }
+  }, [
+    selectedAccount,
+    accountStats,
+    accountDailyData,
+    payoutEligibility,
+    consistencyInfo,
+  ])
 
   // Total cash withdrawn across all accounts
   const totalCashWithdrawn = useMemo(() => {
@@ -365,13 +513,70 @@ export default function Dashboard() {
     }
   }
 
+  const handleManualIntradaySave = async (params: {
+    manualIntradayFloor: number
+    manualDrawdownRemaining: number
+  }) => {
+    if (!selectedAccount) return
+    setIsSaving(true)
+    try {
+      const result = await updateAccount(selectedAccount.id, {
+        manualIntradayFloor: params.manualIntradayFloor,
+        manualDrawdownRemaining: params.manualDrawdownRemaining,
+        manualDrawdownUpdatedAt: new Date().toISOString(),
+      })
+      if (result.error) throw result.error
+      if (result.data) {
+        setAccounts((prev) => prev.map((a) => (a.id === selectedAccount.id ? result.data! : a)))
+        toast({ title: "Saved", description: "Intraday drawdown updated." })
+      }
+    } catch (err) {
+      toast({
+        title: "Error",
+        description: err instanceof Error ? err.message : "Could not save",
+        variant: "destructive",
+      })
+      throw err
+    } finally {
+      setIsSaving(false)
+    }
+  }
+
+  const handleManualIntradayClear = async () => {
+    if (!selectedAccount) return
+    setIsSaving(true)
+    try {
+      const result = await updateAccount(selectedAccount.id, {
+        manualIntradayFloor: null,
+        manualDrawdownRemaining: null,
+        manualDrawdownUpdatedAt: null,
+      })
+      if (result.error) throw result.error
+      if (result.data) {
+        setAccounts((prev) => prev.map((a) => (a.id === selectedAccount.id ? result.data! : a)))
+        toast({ title: "Cleared", description: "Manual intraday override removed." })
+      }
+    } catch (err) {
+      toast({
+        title: "Error",
+        description: err instanceof Error ? err.message : "Could not clear",
+        variant: "destructive",
+      })
+      throw err
+    } finally {
+      setIsSaving(false)
+    }
+  }
+
   // Loading state
   if (isLoading) {
     return (
-      <div className="min-h-screen bg-background flex items-center justify-center">
-        <div className="flex flex-col items-center gap-4">
-          <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
-          <p className="text-muted-foreground">Loading your accounts...</p>
+      <div className="min-h-screen premium-shell flex items-center justify-center">
+        <div className="glass-card rounded-3xl px-8 py-7 flex flex-col items-center gap-3">
+          <div className="rounded-full border border-cyan-300/20 bg-cyan-500/10 p-3 shadow-[0_0_28px_-16px_rgba(34,211,238,0.7)]">
+            <Loader2 className="h-7 w-7 animate-spin text-emerald-400" />
+          </div>
+          <p className="text-sm text-slate-300">Loading your accounts...</p>
         </div>
       </div>
     )
@@ -380,7 +585,7 @@ export default function Dashboard() {
   // Error state
   if (error && accounts.length === 0) {
     return (
-      <div className="min-h-screen bg-background flex items-center justify-center">
+      <div className="min-h-screen premium-shell flex items-center justify-center">
         <div className="flex flex-col items-center gap-4 max-w-md text-center">
           <AlertCircle className="h-8 w-8 text-red-500" />
           <p className="text-red-500">{error}</p>
@@ -394,7 +599,7 @@ export default function Dashboard() {
   }
 
   return (
-    <div className="min-h-screen bg-background">
+    <div className="min-h-screen premium-shell">
       {/* Edit Trade Modal */}
       <EditTradeModal
         trade={editingTrade}
@@ -469,9 +674,24 @@ export default function Dashboard() {
         confirmText="Delete Account"
       />
 
+      {selectedAccount?.drawdownType === "Intraday" && accountStats && (
+        <ManualIntradayDrawdownModal
+          open={manualIntradayModalOpen}
+          onOpenChange={setManualIntradayModalOpen}
+          currentBalance={accountStats.currentBalance}
+          initialMode={manualIntradayModalMode}
+          estimatedFloor={accountStats.activeEodFloor ?? accountStats.minBalance}
+          estimatedDrawdownRemaining={accountStats.drawdownRemaining}
+          hasManualOverride={hasIntradayManualDrawdown(selectedAccount)}
+          onSave={handleManualIntradaySave}
+          onClearManual={handleManualIntradayClear}
+          isSaving={isSaving}
+        />
+      )}
+
       {/* Error toast */}
       {error && accounts.length > 0 && (
-        <div className="fixed top-4 right-4 z-50 bg-red-500/10 border border-red-500/30 text-red-500 px-4 py-3 rounded-lg flex items-center gap-3">
+        <div className="fixed top-4 right-4 z-50 bg-red-500/10 border border-red-400/30 text-red-300 px-4 py-3 rounded-2xl backdrop-blur-xl flex items-center gap-3">
           <AlertCircle className="h-4 w-4" />
           <span className="text-sm">{error}</span>
           <button onClick={() => setError(null)} className="text-red-500/70 hover:text-red-500">
@@ -482,22 +702,22 @@ export default function Dashboard() {
 
       {/* Saving indicator */}
       {isSaving && (
-        <div className="fixed top-4 left-1/2 -translate-x-1/2 z-50 bg-card border border-border px-4 py-2 rounded-lg flex items-center gap-2 shadow-lg">
+        <div className="fixed top-4 left-1/2 -translate-x-1/2 z-50 bg-slate-950/80 border border-white/10 px-4 py-2 rounded-2xl backdrop-blur-xl flex items-center gap-2 shadow-lg">
           <Loader2 className="h-4 w-4 animate-spin" />
           <span className="text-sm">Saving...</span>
         </div>
       )}
 
-      <div className="max-w-[1400px] mx-auto px-4 sm:px-6 py-6 sm:py-8">
+      <div className="max-w-[1680px] mx-auto px-3 sm:px-5 lg:px-6 py-3 sm:py-4">
         {viewMode === "accounts" ? (
           <>
             {/* Header */}
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
-              <h1 className="text-2xl sm:text-3xl font-bold tracking-tight">Accounts</h1>
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4 sm:mb-5">
+              <h1 className="text-2xl sm:text-3xl font-semibold tracking-tight text-slate-100">Accounts</h1>
               <div className="flex items-center gap-2 sm:gap-4 flex-wrap">
                 {/* Total Cash Withdrawn */}
                 {totalCashWithdrawn > 0 && (
-                  <div className="text-right pr-3 sm:pr-4 border-r border-border/50">
+                  <div className="text-right pr-3 sm:pr-4 border-r border-white/10">
                     <div className="text-[10px] sm:text-[11px] text-muted-foreground uppercase tracking-wider">Withdrawn</div>
                     <div className="text-base sm:text-lg font-semibold font-mono text-emerald-500">
                       {formatCurrency(totalCashWithdrawn)}
@@ -512,7 +732,7 @@ export default function Dashboard() {
                     onAddTrade={handleAddTrade}
                   />
                 )}
-                <Button variant="ghost" size="icon" onClick={handleSignOut} title="Sign out">
+                <Button variant="ghost" size="icon" onClick={handleSignOut} title="Sign out" className="border border-white/10 bg-slate-900/55 hover:bg-slate-800/80">
                   <LogOut className="h-4 w-4" />
                 </Button>
               </div>
@@ -522,9 +742,9 @@ export default function Dashboard() {
             <Tabs
               value={accountFilter}
               onValueChange={(v) => setAccountFilter(v as AccountType | "All")}
-              className="mb-6"
+              className="mb-4 sm:mb-5"
             >
-              <TabsList className="bg-muted/50">
+              <TabsList>
                 <TabsTrigger value="All">All</TabsTrigger>
                 <TabsTrigger value="Eval">Eval</TabsTrigger>
                 <TabsTrigger value="PA">PA</TabsTrigger>
@@ -534,7 +754,7 @@ export default function Dashboard() {
 
             {/* Account Cards Grid */}
             {filteredAccounts.length > 0 ? (
-              <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
+              <div className="grid gap-4 sm:gap-5 md:grid-cols-2 xl:grid-cols-3">
                 {filteredAccounts.map((account) => (
                   <div key={account.id} className="relative group">
                     <AccountCard
@@ -547,7 +767,7 @@ export default function Dashboard() {
                     <div className="absolute top-4 right-12 sm:top-6 sm:right-14 opacity-0 group-hover:opacity-100 transition-opacity">
                       <DropdownMenu>
                         <DropdownMenuTrigger asChild>
-                          <Button variant="ghost" size="icon" className="h-8 w-8" onClick={(e) => e.stopPropagation()}>
+                      <Button variant="ghost" size="icon" className="h-8 w-8 border border-white/10 bg-slate-900/70" onClick={(e) => e.stopPropagation()}>
                             <MoreHorizontal className="h-4 w-4" />
                           </Button>
                         </DropdownMenuTrigger>
@@ -570,7 +790,7 @@ export default function Dashboard() {
                 ))}
               </div>
             ) : (
-              <div className="text-center py-20">
+              <div className="text-center py-16 sm:py-20 glass-card rounded-[28px]">
                 <p className="text-xl text-muted-foreground mb-4">No accounts yet</p>
                 <p className="text-muted-foreground mb-6">
                   Create your first account to start tracking your trades
@@ -584,13 +804,13 @@ export default function Dashboard() {
           accountStats && (
             <>
               {/* Detail Header */}
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6 sm:mb-8">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 sm:gap-3 mb-2 sm:mb-3">
                 <div className="flex items-center gap-3 sm:gap-4">
-                  <Button variant="ghost" size="icon" onClick={handleBack} className="h-9 w-9 sm:h-10 sm:w-10 shrink-0">
+                  <Button variant="ghost" size="icon" onClick={handleBack} className="h-9 w-9 sm:h-10 sm:w-10 shrink-0 border border-white/10 bg-slate-900/70">
                     <ArrowLeft className="h-5 w-5" />
                   </Button>
                   <div className="min-w-0">
-                    <h1 className="text-xl sm:text-3xl font-bold tracking-tight truncate">{selectedAccount.name}</h1>
+                    <h1 className="text-xl sm:text-3xl font-semibold tracking-tight truncate">{selectedAccount.name}</h1>
                     <p className="text-sm sm:text-base text-muted-foreground">
                       {selectedAccount.type} Account
                     </p>
@@ -606,7 +826,7 @@ export default function Dashboard() {
                   {/* Account Actions Menu */}
                   <DropdownMenu>
                     <DropdownMenuTrigger asChild>
-                      <Button variant="ghost" size="icon">
+                      <Button variant="ghost" size="icon" className="border border-white/10 bg-slate-900/60">
                         <MoreHorizontal className="h-4 w-4" />
                       </Button>
                     </DropdownMenuTrigger>
@@ -624,14 +844,14 @@ export default function Dashboard() {
                       </DropdownMenuItem>
                     </DropdownMenuContent>
                   </DropdownMenu>
-                  <Button variant="ghost" size="icon" onClick={handleSignOut} title="Sign out">
+                  <Button variant="ghost" size="icon" onClick={handleSignOut} title="Sign out" className="border border-white/10 bg-slate-900/55 hover:bg-slate-800/80">
                     <LogOut className="h-4 w-4" />
                   </Button>
                 </div>
               </div>
 
               {/* TOP ROW: Stats Cards */}
-              <div className="grid gap-3 sm:gap-6 grid-cols-2 lg:grid-cols-5 mb-6 sm:mb-8">
+              <div className="grid gap-2 sm:gap-3 grid-cols-2 lg:grid-cols-5 mb-2 sm:mb-3">
                 <MetricsCard
                   title="Account Balance"
                   value={formatCurrency(accountStats.currentBalance)}
@@ -641,16 +861,41 @@ export default function Dashboard() {
                   }}
                 />
                 <MetricsCard
-                  title="Active EOD Floor"
-                  value={formatCurrency(accountStats.activeEodFloor ?? accountStats.minBalance)}
+                  title={getFloorDisplayTitle(selectedAccount)}
+                  value={formatCurrency(
+                    displayAccountStats!.activeEodFloor ?? displayAccountStats!.minBalance,
+                  )}
                   status={{
-                    label: accountStats.isTradingDayComplete ? "Updated" : "Updates at 2PM",
-                    isGood: accountStats.isSafe,
+                    label: getFloorMetricStatusLabel(selectedAccount, {
+                      isTradingDayComplete: accountStats.isTradingDayComplete,
+                    }),
+                    isGood: displayAccountStats!.isSafe,
                   }}
                   subValue={
-                    !accountStats.isTradingDayComplete && accountStats.projectedEodFloor !== accountStats.activeEodFloor
+                    shouldShowEodProjectedFloorSubValue(selectedAccount, {
+                      isTradingDayComplete: accountStats.isTradingDayComplete,
+                      projectedEodFloor: accountStats.projectedEodFloor,
+                      activeEodFloor: accountStats.activeEodFloor,
+                    })
                       ? `Projected: ${formatCurrency(accountStats.projectedEodFloor ?? 0)}`
                       : undefined
+                  }
+                  titleAction={
+                    selectedAccount.drawdownType === "Intraday" ? (
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon"
+                        className="h-7 w-7 text-slate-400 hover:text-cyan-300"
+                        title="Edit intraday floor"
+                        onClick={() => {
+                          setManualIntradayModalMode("floor")
+                          setManualIntradayModalOpen(true)
+                        }}
+                      >
+                        <Pencil className="h-3.5 w-3.5" />
+                      </Button>
+                    ) : undefined
                   }
                 />
                 <MetricsCard
@@ -661,52 +906,89 @@ export default function Dashboard() {
                     isPositive: accountStats.totalPnL >= 0,
                   }}
                 />
-                <MetricsCard
-                  title="Trading Days"
-                  value={accountStats.tradingDays.toString()}
-                  change={{
-                    value: selectedAccount.type === "PA" ? "5 required" : "Active days",
-                    isPositive: accountStats.tradingDays >= 5,
-                  }}
-                />
+                {fourthStatMetric && (
+                  <MetricsCard
+                    title={fourthStatMetric.title}
+                    value={fourthStatMetric.value}
+                    change={fourthStatMetric.change}
+                    subValue={fourthStatMetric.subValue}
+                  />
+                )}
                 <MetricsCard
                   title="Drawdown Remaining"
-                  value={formatCurrency(Math.max(0, accountStats.drawdownRemaining))}
+                  value={formatCurrency(Math.max(0, displayAccountStats!.drawdownRemaining))}
                   change={{
                     value: `of ${formatCurrency(selectedAccount.maxDrawdown)}`,
-                    isPositive: accountStats.drawdownRemaining > selectedAccount.maxDrawdown * 0.5,
+                    isPositive:
+                      displayAccountStats!.drawdownRemaining > selectedAccount.maxDrawdown * 0.5,
                   }}
+                  subValue={
+                    selectedAccount.drawdownType === "Intraday" &&
+                    hasIntradayManualDrawdown(selectedAccount)
+                      ? "Manually updated from Tradovate."
+                      : undefined
+                  }
+                  titleAction={
+                    selectedAccount.drawdownType === "Intraday" ? (
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon"
+                        className="h-7 w-7 text-slate-400 hover:text-cyan-300"
+                        title="Edit drawdown remaining"
+                        onClick={() => {
+                          setManualIntradayModalMode("remaining")
+                          setManualIntradayModalOpen(true)
+                        }}
+                      >
+                        <Pencil className="h-3.5 w-3.5" />
+                      </Button>
+                    ) : undefined
+                  }
                 />
               </div>
 
+              {shouldShowAccountRangeCard(selectedAccount) && (
+                <div className="mb-2 sm:mb-3">
+                  <AccountRangeCard account={selectedAccount} stats={displayAccountStats!} />
+                </div>
+              )}
+
               {/* ROW 2: Full Width Chart */}
-              <div className="mb-6 sm:mb-8">
+              <div className="mb-2 sm:mb-3">
                 <PerformanceChart
                   data={accountDailyData}
                   account={selectedAccount}
-                  stats={accountStats}
+                  stats={displayAccountStats!}
                 />
               </div>
 
               {/* ROW 3: Full Width Rule Status */}
-              <div className="mb-6 sm:mb-8">
+              <div className="mb-4 sm:mb-5">
                 <RuleEnginePanel
                   account={selectedAccount}
                   dailyData={accountDailyData}
-                  stats={accountStats}
+                  stats={displayAccountStats!}
                   consistencyInfo={consistencyInfo}
+                  lucidCycleQualifyingDays={
+                    selectedAccount.firm === "Lucid" &&
+                    selectedAccount.type === "PA" &&
+                    payoutEligibility?.firm === "Lucid"
+                      ? payoutEligibility.cycleProfitDays
+                      : undefined
+                  }
                 />
               </div>
 
               {/* ROW 4: Full Width Calendar */}
-              <div className="mb-6 sm:mb-8">
+              <div className="mb-4 sm:mb-5">
                 <TradingCalendar account={selectedAccount} dailyData={accountDailyData} trades={accountTrades} />
               </div>
 
               {/* ROW 5: Trade History + Payout Status (PA only) */}
               <div className={cn(
-                "grid gap-6",
-                selectedAccount.type === "PA" && payoutEligibility ? "lg:grid-cols-[2fr_1fr]" : ""
+                "grid gap-4 sm:gap-5",
+                selectedAccount.type === "PA" && payoutEligibility ? "lg:grid-cols-[minmax(0,2.2fr)_minmax(320px,1fr)]" : ""
               )}>
                 <TradeHistoryTable 
                   trades={accountTrades}

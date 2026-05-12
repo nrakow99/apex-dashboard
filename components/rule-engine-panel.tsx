@@ -1,10 +1,17 @@
 "use client"
 
+import { useMemo } from "react"
 import { Card } from "@/components/ui/card"
 import { Progress } from "@/components/ui/progress"
 import { cn } from "@/lib/utils"
 import type { Account, DailyPnL } from "@/lib/types"
 import { getAccountRules } from "@/lib/rules"
+import {
+  getRuleEngineFloorCardTitle,
+  getRuleEngineFloorRowHint,
+  getRuleEngineFloorRowLabel,
+} from "@/lib/floor-display-labels"
+import { getApexPaScalingTier } from "@/lib/apex-pa-scaling"
 import { CheckCircle2, AlertTriangle, XCircle } from "lucide-react"
 
 interface AccountStats {
@@ -33,6 +40,8 @@ interface RuleEnginePanelProps {
   dailyData: DailyPnL[]
   stats: AccountStats
   consistencyInfo: ConsistencyInfo | null
+  /** LucidFlex PA: qualifying days in current payout cycle (matches payout eligibility) */
+  lucidCycleQualifyingDays?: number
 }
 
 function StatusIcon({ status }: { status: "good" | "warning" | "danger" }) {
@@ -54,10 +63,10 @@ function RuleCard({
 }) {
   return (
     <div className={cn(
-      "p-4 rounded-xl border",
+      "p-4 rounded-2xl border transition-all",
       status === "danger"  ? "bg-red-500/10 border-red-500/30" :
       status === "warning" ? "bg-amber-500/10 border-amber-500/30" :
-      "bg-muted/30 border-border/50",
+      "bg-slate-900/45 border-white/10",
       className
     )}>
       <div className="flex items-center justify-between mb-3">
@@ -69,8 +78,51 @@ function RuleCard({
   )
 }
 
-export function RuleEnginePanel({ account, dailyData, stats, consistencyInfo }: RuleEnginePanelProps) {
+function countVisibleRuleCards(
+  account: Account,
+  rules: ReturnType<typeof getAccountRules>,
+  consistencyInfo: ConsistencyInfo | null,
+): number {
+  let n = 1
+  if (rules.hasDLL) n++
+  if (account.type === "Eval" && account.profitTarget) n++
+  if (rules.maxContracts) n++
+  if (rules.hasScaling) n++
+  if (rules.hasConsistency && consistencyInfo) n++
+  if (account.firm !== "Lucid" && account.type === "PA" && rules.minTradingDays > 0) n++
+  if (account.firm !== "Lucid" && account.type === "PA" && consistencyInfo && rules.minProfitDays > 0) n++
+  if (account.firm !== "Lucid" && account.type === "PA" && rules.minBalanceToRequest > 0) n++
+  if (account.firm === "Lucid" && account.type === "PA" && consistencyInfo && rules.minProfitDays > 0) n++
+  return n
+}
+
+export function RuleEnginePanel({
+  account,
+  dailyData,
+  stats,
+  consistencyInfo,
+  lucidCycleQualifyingDays,
+}: RuleEnginePanelProps) {
   const rules = getAccountRules(account)
+  const lucidQualifyingDaysInCycle =
+    account.firm === "Lucid" && account.type === "PA" && lucidCycleQualifyingDays != null
+      ? lucidCycleQualifyingDays
+      : (consistencyInfo?.daysWithMinProfit ?? 0)
+
+  const apexPaScaling = useMemo(
+    () => getApexPaScalingTier(account, stats),
+    [account, stats],
+  )
+
+  const ruleGridClass = useMemo(() => {
+    const r = getAccountRules(account)
+    const count = countVisibleRuleCards(account, r, consistencyInfo)
+    if (count <= 1) return "grid-cols-1"
+    if (count === 2) return "grid-cols-1 sm:grid-cols-2"
+    if (count === 3) return "grid-cols-1 md:grid-cols-3"
+    if (count === 4) return "grid-cols-1 sm:grid-cols-2"
+    return "grid-cols-1 md:grid-cols-2 xl:grid-cols-3"
+  }, [account, consistencyInfo])
 
   // Daily loss (today only)
   const today = dailyData[dailyData.length - 1]
@@ -88,14 +140,14 @@ export function RuleEnginePanel({ account, dailyData, stats, consistencyInfo }: 
   const firmLabel = account.firm === "Lucid" ? "Lucid" : account.firm ?? "Apex"
 
   return (
-    <Card className="p-5 bg-card/50 backdrop-blur border-border/50">
+    <Card className="p-5 rounded-[26px] glass-card">
       <div className="flex items-center justify-between mb-5">
         <h2 className="text-lg font-semibold">Rule Status</h2>
         <div className="flex items-center gap-2">
           <span className={cn(
             "text-xs font-medium px-2.5 py-1 rounded-full border",
             account.firm === "Lucid"
-              ? "bg-violet-500/10 text-violet-400 border-violet-500/30"
+              ? "bg-cyan-500/10 text-cyan-300 border-cyan-500/30"
               : "bg-orange-500/10 text-orange-400 border-orange-500/30"
           )}>
             {firmLabel}
@@ -111,10 +163,10 @@ export function RuleEnginePanel({ account, dailyData, stats, consistencyInfo }: 
         </div>
       </div>
 
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+      <div className={cn("grid gap-3 sm:gap-4", ruleGridClass)}>
 
         {/* ── Active Floor ─────────────────────────────────────────────────── */}
-        <RuleCard title={rules.floorLabel} status={drawdownStatus}>
+        <RuleCard title={getRuleEngineFloorCardTitle(account)} status={drawdownStatus}>
           <div className="space-y-2 text-sm">
             <div className="flex justify-between items-center">
               <span className="text-muted-foreground">Current Balance</span>
@@ -124,9 +176,9 @@ export function RuleEnginePanel({ account, dailyData, stats, consistencyInfo }: 
             </div>
             <div className="flex justify-between items-start">
               <div>
-                <span className="text-muted-foreground">Active Floor</span>
+                <span className="text-muted-foreground">{getRuleEngineFloorRowLabel(account)}</span>
                 <div className="text-[10px] text-muted-foreground/60">
-                  {account.drawdownType === "Intraday" ? "Updates in real time" : "Updates at 2pm PST"}
+                  {getRuleEngineFloorRowHint(account)}
                 </div>
               </div>
               <span className="font-mono text-red-500">
@@ -202,16 +254,60 @@ export function RuleEnginePanel({ account, dailyData, stats, consistencyInfo }: 
           </RuleCard>
         )}
 
-        {/* ── Max Contracts (when specified) ───────────────────────────────── */}
-        {rules.maxContracts && (
+        {/* ── Position Limit / Apex PA scaling ───────────────────────────── */}
+        {account.firm === "Apex" && account.type === "PA" && apexPaScaling ? (
           <RuleCard title="Position Limit">
-            <div className="space-y-1 text-sm">
-              <div className="flex justify-between">
-                <span className="text-muted-foreground">Max Size</span>
-                <span className="font-mono font-medium">{rules.maxContracts}</span>
+            <div className="space-y-2 text-sm">
+              <div className="flex justify-between gap-3">
+                <span className="text-muted-foreground">Current Tier</span>
+                <span className="font-mono font-semibold text-slate-100">Level {apexPaScaling.level}</span>
               </div>
+              <div className="flex justify-between gap-3">
+                <span className="text-muted-foreground">Max Contracts</span>
+                <span className="font-mono font-medium">
+                  {apexPaScaling.maxContracts} {apexPaScaling.maxContracts === 1 ? "contract" : "contracts"}
+                </span>
+              </div>
+              <div className="flex justify-between gap-3">
+                <span className="text-muted-foreground">Daily Loss Limit</span>
+                <span className="font-mono font-medium">
+                  ${apexPaScaling.dailyLossLimit.toLocaleString()}
+                </span>
+              </div>
+              <div className="flex justify-between gap-3 border-t border-border/40 pt-2">
+                <span className="text-muted-foreground">Current Profit</span>
+                <span className="font-mono font-medium text-emerald-400/95">
+                  ${apexPaScaling.currentProfit.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                </span>
+              </div>
+              {apexPaScaling.isMaxTier ? (
+                <p className="text-xs font-medium text-emerald-500/90 pt-0.5">Max Tier Reached</p>
+              ) : (
+                <p className="text-xs text-muted-foreground pt-0.5 leading-snug">
+                  Next Tier:{" "}
+                  <span className="font-mono text-slate-200">
+                    $
+                    {(apexPaScaling.amountToNextTier ?? 0).toLocaleString(undefined, {
+                      minimumFractionDigits: 2,
+                      maximumFractionDigits: 2,
+                    })}
+                  </span>{" "}
+                  to Level {apexPaScaling.nextLevel}
+                </p>
+              )}
             </div>
           </RuleCard>
+        ) : (
+          rules.maxContracts && (
+            <RuleCard title="Position Limit">
+              <div className="space-y-1 text-sm">
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">Max Size</span>
+                  <span className="font-mono font-medium">{rules.maxContracts}</span>
+                </div>
+              </div>
+            </RuleCard>
+          )
         )}
 
         {/* ── Scaling Plan (Lucid PA) ───────────────────────────────────────── */}
@@ -237,7 +333,6 @@ export function RuleEnginePanel({ account, dailyData, stats, consistencyInfo }: 
           <RuleCard
             title={`Consistency Rule (${rules.consistencyPercent}%)`}
             status={consistencyInfo.isValid ? "good" : "warning"}
-            className="md:col-span-2 lg:col-span-1"
           >
             <div className="space-y-1.5 text-sm">
               <div className="flex justify-between">
@@ -306,6 +401,30 @@ export function RuleEnginePanel({ account, dailyData, stats, consistencyInfo }: 
               <Progress
                 value={(consistencyInfo.daysWithMinProfit / rules.minProfitDays) * 100}
                 className={cn("h-2", consistencyInfo.daysWithMinProfit >= rules.minProfitDays && "[&>div]:bg-emerald-500")}
+              />
+            </div>
+          </RuleCard>
+        )}
+
+        {/* ── LucidFlex PA: qualifying payout days (cycle) — no Apex consistency gate ─ */}
+        {account.firm === "Lucid" && account.type === "PA" && consistencyInfo && rules.minProfitDays > 0 && (
+          <RuleCard title={`LucidFlex · $${rules.minDailyProfit}+ days`}>
+            <div className="space-y-2">
+              <p className="text-[11px] text-muted-foreground leading-snug">
+                Five payout-qualifying days per cycle (positive cycle profit required for payout eligibility).
+              </p>
+              <div className="flex justify-between text-sm">
+                <span className="text-muted-foreground">Qualifying days (this cycle)</span>
+                <span className={cn(
+                  "font-mono font-bold",
+                  lucidQualifyingDaysInCycle >= rules.minProfitDays ? "text-emerald-500" : "text-amber-500"
+                )}>
+                  {lucidQualifyingDaysInCycle} / {rules.minProfitDays}
+                </span>
+              </div>
+              <Progress
+                value={(lucidQualifyingDaysInCycle / rules.minProfitDays) * 100}
+                className={cn("h-2", lucidQualifyingDaysInCycle >= rules.minProfitDays && "[&>div]:bg-emerald-500")}
               />
             </div>
           </RuleCard>

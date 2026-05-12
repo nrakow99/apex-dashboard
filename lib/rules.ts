@@ -1,4 +1,5 @@
 import type { Firm, AccountType, DrawdownType } from "./types"
+import type { LucidFlexFloorParams } from "./lucid-flex-floor"
 
 export interface AccountRules {
   // Drawdown
@@ -40,6 +41,9 @@ export interface AccountRules {
   // Extras
   hasScaling: boolean
   maxContracts: string  // "" if not specified
+
+  /** LucidFlex PA only: stop-out floor schedule (null for Apex / Lucid Eval / non-Flex) */
+  lucidFlexFloor: LucidFlexFloorParams | null
 }
 
 // ─── Size key helper ─────────────────────────────────────────────────────────
@@ -108,7 +112,8 @@ const LUCID_EVAL: Record<SizeKey, {
   150000: { profitTarget: 9000, maxDrawdown: 4500, maxContracts: "10 mini / 100 micros" },
 }
 
-const LUCID_PA: Record<SizeKey, {
+/** LucidFlex PA — payouts from cycle profit; no Apex-style balance gate */
+const LUCID_FLEX_PA: Record<SizeKey, {
   maxDrawdown: number
   maxContracts: string
   minDailyProfit: number
@@ -118,6 +123,15 @@ const LUCID_PA: Record<SizeKey, {
   50000:  { maxDrawdown: 2000, maxContracts: "4 mini / 40 micros",   minDailyProfit: 150, payoutAbsoluteCap: 2000 },
   100000: { maxDrawdown: 3000, maxContracts: "6 mini / 60 micros",   minDailyProfit: 200, payoutAbsoluteCap: 2500 },
   150000: { maxDrawdown: 4500, maxContracts: "10 mini / 100 micros", minDailyProfit: 250, payoutAbsoluteCap: 3000 },
+}
+
+/** Locked-floor params — specified for 50K LucidFlex PA; other sizes trail min(peak−DD, rules) only via peak−DD until we add program-specific rows */
+const LUCID_FLEX_FLOOR_BY_SIZE: Partial<Record<SizeKey, LucidFlexFloorParams>> = {
+  50000: {
+    minimumFloor: 48_100,
+    lockPeakThreshold: 52_100,
+    lockedFloor: 50_100,
+  },
 }
 
 // ─── Main export ─────────────────────────────────────────────────────────────
@@ -155,6 +169,7 @@ export function getAccountRules(account: {
     minPayoutAmount: 500,
     hasScaling: false,
     maxContracts: "",
+    lucidFlexFloor: null,
   }
 
   // ── Apex ──────────────────────────────────────────────────────────────────
@@ -250,7 +265,7 @@ export function getAccountRules(account: {
     }
 
     if (account.type === "PA") {
-      const r = LUCID_PA[size]
+      const r = LUCID_FLEX_PA[size]
       return {
         ...base,
         maxDrawdown: r.maxDrawdown,
@@ -266,8 +281,9 @@ export function getAccountRules(account: {
         payoutSplit: 0.9,
         minPayoutAmount: 500,
         hasConsistency: false,
-        hasScaling: true,
+        hasScaling: false,
         maxContracts: r.maxContracts,
+        lucidFlexFloor: LUCID_FLEX_FLOOR_BY_SIZE[size] ?? null,
       }
     }
   }

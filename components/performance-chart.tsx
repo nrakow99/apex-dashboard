@@ -17,7 +17,11 @@ import { TrendingUp } from "lucide-react"
 import { cn } from "@/lib/utils"
 import type { DailyPnL, Account } from "@/lib/types"
 import { PA_CONSTANTS } from "@/lib/types"
-import { getAccountRules } from "@/lib/rules"
+import {
+  getPerformanceChartBalanceSubtitle,
+  getChartFloorLineLabel,
+} from "@/lib/floor-display-labels"
+import { hasIntradayManualDrawdown } from "@/lib/intraday-manual-drawdown"
 import { isTradingDayComplete, getTodayDateStr } from "@/lib/storage"
 
 interface AccountStats {
@@ -112,8 +116,14 @@ export function PerformanceChart({ data, account, stats }: PerformanceChartProps
       })
     }
 
+    if (isIntraday && hasIntradayManualDrawdown(account) && result.length > 1) {
+      const manualFloor = stats.activeEodFloor ?? stats.minBalance
+      const last = result.length - 1
+      result[last] = { ...result[last], minBalance: manualFloor }
+    }
+
     return result
-  }, [data, account])
+  }, [data, account, stats])
 
   // Calculate Y-axis domain dynamically
   const yAxisDomain = useMemo(() => {
@@ -191,7 +201,9 @@ export function PerformanceChart({ data, account, stats }: PerformanceChartProps
           <div className="flex items-center justify-between gap-3">
             <div className="flex items-center gap-2">
               <div className="w-2 h-2 rounded-full bg-red-500" />
-              <span className="text-[11px] text-muted-foreground uppercase tracking-wider">Active Floor</span>
+              <span className="text-[11px] text-muted-foreground uppercase tracking-wider">
+                {getChartFloorLineLabel(account)}
+              </span>
             </div>
             <span className="font-mono font-semibold text-[13px] text-red-400">{formatValue(point.minBalance)}</span>
           </div>
@@ -219,14 +231,16 @@ export function PerformanceChart({ data, account, stats }: PerformanceChartProps
   // Empty state - uses same flex layout as main chart for consistency
   if (data.length === 0) {
     return (
-      <Card className="h-[320px] sm:h-[440px] flex flex-col p-4 sm:p-5 bg-card/50 backdrop-blur border-border/50">
+      <Card className="h-[220px] sm:h-[252px] lg:h-[268px] flex flex-col p-2.5 sm:p-3 rounded-[24px] glass-card">
         {/* Header */}
-        <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
           <div>
-            <h2 className="text-base sm:text-lg font-semibold">Performance</h2>
-            <p className="text-xs sm:text-sm text-muted-foreground hidden sm:block">Balance over time with EOD drawdown tracking</p>
+            <h2 className="text-sm sm:text-base font-semibold">Performance</h2>
+            <p className="text-xs sm:text-sm text-muted-foreground hidden sm:block">
+              {`Balance over time · ${getPerformanceChartBalanceSubtitle(account)}`}
+            </p>
           </div>
-          <div className="flex gap-1 p-1 bg-muted/50 rounded-lg">
+          <div className="flex gap-1 p-1 bg-slate-900/65 border border-white/10 rounded-xl">
             <Button
               size="sm"
               variant={view === "balance" ? "secondary" : "ghost"}
@@ -247,14 +261,14 @@ export function PerformanceChart({ data, account, stats }: PerformanceChartProps
         </div>
         
         {/* Chart area - flex-1 to fill remaining space */}
-        <div className="flex-1 min-h-0 w-full relative mt-3">
+        <div className="flex-1 min-h-0 w-full relative mt-2">
           <ResponsiveContainer width="100%" height="100%">
             <AreaChart
               data={[
                 { date: "Start", balance: account.startingBalance, minBalance: account.startingBalance - account.maxDrawdown },
                 { date: "Now", balance: account.startingBalance, minBalance: account.startingBalance - account.maxDrawdown },
               ]}
-              margin={{ top: 10, right: 20, left: 10, bottom: 5 }}
+              margin={{ top: 6, right: 12, left: 2, bottom: 0 }}
             >
               <defs>
                 <linearGradient id="emptyGradient" x1="0" y1="0" x2="0" y2="1">
@@ -296,7 +310,7 @@ export function PerformanceChart({ data, account, stats }: PerformanceChartProps
           </ResponsiveContainer>
           {/* Centered message overlay */}
           <div className="absolute inset-0 flex items-center justify-center">
-            <div className="bg-card/90 backdrop-blur-sm border border-border/50 rounded-xl px-6 py-4 text-center max-w-sm">
+            <div className="bg-slate-950/85 backdrop-blur-xl border border-white/10 rounded-2xl px-6 py-4 text-center max-w-sm">
               <TrendingUp className="h-8 w-8 text-muted-foreground mx-auto mb-2" />
               <p className="text-sm text-muted-foreground">
                 No trades yet. Add your first trade to track performance.
@@ -306,14 +320,14 @@ export function PerformanceChart({ data, account, stats }: PerformanceChartProps
         </div>
         
         {/* Legend */}
-        <div className="flex items-center gap-6 pt-3 text-sm text-muted-foreground">
+        <div className="flex flex-wrap items-center gap-x-4 gap-y-1 pt-2 text-xs text-muted-foreground">
           <div className="flex items-center gap-2">
             <div className="w-5 h-0.5 bg-muted-foreground rounded" />
             <span>Account Balance</span>
           </div>
           <div className="flex items-center gap-2">
             <div className="w-5 h-0.5 border-t-2 border-dashed border-red-500/50" />
-            <span>Active Floor</span>
+            <span>{getChartFloorLineLabel(account)}</span>
           </div>
         </div>
       </Card>
@@ -321,18 +335,18 @@ export function PerformanceChart({ data, account, stats }: PerformanceChartProps
   }
 
   return (
-    <Card className="h-[320px] sm:h-[440px] flex flex-col p-4 sm:p-5 bg-card/50 backdrop-blur border-border/50">
+      <Card className="h-[220px] sm:h-[252px] lg:h-[268px] flex flex-col p-2.5 sm:p-3 rounded-[24px] glass-card">
       {/* Header */}
-      <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+      <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h2 className="text-base sm:text-lg font-semibold">Performance</h2>
+          <h2 className="text-sm sm:text-base font-semibold">Performance</h2>
           <p className="text-xs sm:text-sm text-muted-foreground hidden sm:block">
             {view === "balance"
-              ? `Balance over time · ${getAccountRules(account).floorLabel}`
+              ? `Balance over time · ${getPerformanceChartBalanceSubtitle(account)}`
               : "Daily profit and loss"}
           </p>
         </div>
-        <div className="flex gap-1 p-1 bg-muted/50 rounded-lg">
+        <div className="flex gap-1 p-1 bg-slate-900/65 border border-white/10 rounded-xl">
           <Button
             size="sm"
             variant={view === "balance" ? "secondary" : "ghost"}
@@ -353,10 +367,10 @@ export function PerformanceChart({ data, account, stats }: PerformanceChartProps
       </div>
       
       {/* Chart area - flex-1 fills remaining space */}
-      <div className="flex-1 min-h-0 w-full mt-3">
+      <div className="flex-1 min-h-0 w-full mt-2">
         <ResponsiveContainer width="100%" height="100%">
           {view === "balance" ? (
-            <AreaChart data={chartData} margin={{ top: 10, right: 20, left: 10, bottom: 5 }}>
+            <AreaChart data={chartData} margin={{ top: 6, right: 12, left: 2, bottom: 0 }}>
               <defs>
                 <linearGradient id="balanceGradient" x1="0" y1="0" x2="0" y2="1">
                   <stop offset="0%" stopColor="#10b981" stopOpacity={0.2} />
@@ -470,7 +484,7 @@ export function PerformanceChart({ data, account, stats }: PerformanceChartProps
               />
             </AreaChart>
           ) : (
-            <AreaChart data={chartData.filter((d) => !d.isStartingPoint)} margin={{ top: 10, right: 20, left: 10, bottom: 5 }}>
+            <AreaChart data={chartData.filter((d) => !d.isStartingPoint)} margin={{ top: 6, right: 12, left: 2, bottom: 0 }}>
               <defs>
                 <linearGradient id="pnlGradientPos" x1="0" y1="0" x2="0" y2="1">
                   <stop offset="0%" stopColor="#10b981" stopOpacity={0.2} />
@@ -541,14 +555,14 @@ export function PerformanceChart({ data, account, stats }: PerformanceChartProps
       </div>
       {/* Legend */}
       {view === "balance" ? (
-        <div className="flex flex-wrap items-center gap-x-6 gap-y-2 pt-3 text-sm text-muted-foreground">
+        <div className="flex flex-wrap items-center gap-x-4 gap-y-1 pt-2 text-xs text-muted-foreground">
           <div className="flex items-center gap-2">
             <div className="w-5 h-0.5 bg-emerald-500 rounded" />
             <span>Account Balance</span>
           </div>
           <div className="flex items-center gap-2">
             <div className="w-5 h-0.5 border-t-2 border-dashed border-red-500" />
-            <span>{getAccountRules(account).floorLabel}</span>
+            <span>{getChartFloorLineLabel(account)}</span>
           </div>
           <div className="flex items-center gap-2">
             <div className="w-5 h-0.5 border-t border-dashed border-muted-foreground/50" />
@@ -562,7 +576,7 @@ export function PerformanceChart({ data, account, stats }: PerformanceChartProps
           )}
         </div>
       ) : (
-        <div className="flex items-center gap-6 pt-3 text-sm text-muted-foreground">
+        <div className="flex flex-wrap items-center gap-x-4 gap-y-1 pt-2 text-xs text-muted-foreground">
           <div className="flex items-center gap-2">
             <div className="w-3 h-3 rounded-full bg-emerald-500" />
             <span>Profit Day</span>
