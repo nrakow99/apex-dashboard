@@ -41,7 +41,7 @@ export function DeleteConfirmationModal({
 
   return (
     <AlertDialog open={open} onOpenChange={onOpenChange}>
-      <AlertDialogContent className="bg-card border-border">
+      <AlertDialogContent>
         <AlertDialogHeader>
           <AlertDialogTitle>{title}</AlertDialogTitle>
           <AlertDialogDescription className="text-muted-foreground">
@@ -50,7 +50,7 @@ export function DeleteConfirmationModal({
         </AlertDialogHeader>
         
         {itemDetails && (
-          <div className="my-4 p-4 bg-muted/50 rounded-lg border border-border/50">
+          <div className="my-4 p-4 bg-slate-900/55 rounded-xl border border-white/10">
             {itemDetails}
           </div>
         )}

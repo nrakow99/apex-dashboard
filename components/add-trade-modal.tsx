@@ -66,12 +66,12 @@ export function AddTradeModal({ accounts, selectedAccountId, onAddTrade }: AddTr
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
-        <Button className="gap-2 bg-emerald-600 hover:bg-emerald-700">
+        <Button className="gap-2">
           <Plus className="h-4 w-4" />
           Add Trade
         </Button>
       </DialogTrigger>
-      <DialogContent className="sm:max-w-[400px] bg-card border-border">
+      <DialogContent className="sm:max-w-[400px]">
         <DialogHeader>
           <DialogTitle>Add New Trade</DialogTitle>
         </DialogHeader>

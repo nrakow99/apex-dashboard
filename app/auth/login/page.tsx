@@ -84,12 +84,14 @@ export default function LoginPage() {
   }
 
   return (
-    <div className="min-h-screen bg-background flex items-center justify-center p-4">
-      <Card className="w-full max-w-md p-8 bg-card/50 backdrop-blur border-border/50">
+    <div className="min-h-screen premium-shell flex items-center justify-center p-4">
+      <Card className="w-full max-w-md p-8 rounded-[28px] glass-card">
         <div className="flex flex-col items-center mb-8">
           <div className="flex items-center gap-2 mb-2">
-            <TrendingUp className="h-8 w-8 text-emerald-500" />
-            <h1 className="text-2xl font-bold">Apex Tracker</h1>
+            <div className="rounded-2xl border border-cyan-400/30 bg-cyan-500/10 p-2 shadow-[0_0_35px_-18px_rgba(34,211,238,0.95)]">
+              <TrendingUp className="h-7 w-7 text-emerald-400" />
+            </div>
+            <h1 className="text-2xl font-semibold tracking-tight">Apex Tracker</h1>
           </div>
           <p className="text-sm text-muted-foreground">
             {mode === "login" && "Sign in to your account"}
@@ -99,13 +101,13 @@ export default function LoginPage() {
         </div>
 
         {error && (
-          <div className="mb-4 p-3 rounded-lg bg-red-500/10 border border-red-500/30 text-red-500 text-sm">
+          <div className="mb-4 p-3 rounded-xl bg-red-500/10 border border-red-500/30 text-red-400 text-sm">
             {error}
           </div>
         )}
 
         {message && (
-          <div className="mb-4 p-3 rounded-lg bg-emerald-500/10 border border-emerald-500/30 text-emerald-500 text-sm">
+          <div className="mb-4 p-3 rounded-xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 text-sm">
             {message}
           </div>
         )}
@@ -121,7 +123,7 @@ export default function LoginPage() {
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 required
-                className="bg-muted/50"
+                className="bg-slate-950/50"
               />
             </div>
 
@@ -136,7 +138,7 @@ export default function LoginPage() {
                   onChange={(e) => setPassword(e.target.value)}
                   required
                   minLength={6}
-                  className="bg-muted/50"
+                  className="bg-slate-950/50"
                 />
               </div>
             )}

@@ -36,7 +36,7 @@ function SegmentedControl<T extends string>({
   disabled?: boolean
 }) {
   return (
-    <div className="flex gap-0 p-1 bg-muted/40 rounded-lg">
+    <div className="flex gap-0 p-1 bg-slate-900/70 border border-white/10 rounded-xl">
       {options.map((opt) => (
         <button
           key={opt.value}
@@ -44,10 +44,10 @@ function SegmentedControl<T extends string>({
           onClick={() => !disabled && onChange(opt.value)}
           disabled={disabled}
           className={cn(
-            "flex-1 py-1.5 px-2 rounded-md text-sm font-medium transition-all",
+            "flex-1 py-1.5 px-2 rounded-lg text-sm font-medium transition-all",
             value === opt.value
-              ? "bg-background text-foreground shadow-sm"
-              : "text-muted-foreground hover:text-foreground",
+              ? "bg-gradient-to-r from-cyan-500/25 to-emerald-500/25 text-slate-100 shadow-[inset_0_0_0_1px_rgba(103,232,249,0.35)]"
+              : "text-slate-400 hover:text-slate-100",
             disabled && "opacity-50 cursor-not-allowed"
           )}
         >
@@ -143,7 +143,7 @@ export function EditAccountModal({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-[480px] bg-card border-border max-h-[90vh] overflow-y-auto">
+      <DialogContent className="sm:max-w-[480px] max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>Edit Account</DialogTitle>
         </DialogHeader>

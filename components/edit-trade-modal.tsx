@@ -79,7 +79,7 @@ export function EditTradeModal({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-[400px] bg-card border-border">
+      <DialogContent className="sm:max-w-[400px]">
         <DialogHeader>
           <DialogTitle>Edit Trade</DialogTitle>
         </DialogHeader>

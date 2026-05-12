@@ -20,9 +20,9 @@ export function LiveClock() {
 
   if (!mounted || !time) {
     return (
-      <div className="flex items-center gap-3 px-4 py-2 rounded-lg bg-muted/30 border border-border/50">
-        <Clock className="h-4 w-4 text-muted-foreground" />
-        <span className="text-sm font-mono text-muted-foreground">--:--:--</span>
+      <div className="flex items-center gap-3 px-4 py-2 rounded-2xl bg-slate-900/70 border border-white/10 backdrop-blur">
+        <Clock className="h-4 w-4 text-cyan-300/70" />
+        <span className="text-sm font-mono text-slate-400">--:--:--</span>
       </div>
     )
   }
@@ -37,9 +37,9 @@ export function LiveClock() {
   }
 
   return (
-    <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-muted/30 border border-border/50">
-      <Clock className="h-3.5 w-3.5 text-muted-foreground" />
-      <span className="text-sm font-mono text-foreground">{formatTime(time)}</span>
+    <div className="flex items-center gap-2 px-3 py-1.5 rounded-2xl bg-slate-900/70 border border-white/10 backdrop-blur shadow-[0_0_28px_-18px_rgba(34,211,238,0.8)]">
+      <Clock className="h-3.5 w-3.5 text-cyan-300/80" />
+      <span className="text-sm font-mono text-slate-100">{formatTime(time)}</span>
     </div>
   )
 }
