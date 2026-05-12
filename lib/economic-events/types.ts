@@ -2,6 +2,26 @@ export type EconomicImpactLevel = "high" | "medium" | "low"
 
 export type EconomicEventSource = "finnhub" | "trading-economics" | "fmp"
 
+export type EconomicSeverityScore = number
+
+export type EconomicSessionBucket =
+  | "overnight"
+  | "pre-ny-open"
+  | "ny-open"
+  | "ny-am"
+  | "lunch"
+  | "power-hour"
+  | "after-close"
+
+export type EconomicEventCategory =
+  | "inflation"
+  | "employment"
+  | "rates"
+  | "growth"
+  | "consumption"
+  | "manufacturing"
+  | "other"
+
 /** Normalized event returned by `/api/economic-events` and providers. */
 export type EconomicEvent = {
   id: string
@@ -19,6 +39,13 @@ export type EconomicEvent = {
   previous?: string | number | null
   actual?: string | number | null
   source: EconomicEventSource
+  severityScore: EconomicSeverityScore
+  category: EconomicEventCategory
+  sessionBucket: EconomicSessionBucket
+  /** Trader-facing session label (America/New_York). */
+  sessionLabel: string
+  /** USD + high + tier-1 macro name match. */
+  isRedFolder: boolean
 }
 
 /** Existing calendar UI / badges use title-case impact. */
@@ -38,4 +65,10 @@ export type CalendarEventDisplay = {
   datetime: string
   /** Extra emphasis for US macro + high impact. */
   isUsdHigh?: boolean
+  severityScore: EconomicSeverityScore
+  sessionLabel: string
+  category: EconomicEventCategory
+  isRedFolder: boolean
 }
+
+export type EventsViewFilter = "all" | "usd" | "high" | "red-folder"

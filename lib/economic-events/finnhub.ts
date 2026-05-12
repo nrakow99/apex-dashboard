@@ -2,6 +2,7 @@ import { formatInTimeZone, toDate } from "date-fns-tz"
 import { createHash } from "node:crypto"
 import type { EconomicEventsProvider } from "./provider"
 import type { EconomicEvent } from "./types"
+import { enrichEconomicEvent } from "./enrich"
 import { formatMetricDisplay, inferImpactLevel } from "./utils"
 
 const FINNHUB_BASE = "https://finnhub.io/api/v1"
@@ -77,7 +78,7 @@ function normalizeRow(row: FinnhubCalendarRow, index: number, from: string): Eco
 
   const id = `finnhub-${stableId(`${date}|${time}|${title}|${country}|${index}`)}`
 
-  return {
+  const base = {
     id,
     date,
     time: /^\d{4}-\d{2}-\d{2}$/.test((row.time ?? "").trim()) ? null : time,
@@ -89,15 +90,20 @@ function normalizeRow(row: FinnhubCalendarRow, index: number, from: string): Eco
     forecast: formatMetricDisplay(row.estimate ?? null),
     previous: formatMetricDisplay(row.prev ?? row.previous ?? null),
     actual: formatMetricDisplay(row.actual ?? null),
-    source: "finnhub",
+    source: "finnhub" as const,
   }
+
+  return enrichEconomicEvent(base)
 }
 
-export function createFinnhubEconomicEventsProvider(apiKey?: string): EconomicEventsProvider {
+export function createFinnhubEconomicEventsProvider(
+  apiKey?: string,
+  defaultRevalidateSeconds = 600,
+): EconomicEventsProvider {
   const key = apiKey ?? process.env.FINNHUB_API_KEY
 
   return {
-    async fetchEvents(from: string, to: string): Promise<EconomicEvent[]> {
+    async fetchEvents(from: string, to: string, revalidateSeconds?: number): Promise<EconomicEvent[]> {
       if (!key?.trim()) return []
 
       const url = new URL(`${FINNHUB_BASE}/calendar/economic`)
@@ -105,9 +111,11 @@ export function createFinnhubEconomicEventsProvider(apiKey?: string): EconomicEv
       url.searchParams.set("to", to)
       url.searchParams.set("token", key.trim())
 
+      const rev = revalidateSeconds ?? defaultRevalidateSeconds
+
       const res = await fetch(url.toString(), {
         headers: { Accept: "application/json" },
-        next: { revalidate: 600 },
+        next: { revalidate: rev },
       })
 
       if (!res.ok) return []

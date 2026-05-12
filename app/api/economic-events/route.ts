@@ -1,7 +1,6 @@
 import { NextResponse } from "next/server"
 import { createFinnhubEconomicEventsProvider } from "@/lib/economic-events/finnhub"
-
-export const revalidate = 600
+import { resolveFetchRevalidateSeconds, resolveHttpCacheControl } from "@/lib/economic-events/cache-policy"
 
 function defaultFromTo(): { from: string; to: string } {
   const now = new Date()
@@ -20,9 +19,11 @@ export async function GET(req: Request) {
   const from = qpFrom && /^\d{4}-\d{2}-\d{2}$/.test(qpFrom) ? qpFrom : defaults.from
   const to = qpTo && /^\d{4}-\d{2}-\d{2}$/.test(qpTo) ? qpTo : defaults.to
 
+  const revalidateSec = resolveFetchRevalidateSeconds(from, to)
+
   try {
-    const provider = createFinnhubEconomicEventsProvider()
-    const events = await provider.fetchEvents(from, to)
+    const provider = createFinnhubEconomicEventsProvider(undefined, revalidateSec)
+    const events = await provider.fetchEvents(from, to, revalidateSec)
     return NextResponse.json(
       {
         events,
@@ -31,11 +32,12 @@ export async function GET(req: Request) {
           to,
           provider: "finnhub",
           stale: false,
+          cacheSeconds: revalidateSec,
         },
       },
       {
         headers: {
-          "Cache-Control": "public, s-maxage=600, stale-while-revalidate=1200",
+          "Cache-Control": resolveHttpCacheControl(from, to),
         },
       },
     )

@@ -3,6 +3,7 @@ import type {
   EconomicImpactLevel,
   EconomicEventImpactDisplay,
   CalendarEventDisplay,
+  EventsViewFilter,
 } from "./types"
 
 const HIGH_US_KEYWORDS =
@@ -51,6 +52,22 @@ export function formatEventTimeLocal(iso: string): string {
   return d.toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" })
 }
 
+export function filterEconomicEventsForView(
+  events: EconomicEvent[],
+  filter: EventsViewFilter,
+): EconomicEvent[] {
+  switch (filter) {
+    case "usd":
+      return events.filter((e) => e.currency === "USD")
+    case "high":
+      return events.filter((e) => e.impact === "high")
+    case "red-folder":
+      return events.filter((e) => e.isRedFolder)
+    default:
+      return events
+  }
+}
+
 export function toCalendarEventDisplay(ev: EconomicEvent): CalendarEventDisplay {
   const impact = impactLevelToDisplay(ev.impact)
   const us = ev.country?.toUpperCase() === "US" || ev.currency === "USD"
@@ -68,6 +85,10 @@ export function toCalendarEventDisplay(ev: EconomicEvent): CalendarEventDisplay 
     currency: ev.currency ?? null,
     datetime: ev.datetime,
     isUsdHigh,
+    severityScore: ev.severityScore,
+    sessionLabel: ev.sessionLabel,
+    category: ev.category,
+    isRedFolder: ev.isRedFolder,
   }
 }
 
@@ -80,7 +101,10 @@ export function buildCalendarEventsByDate(events: EconomicEvent[]): Map<string, 
     map.set(e.date, list)
   }
   for (const [, list] of map) {
-    list.sort((a, b) => a.datetime.localeCompare(b.datetime))
+    list.sort((a, b) => {
+      if (b.severityScore !== a.severityScore) return b.severityScore - a.severityScore
+      return a.datetime.localeCompare(b.datetime)
+    })
   }
   return map
 }
@@ -92,13 +116,18 @@ export function maxImpactForDay(events: CalendarEventDisplay[]): EconomicEventIm
   return "Low"
 }
 
-export function sortCalendarEventsByImpactThenTime(events: CalendarEventDisplay[]): CalendarEventDisplay[] {
+/** Primary sort: severity (analytics), then impact band, USD-high macro, time. */
+export function sortCalendarEventsDisplay(events: CalendarEventDisplay[]): CalendarEventDisplay[] {
   const rank: Record<EconomicEventImpactDisplay, number> = { High: 0, Medium: 1, Low: 2 }
   return [...events].sort((a, b) => {
-    const d = rank[a.impact] - rank[b.impact]
-    if (d !== 0) return d
+    if (b.severityScore !== a.severityScore) return b.severityScore - a.severityScore
+    const ir = rank[a.impact] - rank[b.impact]
+    if (ir !== 0) return ir
     const us = (x: CalendarEventDisplay) => (x.isUsdHigh ? 0 : 1)
     if (us(a) !== us(b)) return us(a) - us(b)
     return a.datetime.localeCompare(b.datetime)
   })
 }
+
+/** @deprecated use sortCalendarEventsDisplay */
+export const sortCalendarEventsByImpactThenTime = sortCalendarEventsDisplay

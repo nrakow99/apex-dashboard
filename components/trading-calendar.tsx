@@ -24,12 +24,15 @@ import { ChevronLeft, ChevronRight, X, TrendingUp, TrendingDown, Minus, Star } f
 import { cn } from "@/lib/utils"
 import type { Account, DailyPnL, Trade } from "@/lib/types"
 import { getAccountRules } from "@/lib/rules"
-import type { EconomicEvent, EconomicEventImpactDisplay } from "@/lib/economic-events/types"
+import type { EconomicEventImpactDisplay, EventsViewFilter } from "@/lib/economic-events/types"
+import { formatEventCountdown } from "@/lib/economic-events/countdown"
 import {
   buildCalendarEventsByDate,
+  filterEconomicEventsForView,
   maxImpactForDay,
-  sortCalendarEventsByImpactThenTime,
+  sortCalendarEventsDisplay,
 } from "@/lib/economic-events/utils"
+import { useEconomicCalendarPrefetch } from "@/hooks/use-economic-calendar-events"
 
 interface TradingCalendarProps {
   account: Account
@@ -47,6 +50,13 @@ interface DayStats {
 
 type CalendarMode = "pnl" | "events"
 type EventImpactFilter = "all" | EconomicEventImpactDisplay
+
+const EVENT_VIEW_FILTERS: { id: EventsViewFilter; label: string }[] = [
+  { id: "all", label: "All Events" },
+  { id: "usd", label: "USD Only" },
+  { id: "high", label: "High Impact" },
+  { id: "red-folder", label: "Red Folder" },
+]
 
 function dotClassForImpact(impact: EconomicEventImpactDisplay): string {
   if (impact === "High") return "bg-red-500 shadow-[0_0_6px_rgba(239,68,68,0.65)]"
@@ -76,48 +86,40 @@ export function TradingCalendar({ account, dailyData, trades }: TradingCalendarP
   const [calendarMode, setCalendarMode] = useState<CalendarMode>("pnl")
   const [eventsModalDate, setEventsModalDate] = useState<string | null>(null)
   const [eventImpactFilter, setEventImpactFilter] = useState<EventImpactFilter>("all")
-  const [economicEvents, setEconomicEvents] = useState<EconomicEvent[]>([])
-  const [econLoading, setEconLoading] = useState(false)
+  const [eventsViewFilter, setEventsViewFilter] = useState<EventsViewFilter>("all")
 
   const rules = getAccountRules(account)
   const isPA = account.type === "PA"
   const minQualifyingProfit = rules.minDailyProfit
 
-  useEffect(() => {
-    let cancelled = false
-    const y = currentDate.getFullYear()
-    const m = currentDate.getMonth()
-    const pad = (n: number) => String(n).padStart(2, "0")
-    const from = `${y}-${pad(m + 1)}-01`
-    const lastDay = new Date(y, m + 1, 0).getDate()
-    const to = `${y}-${pad(m + 1)}-${pad(lastDay)}`
+  const { mergedEvents: economicEventsMerged, loading: econLoading } =
+    useEconomicCalendarPrefetch(currentDate)
 
-    setEconLoading(true)
-    fetch(`/api/economic-events?from=${from}&to=${to}`)
-      .then((r) => r.json())
-      .then((body: { events?: EconomicEvent[] }) => {
-        if (!cancelled) setEconomicEvents(body.events ?? [])
-      })
-      .catch(() => {
-        if (!cancelled) setEconomicEvents([])
-      })
-      .finally(() => {
-        if (!cancelled) setEconLoading(false)
-      })
-    return () => {
-      cancelled = true
-    }
-  }, [currentDate])
+  const [tickNow, setTickNow] = useState(() => new Date())
+  useEffect(() => {
+    if (calendarMode !== "events") return
+    const id = window.setInterval(() => setTickNow(new Date()), 60_000)
+    return () => window.clearInterval(id)
+  }, [calendarMode])
+
+  useEffect(() => {
+    if (eventsModalDate) setTickNow(new Date())
+  }, [eventsModalDate])
+
+  const filteredEconomicEvents = useMemo(
+    () => filterEconomicEventsForView(economicEventsMerged, eventsViewFilter),
+    [economicEventsMerged, eventsViewFilter],
+  )
 
   const eventsByDate = useMemo(
-    () => buildCalendarEventsByDate(economicEvents),
-    [economicEvents],
+    () => buildCalendarEventsByDate(filteredEconomicEvents),
+    [filteredEconomicEvents],
   )
 
   const modalDayEvents = useMemo(() => {
     if (!eventsModalDate) return []
     const raw = eventsByDate.get(eventsModalDate) ?? []
-    const sorted = sortCalendarEventsByImpactThenTime(raw)
+    const sorted = sortCalendarEventsDisplay(raw)
     if (eventImpactFilter === "all") return sorted
     return sorted.filter((e) => e.impact === eventImpactFilter)
   }, [eventsModalDate, eventsByDate, eventImpactFilter])
@@ -261,6 +263,28 @@ export function TradingCalendar({ account, dailyData, trades }: TradingCalendarP
         </div>
       </div>
 
+      {calendarMode === "events" && (
+        <div className="mb-3 flex flex-wrap gap-2">
+          {EVENT_VIEW_FILTERS.map(({ id, label }) => (
+            <Button
+              key={id}
+              type="button"
+              variant="outline"
+              size="sm"
+              className={cn(
+                "h-8 rounded-xl border-white/10 bg-slate-900/55 px-3 text-xs font-medium transition-all",
+                eventsViewFilter === id
+                  ? "border-cyan-500/45 bg-gradient-to-r from-cyan-500/15 to-emerald-500/10 text-slate-100 shadow-[inset_0_0_0_1px_rgba(103,232,249,0.25)]"
+                  : "text-muted-foreground hover:border-white/15 hover:bg-slate-900/80 hover:text-slate-200",
+              )}
+              onClick={() => setEventsViewFilter(id)}
+            >
+              {label}
+            </Button>
+          ))}
+        </div>
+      )}
+
       {/* Weekday Headers */}
       <div className="mb-2 grid flex-shrink-0 grid-cols-7 gap-1 sm:mb-2.5 sm:gap-1.5 lg:gap-2">
         {weekDays.map((day) => (
@@ -291,7 +315,7 @@ export function TradingCalendar({ account, dailyData, trades }: TradingCalendarP
 
           const dayEvents = eventsByDate.get(dateKey) ?? []
           const hasEconEvents = dayEvents.length > 0
-          const sortedForDots = sortCalendarEventsByImpactThenTime(dayEvents)
+          const sortedForDots = sortCalendarEventsDisplay(dayEvents)
           const dotEvents = sortedForDots.slice(0, 3)
           const moreCount = dayEvents.length - dotEvents.length
           const maxImp = maxImpactForDay(dayEvents)
@@ -644,15 +668,35 @@ export function TradingCalendar({ account, dailyData, trades }: TradingCalendarP
                     key={ev.id ?? `${ev.time}-${ev.name}-${idx}`}
                     className={cn(
                       "rounded-2xl border bg-slate-900/50 p-3 shadow-[inset_0_1px_0_0_rgba(255,255,255,0.04)] backdrop-blur-sm sm:p-4",
-                      ev.isUsdHigh
-                        ? "border-amber-400/40 ring-1 ring-amber-400/25"
-                        : "border-white/10",
+                      ev.isRedFolder && "border-red-500/45 ring-1 ring-red-500/30",
+                      !ev.isRedFolder &&
+                        ev.isUsdHigh &&
+                        "border-amber-400/40 ring-1 ring-amber-400/25",
+                      !ev.isRedFolder && !ev.isUsdHigh && "border-white/10",
                     )}
                   >
                     <div className="flex flex-wrap items-start justify-between gap-2">
                       <div className="min-w-0 space-y-1">
-                        <p className="font-mono text-xs text-cyan-200/90">{ev.time}</p>
+                        <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+                          <p className="font-mono text-xs text-cyan-200/90">{ev.time}</p>
+                          {formatEventCountdown(ev.datetime, tickNow) ? (
+                            <span className="text-[11px] font-mono text-emerald-400/95">
+                              {formatEventCountdown(ev.datetime, tickNow)}
+                            </span>
+                          ) : null}
+                        </div>
                         <p className="text-sm font-semibold leading-snug text-slate-100 sm:text-base">{ev.name}</p>
+                        <div className="flex flex-wrap items-center gap-2">
+                          <Badge
+                            variant="outline"
+                            className="border-white/12 bg-slate-950/50 text-[10px] font-medium text-slate-300"
+                          >
+                            {ev.sessionLabel}
+                          </Badge>
+                          <span className="text-[10px] uppercase tracking-wide text-muted-foreground/90">
+                            {ev.category}
+                          </span>
+                        </div>
                         <p className="text-[11px] text-muted-foreground">
                           {ev.country}
                           {ev.currency ? ` · ${ev.currency}` : ""}
