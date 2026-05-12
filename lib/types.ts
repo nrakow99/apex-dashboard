@@ -22,6 +22,12 @@ export interface Account {
   /** Intraday only: manual distance to floor (optional) */
   manualDrawdownRemaining?: number | null
   manualDrawdownUpdatedAt?: string | null
+  /** When Eval → PA in-place activation completed */
+  activatedAt?: string | null
+  /** PA only (converted from Eval): metrics use trades/payouts on or after this date (YYYY-MM-DD) */
+  activationStartDate?: string | null
+  /** Set when converting in place, e.g. "Eval" */
+  previousType?: string | null
 }
 
 export interface Trade {

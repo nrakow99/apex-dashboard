@@ -3,6 +3,23 @@ import { EOD_CONSTANTS } from "./types"
 import { getAccountRules } from "./rules"
 import { lucidFlexActiveFloor } from "./lucid-flex-floor"
 
+/** PA converted from Eval: balance/stats/payouts ignore trades before activation_start_date. */
+export function tradesEffectiveForAccount(account: Account, trades: Trade[]): Trade[] {
+  const forAcct = trades.filter((t) => t.accountId === account.id)
+  if (account.type === "PA" && account.activationStartDate) {
+    return forAcct.filter((t) => t.date >= account.activationStartDate)
+  }
+  return forAcct
+}
+
+export function payoutsEffectiveForAccount(account: Account, payouts: Payout[]): Payout[] {
+  const forAcct = payouts.filter((p) => p.accountId === account.id)
+  if (account.type === "PA" && account.activationStartDate) {
+    return forAcct.filter((p) => p.date >= account.activationStartDate)
+  }
+  return forAcct
+}
+
 // ─── EOD Time Utilities ───────────────────────────────────────────────────────
 
 export function isTradingDayComplete(): boolean {
@@ -35,7 +52,10 @@ export function calculateDailyPnLData(
   account: Account,
   payouts: Payout[]
 ): DailyPnL[] {
-  const accountTrades = trades.filter((t) => t.accountId === accountId)
+  let accountTrades = trades.filter((t) => t.accountId === accountId)
+  if (account.type === "PA" && account.activationStartDate) {
+    accountTrades = accountTrades.filter((t) => t.date >= account.activationStartDate)
+  }
   if (accountTrades.length === 0) return []
 
   const tradesByDate: Record<string, Trade[]> = {}
@@ -68,8 +88,8 @@ export function calculateAccountStats(
   trades: Trade[],
   payouts: Payout[]
 ) {
-  const accountTrades = trades.filter((t) => t.accountId === account.id)
-  const accountPayouts = payouts.filter((p) => p.accountId === account.id)
+  const accountTrades = tradesEffectiveForAccount(account, trades)
+  const accountPayouts = payoutsEffectiveForAccount(account, payouts)
 
   const totalPnL = accountTrades.reduce((sum, t) => sum + t.pnl, 0)
   const totalPayouts = accountPayouts.reduce((sum, p) => sum + p.amount, 0)
@@ -183,14 +203,23 @@ function getCycleData(
   account: Account,
   payouts: Payout[]
 ) {
-  const accountPayouts = payouts.filter((p) => p.accountId === accountId)
+  let accountPayouts = payouts.filter((p) => p.accountId === accountId)
+  if (account.type === "PA" && account.activationStartDate) {
+    accountPayouts = accountPayouts.filter((p) => p.date >= account.activationStartDate)
+  }
+
   const lastPayout = accountPayouts.length > 0
     ? accountPayouts.sort((a, b) => a.date.localeCompare(b.date)).at(-1)
     : null
   const cutoffDate = lastPayout?.date ?? null
 
-  const accountTrades = trades.filter(
-    (t) => t.accountId === accountId && (cutoffDate === null || t.date > cutoffDate)
+  let accountTrades = trades.filter((t) => t.accountId === accountId)
+  if (account.type === "PA" && account.activationStartDate) {
+    accountTrades = accountTrades.filter((t) => t.date >= account.activationStartDate)
+  }
+
+  accountTrades = accountTrades.filter(
+    (t) => cutoffDate === null || t.date > cutoffDate,
   )
 
   const tradesByDate: Record<string, number> = {}

@@ -19,6 +19,9 @@ interface AccountRow {
   manual_intraday_floor?: number | null
   manual_drawdown_remaining?: number | null
   manual_drawdown_updated_at?: string | null
+  activated_at?: string | null
+  activation_start_date?: string | null
+  previous_type?: string | null
   created_at: string
   updated_at: string
 }
@@ -68,6 +71,9 @@ function rowToAccount(row: AccountRow): Account {
     manualDrawdownRemaining:
       row.manual_drawdown_remaining != null ? Number(row.manual_drawdown_remaining) : null,
     manualDrawdownUpdatedAt: row.manual_drawdown_updated_at ?? null,
+    activatedAt: row.activated_at ?? null,
+    activationStartDate: row.activation_start_date ?? null,
+    previousType: row.previous_type ?? null,
   }
 }
 
@@ -262,6 +268,9 @@ export async function updateAccount(
     manualIntradayFloor?: number | null
     manualDrawdownRemaining?: number | null
     manualDrawdownUpdatedAt?: string | null
+    activatedAt?: string | null
+    activationStartDate?: string | null
+    previousType?: string | null
   }
 ): Promise<{ data: Account | null; error: Error | null }> {
   const supabase = createClient()
@@ -282,6 +291,10 @@ export async function updateAccount(
     updateData.manual_drawdown_remaining = updates.manualDrawdownRemaining
   if (updates.manualDrawdownUpdatedAt !== undefined)
     updateData.manual_drawdown_updated_at = updates.manualDrawdownUpdatedAt
+  if (updates.activatedAt !== undefined) updateData.activated_at = updates.activatedAt
+  if (updates.activationStartDate !== undefined)
+    updateData.activation_start_date = updates.activationStartDate
+  if (updates.previousType !== undefined) updateData.previous_type = updates.previousType
 
   const { data, error } = await supabase
     .from("accounts")

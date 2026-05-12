@@ -1,6 +1,6 @@
 "use client"
 
-import { useMemo, useState } from "react"
+import { useEffect, useMemo, useState } from "react"
 import { Card } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
@@ -24,13 +24,12 @@ import { ChevronLeft, ChevronRight, X, TrendingUp, TrendingDown, Minus, Star } f
 import { cn } from "@/lib/utils"
 import type { Account, DailyPnL, Trade } from "@/lib/types"
 import { getAccountRules } from "@/lib/rules"
+import type { EconomicEvent, EconomicEventImpactDisplay } from "@/lib/economic-events/types"
 import {
-  MOCK_ECONOMIC_EVENTS,
-  buildEconomicEventsByDate,
+  buildCalendarEventsByDate,
   maxImpactForDay,
-  type EconomicEventImpact,
-  type EconomicEventItem,
-} from "@/lib/economic-events.mock"
+  sortCalendarEventsByImpactThenTime,
+} from "@/lib/economic-events/utils"
 
 interface TradingCalendarProps {
   account: Account
@@ -47,29 +46,15 @@ interface DayStats {
 }
 
 type CalendarMode = "pnl" | "events"
-type EventImpactFilter = "all" | EconomicEventImpact
+type EventImpactFilter = "all" | EconomicEventImpactDisplay
 
-function impactRank(impact: EconomicEventImpact): number {
-  if (impact === "High") return 0
-  if (impact === "Medium") return 1
-  return 2
-}
-
-function sortEventsByImpactThenTime(events: EconomicEventItem[]): EconomicEventItem[] {
-  return [...events].sort((a, b) => {
-    const d = impactRank(a.impact) - impactRank(b.impact)
-    if (d !== 0) return d
-    return a.time.localeCompare(b.time, undefined, { numeric: true })
-  })
-}
-
-function dotClassForImpact(impact: EconomicEventImpact): string {
+function dotClassForImpact(impact: EconomicEventImpactDisplay): string {
   if (impact === "High") return "bg-red-500 shadow-[0_0_6px_rgba(239,68,68,0.65)]"
   if (impact === "Medium") return "bg-amber-400 shadow-[0_0_6px_rgba(245,158,11,0.55)]"
   return "bg-blue-400 shadow-[0_0_6px_rgba(59,130,246,0.55)]"
 }
 
-function ImpactBadge({ impact }: { impact: EconomicEventImpact }) {
+function ImpactBadge({ impact }: { impact: EconomicEventImpactDisplay }) {
   return (
     <Badge
       variant="outline"
@@ -91,17 +76,48 @@ export function TradingCalendar({ account, dailyData, trades }: TradingCalendarP
   const [calendarMode, setCalendarMode] = useState<CalendarMode>("pnl")
   const [eventsModalDate, setEventsModalDate] = useState<string | null>(null)
   const [eventImpactFilter, setEventImpactFilter] = useState<EventImpactFilter>("all")
+  const [economicEvents, setEconomicEvents] = useState<EconomicEvent[]>([])
+  const [econLoading, setEconLoading] = useState(false)
 
   const rules = getAccountRules(account)
   const isPA = account.type === "PA"
   const minQualifyingProfit = rules.minDailyProfit
 
-  const eventsByDate = useMemo(() => buildEconomicEventsByDate(MOCK_ECONOMIC_EVENTS), [])
+  useEffect(() => {
+    let cancelled = false
+    const y = currentDate.getFullYear()
+    const m = currentDate.getMonth()
+    const pad = (n: number) => String(n).padStart(2, "0")
+    const from = `${y}-${pad(m + 1)}-01`
+    const lastDay = new Date(y, m + 1, 0).getDate()
+    const to = `${y}-${pad(m + 1)}-${pad(lastDay)}`
+
+    setEconLoading(true)
+    fetch(`/api/economic-events?from=${from}&to=${to}`)
+      .then((r) => r.json())
+      .then((body: { events?: EconomicEvent[] }) => {
+        if (!cancelled) setEconomicEvents(body.events ?? [])
+      })
+      .catch(() => {
+        if (!cancelled) setEconomicEvents([])
+      })
+      .finally(() => {
+        if (!cancelled) setEconLoading(false)
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [currentDate])
+
+  const eventsByDate = useMemo(
+    () => buildCalendarEventsByDate(economicEvents),
+    [economicEvents],
+  )
 
   const modalDayEvents = useMemo(() => {
     if (!eventsModalDate) return []
     const raw = eventsByDate.get(eventsModalDate) ?? []
-    const sorted = sortEventsByImpactThenTime(raw)
+    const sorted = sortCalendarEventsByImpactThenTime(raw)
     if (eventImpactFilter === "all") return sorted
     return sorted.filter((e) => e.impact === eventImpactFilter)
   }, [eventsModalDate, eventsByDate, eventImpactFilter])
@@ -203,17 +219,24 @@ export function TradingCalendar({ account, dailyData, trades }: TradingCalendarP
     : ""
 
   const cellShell = cn(
-    "relative flex flex-col items-center justify-center transition-all rounded-xl",
-    "min-h-[44px] aspect-square sm:min-h-[52px] sm:rounded-2xl sm:aspect-square sm:min-w-0",
-    "lg:aspect-auto lg:w-full lg:rounded-xl lg:p-1",
-    "lg:h-[clamp(70px,10.5dvh,88px)] lg:min-h-[70px] lg:max-h-[88px]",
+    "relative flex flex-col items-center justify-center gap-0.5 transition-all rounded-xl",
+    "min-h-[54px] aspect-square sm:min-h-[64px] sm:rounded-2xl sm:aspect-square sm:min-w-0",
+    "lg:aspect-auto lg:w-full lg:justify-center lg:rounded-xl lg:p-2",
+    "lg:h-[clamp(92px,14dvh,122px)] lg:min-h-[92px] lg:max-h-[122px]",
   )
 
   return (
-    <Card className="flex flex-col rounded-[24px] glass-card p-3 sm:p-4 lg:min-h-[min(82dvh,880px)]">
-      <div className="mb-2 flex flex-shrink-0 flex-col gap-2 sm:gap-2.5 lg:mb-2 lg:gap-2">
+    <Card className="flex flex-col rounded-[24px] glass-card p-3 sm:p-4 lg:p-5 lg:min-h-[min(920px,calc(100dvh-7.5rem))]">
+      <div className="mb-2 flex flex-shrink-0 flex-col gap-2 sm:gap-2.5 lg:mb-3 lg:gap-2.5">
         <div className="flex flex-wrap items-start justify-between gap-2 sm:gap-3">
-          <h2 className="text-base font-semibold sm:text-lg">Trading Calendar</h2>
+          <div className="flex min-h-[2rem] items-center gap-2">
+            <h2 className="text-base font-semibold sm:text-lg">Trading Calendar</h2>
+            {calendarMode === "events" && econLoading && (
+              <span className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+                Loading…
+              </span>
+            )}
+          </div>
           <Tabs value={calendarMode} onValueChange={handleCalendarModeChange} className="w-full sm:w-auto">
             <TabsList className="grid h-9 w-full grid-cols-2 gap-0.5 sm:inline-flex sm:h-9 sm:w-auto sm:gap-0">
               <TabsTrigger value="pnl" className="rounded-lg px-3 text-xs sm:text-sm">
@@ -239,11 +262,11 @@ export function TradingCalendar({ account, dailyData, trades }: TradingCalendarP
       </div>
 
       {/* Weekday Headers */}
-      <div className="mb-1.5 grid flex-shrink-0 grid-cols-7 gap-1 sm:mb-2 sm:gap-1.5 lg:gap-1.5">
+      <div className="mb-2 grid flex-shrink-0 grid-cols-7 gap-1 sm:mb-2.5 sm:gap-1.5 lg:gap-2">
         {weekDays.map((day) => (
           <div
             key={day}
-            className="py-1 text-center text-[10px] font-medium text-muted-foreground sm:py-1.5 sm:text-xs lg:text-[11px]"
+            className="py-1.5 text-center text-[10px] font-medium text-muted-foreground sm:py-2 sm:text-xs lg:text-[11px]"
           >
             <span className="sm:hidden">{day.slice(0, 1)}</span>
             <span className="hidden sm:inline">{day}</span>
@@ -252,7 +275,7 @@ export function TradingCalendar({ account, dailyData, trades }: TradingCalendarP
       </div>
 
       {/* Calendar Grid */}
-      <div className="grid min-h-0 flex-1 grid-cols-7 gap-1 sm:gap-1.5 lg:gap-1.5 lg:content-start">
+      <div className="grid min-h-0 flex-1 grid-cols-7 gap-1.5 sm:gap-2 lg:gap-2 lg:content-start">
         {Array.from({ length: firstDayOfMonth }).map((_, i) => (
           <div key={`empty-${i}`} className={cn(cellShell, "pointer-events-none invisible border-0 bg-transparent shadow-none")} aria-hidden />
         ))}
@@ -268,10 +291,11 @@ export function TradingCalendar({ account, dailyData, trades }: TradingCalendarP
 
           const dayEvents = eventsByDate.get(dateKey) ?? []
           const hasEconEvents = dayEvents.length > 0
-          const sortedForDots = sortEventsByImpactThenTime(dayEvents)
+          const sortedForDots = sortCalendarEventsByImpactThenTime(dayEvents)
           const dotEvents = sortedForDots.slice(0, 3)
           const moreCount = dayEvents.length - dotEvents.length
           const maxImp = maxImpactForDay(dayEvents)
+          const hasUsdHighMacro = dayEvents.some((e) => e.isUsdHigh)
 
           if (calendarMode === "pnl") {
             return (
@@ -311,7 +335,7 @@ export function TradingCalendar({ account, dailyData, trades }: TradingCalendarP
                 )}
                 <span
                   className={cn(
-                    "text-sm font-semibold leading-none sm:text-base lg:text-sm xl:text-[15px]",
+                    "text-[15px] font-semibold leading-none sm:text-base lg:text-[15px] xl:text-[16px]",
                     hasTrades && dayStats.pnl > 0 && "text-emerald-400",
                     hasTrades && dayStats.pnl < 0 && "text-red-400",
                     hasTrades && dayStats.pnl === 0 && "text-muted-foreground",
@@ -324,7 +348,7 @@ export function TradingCalendar({ account, dailyData, trades }: TradingCalendarP
                   <>
                     <span
                       className={cn(
-                        "mt-0 max-w-full truncate font-mono text-[9px] font-bold sm:mt-0.5 sm:text-xs lg:mt-0.5 lg:text-[11px] xl:text-xs",
+                        "mt-0 max-w-full truncate font-mono text-[10px] font-bold sm:mt-0.5 sm:text-[11px] lg:text-[12px]",
                         dayStats.pnl > 0
                           ? "text-emerald-400"
                           : dayStats.pnl < 0
@@ -383,9 +407,12 @@ export function TradingCalendar({ account, dailyData, trades }: TradingCalendarP
                 hasEconEvents &&
                   maxImp === "Low" &&
                   "border-blue-500/40 shadow-[0_0_14px_-6px_rgba(59,130,246,0.45)] ring-1 ring-blue-500/25",
+                hasEconEvents &&
+                  hasUsdHighMacro &&
+                  "shadow-[0_0_20px_-8px_rgba(251,191,36,0.55)] ring-2 ring-amber-400/45",
               )}
             >
-              <span className="text-sm font-semibold leading-none text-slate-100 sm:text-base lg:text-sm xl:text-[15px]">
+              <span className="text-[15px] font-semibold leading-none text-slate-100 sm:text-base lg:text-[15px] xl:text-[16px]">
                 {day}
               </span>
               {hasEconEvents && (
@@ -393,9 +420,9 @@ export function TradingCalendar({ account, dailyData, trades }: TradingCalendarP
                   <div className="flex items-center justify-center gap-1">
                     {dotEvents.map((ev, idx) => (
                       <span
-                        key={`${ev.time}-${ev.name}-${idx}`}
+                        key={ev.id ?? `${ev.time}-${ev.name}-${idx}`}
                         className={cn(
-                          "h-1.5 w-1.5 rounded-full sm:h-2 sm:w-2 lg:h-2 lg:w-2 xl:h-2.5 xl:w-2.5",
+                          "h-2 w-2 rounded-full sm:h-2 sm:w-2 lg:h-2.5 lg:w-2.5",
                           dotClassForImpact(ev.impact),
                         )}
                         aria-hidden
@@ -614,13 +641,22 @@ export function TradingCalendar({ account, dailyData, trades }: TradingCalendarP
               <ul className="space-y-2">
                 {modalDayEvents.map((ev, idx) => (
                   <li
-                    key={`${ev.time}-${ev.name}-${idx}`}
-                    className="rounded-2xl border border-white/10 bg-slate-900/50 p-3 shadow-[inset_0_1px_0_0_rgba(255,255,255,0.04)] backdrop-blur-sm sm:p-4"
+                    key={ev.id ?? `${ev.time}-${ev.name}-${idx}`}
+                    className={cn(
+                      "rounded-2xl border bg-slate-900/50 p-3 shadow-[inset_0_1px_0_0_rgba(255,255,255,0.04)] backdrop-blur-sm sm:p-4",
+                      ev.isUsdHigh
+                        ? "border-amber-400/40 ring-1 ring-amber-400/25"
+                        : "border-white/10",
+                    )}
                   >
                     <div className="flex flex-wrap items-start justify-between gap-2">
                       <div className="min-w-0 space-y-1">
                         <p className="font-mono text-xs text-cyan-200/90">{ev.time}</p>
                         <p className="text-sm font-semibold leading-snug text-slate-100 sm:text-base">{ev.name}</p>
+                        <p className="text-[11px] text-muted-foreground">
+                          {ev.country}
+                          {ev.currency ? ` · ${ev.currency}` : ""}
+                        </p>
                       </div>
                       <ImpactBadge impact={ev.impact} />
                     </div>

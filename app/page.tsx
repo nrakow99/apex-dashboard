@@ -13,6 +13,7 @@ import { AddAccountModal } from "@/components/add-account-modal"
 import { EditTradeModal } from "@/components/edit-trade-modal"
 import { EditAccountModal } from "@/components/edit-account-modal"
 import { DeleteConfirmationModal } from "@/components/delete-confirmation-modal"
+import { ActivatePaModal } from "@/components/activate-pa-modal"
 import { LiveClock } from "@/components/live-clock"
 import { AccountRangeCard, shouldShowAccountRangeCard } from "@/components/account-range-card"
 import {
@@ -44,6 +45,8 @@ import {
   calculateAccountStats,
   getConsistencyInfo,
   getPayoutEligibility,
+  tradesEffectiveForAccount,
+  payoutsEffectiveForAccount,
 } from "@/lib/storage"
 import { getAccountRules } from "@/lib/rules"
 import {
@@ -58,6 +61,11 @@ import {
   deleteAccount,
   deleteTrade,
 } from "@/lib/supabase/database"
+import {
+  buildEvalToPaConversionUpdates,
+  getEvalActivationStats,
+  isEvalEligibleForPaActivation,
+} from "@/lib/pa-activation"
 import { createClient } from "@/lib/supabase/client"
 import type { Trade, Payout, Account, AccountType, DrawdownType, Firm, DailyPnL } from "@/lib/types"
 
@@ -82,6 +90,8 @@ export default function Dashboard() {
   const [deletingAccount, setDeletingAccount] = useState<Account | null>(null)
   const [manualIntradayModalOpen, setManualIntradayModalOpen] = useState(false)
   const [manualIntradayModalMode, setManualIntradayModalMode] = useState<ManualDrawdownMode>("remaining")
+  const [activatePaOpen, setActivatePaOpen] = useState(false)
+  const [activatePaEval, setActivatePaEval] = useState<Account | null>(null)
 
   // Load data from Supabase on mount
   const loadData = useCallback(async () => {
@@ -134,12 +144,12 @@ export default function Dashboard() {
   // Get data for selected account
   const accountTrades = useMemo(() => {
     if (!selectedAccount) return []
-    return allTrades.filter((t) => t.accountId === selectedAccount.id)
+    return tradesEffectiveForAccount(selectedAccount, allTrades)
   }, [allTrades, selectedAccount])
 
   const accountPayouts = useMemo(() => {
     if (!selectedAccount) return []
-    return allPayouts.filter((p) => p.accountId === selectedAccount.id)
+    return payoutsEffectiveForAccount(selectedAccount, allPayouts)
   }, [allPayouts, selectedAccount])
 
   const accountDailyData = useMemo((): DailyPnL[] => {
@@ -177,6 +187,14 @@ export default function Dashboard() {
   const payoutEligibility = useMemo(() => {
     if (!selectedAccount || selectedAccount.type !== "PA") return null
     return getPayoutEligibility(selectedAccount.id, allTrades, selectedAccount, allPayouts)
+  }, [selectedAccount, allTrades, allPayouts])
+
+  const selectedEvalEligible = useMemo(() => {
+    if (!selectedAccount || selectedAccount.type !== "Eval") return false
+    const at = allTrades.filter((t) => t.accountId === selectedAccount.id)
+    const ap = allPayouts.filter((p) => p.accountId === selectedAccount.id)
+    const stats = getEvalActivationStats(selectedAccount, at, ap)
+    return isEvalEligibleForPaActivation(selectedAccount, stats, at, ap)
   }, [selectedAccount, allTrades, allPayouts])
 
   /** Fourth top metric: qualifying days (PA), profit/consistency (Eval), or trading days (Live). Display-only; counts match rules/payout helpers. */
@@ -300,6 +318,32 @@ export default function Dashboard() {
   const totalCashWithdrawn = useMemo(() => {
     return allPayouts.reduce((sum, p) => sum + p.amount, 0)
   }, [allPayouts])
+
+  /** Portfolio summary for accounts overview (display-only aggregates) */
+  const accountsOverview = useMemo(() => {
+    if (accounts.length === 0) return null
+    let totalBalance = 0
+    let totalNetPnL = 0
+    let evalPassed = 0
+    let payoutEligible = 0
+    for (const a of accounts) {
+      const s = calculateAccountStats(a, allTrades, allPayouts)
+      totalBalance += s.currentBalance
+      totalNetPnL += s.totalPnL
+      if (a.type === "Eval" && a.status === "Passed") evalPassed++
+      if (a.type === "PA") {
+        const el = getPayoutEligibility(a.id, allTrades, a, allPayouts)
+        if (el.isEligible) payoutEligible++
+      }
+    }
+    return {
+      totalBalance,
+      totalNetPnL,
+      accountCount: accounts.length,
+      evalPassed,
+      payoutEligible,
+    }
+  }, [accounts, allTrades, allPayouts])
 
   const handleSelectAccount = (account: Account) => {
     setSelectedAccountId(account.id)
@@ -689,6 +733,47 @@ export default function Dashboard() {
         />
       )}
 
+      <ActivatePaModal
+        open={activatePaOpen}
+        onOpenChange={(open) => {
+          setActivatePaOpen(open)
+          if (!open) setActivatePaEval(null)
+        }}
+        evalAccount={activatePaEval}
+        isSubmitting={isSaving}
+        onConfirm={async ({ name, activatedAtIso, activationStartDate }) => {
+          if (!activatePaEval) return
+          const evalAcc = activatePaEval
+          setIsSaving(true)
+          try {
+            const updates = buildEvalToPaConversionUpdates(
+              evalAcc,
+              name,
+              activatedAtIso,
+              activationStartDate,
+            )
+            const result = await updateAccount(evalAcc.id, updates)
+            if (result.error) throw result.error
+
+            await loadData()
+            setActivatePaOpen(false)
+            setActivatePaEval(null)
+            toast({
+              title: "Performance account activated",
+              description: `${updates.name} is now a funded account. PA metrics use trades on or after ${activationStartDate}.`,
+            })
+          } catch (err) {
+            toast({
+              title: "Activation failed",
+              description: err instanceof Error ? err.message : "Could not activate PA",
+              variant: "destructive",
+            })
+          } finally {
+            setIsSaving(false)
+          }
+        }}
+      />
+
       {/* Error toast */}
       {error && accounts.length > 0 && (
         <div className="fixed top-4 right-4 z-50 bg-red-500/10 border border-red-400/30 text-red-300 px-4 py-3 rounded-2xl backdrop-blur-xl flex items-center gap-3">
@@ -742,7 +827,7 @@ export default function Dashboard() {
             <Tabs
               value={accountFilter}
               onValueChange={(v) => setAccountFilter(v as AccountType | "All")}
-              className="mb-4 sm:mb-5"
+              className="mb-3 sm:mb-4"
             >
               <TabsList>
                 <TabsTrigger value="All">All</TabsTrigger>
@@ -752,16 +837,69 @@ export default function Dashboard() {
               </TabsList>
             </Tabs>
 
+            {accountsOverview && (
+              <div className="mb-4 grid grid-cols-2 gap-2.5 sm:mb-5 sm:gap-3 lg:grid-cols-4">
+                <div className="rounded-2xl border border-white/10 bg-slate-950/40 px-3 py-2.5 shadow-[inset_0_1px_0_0_rgba(255,255,255,0.04)] backdrop-blur-sm sm:px-4 sm:py-3">
+                  <p className="text-[10px] font-medium uppercase tracking-[0.14em] text-slate-500">Total balance</p>
+                  <p className="mt-0.5 font-mono text-base font-semibold tracking-tight text-slate-100 sm:text-lg">
+                    {formatCurrency(accountsOverview.totalBalance)}
+                  </p>
+                </div>
+                <div className="rounded-2xl border border-white/10 bg-slate-950/40 px-3 py-2.5 shadow-[inset_0_1px_0_0_rgba(255,255,255,0.04)] backdrop-blur-sm sm:px-4 sm:py-3">
+                  <p className="text-[10px] font-medium uppercase tracking-[0.14em] text-slate-500">Total net PnL</p>
+                  <p
+                    className={cn(
+                      "mt-0.5 font-mono text-base font-semibold tracking-tight sm:text-lg",
+                      accountsOverview.totalNetPnL >= 0 ? "text-emerald-400" : "text-red-400",
+                    )}
+                  >
+                    {formatPnL(accountsOverview.totalNetPnL)}
+                  </p>
+                </div>
+                <div className="rounded-2xl border border-white/10 bg-slate-950/40 px-3 py-2.5 shadow-[inset_0_1px_0_0_rgba(255,255,255,0.04)] backdrop-blur-sm sm:px-4 sm:py-3">
+                  <p className="text-[10px] font-medium uppercase tracking-[0.14em] text-slate-500">Accounts</p>
+                  <p className="mt-0.5 font-mono text-base font-semibold tracking-tight text-slate-100 sm:text-lg">
+                    {accountsOverview.accountCount}
+                  </p>
+                </div>
+                <div className="col-span-2 rounded-2xl border border-white/10 bg-slate-950/40 px-3 py-2.5 shadow-[inset_0_1px_0_0_rgba(255,255,255,0.04)] backdrop-blur-sm sm:col-span-1 sm:px-4 sm:py-3">
+                  <p className="text-[10px] font-medium uppercase tracking-[0.14em] text-slate-500">Milestones</p>
+                  <p className="mt-0.5 text-xs leading-snug text-slate-300 sm:text-sm">
+                    <span className="font-mono text-emerald-400/95">{accountsOverview.evalPassed}</span>
+                    <span className="text-muted-foreground"> eval passed</span>
+                    <span className="mx-1.5 text-muted-foreground/40">·</span>
+                    <span className="font-mono text-cyan-400/95">{accountsOverview.payoutEligible}</span>
+                    <span className="text-muted-foreground"> PA payout-ready</span>
+                  </p>
+                </div>
+              </div>
+            )}
+
             {/* Account Cards Grid */}
             {filteredAccounts.length > 0 ? (
-              <div className="grid gap-4 sm:gap-5 md:grid-cols-2 xl:grid-cols-3">
-                {filteredAccounts.map((account) => (
+              <div className="grid gap-4 sm:gap-5 md:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">
+                {filteredAccounts.map((account) => {
+                  const tradesForAccount = allTrades.filter((t) => t.accountId === account.id)
+                  const payoutsForAccount = allPayouts.filter((p) => p.accountId === account.id)
+                  const actStats = getEvalActivationStats(account, tradesForAccount, payoutsForAccount)
+                  const eligibleForPa =
+                    account.type === "Eval" &&
+                    isEvalEligibleForPaActivation(account, actStats, tradesForAccount, payoutsForAccount)
+                  return (
                   <div key={account.id} className="relative group">
                     <AccountCard
                       account={account}
                       trades={allTrades}
                       payouts={allPayouts}
                       onClick={() => handleSelectAccount(account)}
+                      onActivatePa={
+                        eligibleForPa
+                          ? () => {
+                              setActivatePaEval(account)
+                              setActivatePaOpen(true)
+                            }
+                          : undefined
+                      }
                     />
                     {/* Account Actions Menu */}
                     <div className="absolute top-4 right-12 sm:top-6 sm:right-14 opacity-0 group-hover:opacity-100 transition-opacity">
@@ -787,7 +925,8 @@ export default function Dashboard() {
                       </DropdownMenu>
                     </div>
                   </div>
-                ))}
+                  )
+                })}
               </div>
             ) : (
               <div className="text-center py-16 sm:py-20 glass-card rounded-[28px]">
@@ -804,7 +943,7 @@ export default function Dashboard() {
           accountStats && (
             <>
               {/* Detail Header */}
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 sm:gap-3 mb-2 sm:mb-3">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 sm:gap-3 mb-3 sm:mb-4">
                 <div className="flex items-center gap-3 sm:gap-4">
                   <Button variant="ghost" size="icon" onClick={handleBack} className="h-9 w-9 sm:h-10 sm:w-10 shrink-0 border border-white/10 bg-slate-900/70">
                     <ArrowLeft className="h-5 w-5" />
@@ -816,8 +955,20 @@ export default function Dashboard() {
                     </p>
                   </div>
                 </div>
-                <div className="flex items-center gap-2 sm:gap-4 ml-12 sm:ml-0">
+                <div className="flex items-center gap-2 sm:gap-4 ml-12 sm:ml-0 flex-wrap justify-end">
                   <LiveClock />
+                  {selectedAccount.type === "Eval" && selectedEvalEligible && (
+                      <Button
+                        size="sm"
+                        className="bg-gradient-to-r from-emerald-600/90 to-cyan-600/90 hover:from-emerald-500 hover:to-cyan-500 shadow-md shadow-emerald-900/25"
+                        onClick={() => {
+                          setActivatePaEval(selectedAccount)
+                          setActivatePaOpen(true)
+                        }}
+                      >
+                        Activate PA
+                      </Button>
+                    )}
                   <AddTradeModal
                     accounts={accounts}
                     selectedAccountId={selectedAccount.id}
@@ -851,7 +1002,7 @@ export default function Dashboard() {
               </div>
 
               {/* TOP ROW: Stats Cards */}
-              <div className="grid gap-2 sm:gap-3 grid-cols-2 lg:grid-cols-5 mb-2 sm:mb-3">
+              <div className="grid gap-2 sm:gap-3 grid-cols-2 lg:grid-cols-5 mb-3 sm:mb-4">
                 <MetricsCard
                   title="Account Balance"
                   value={formatCurrency(accountStats.currentBalance)}
@@ -949,13 +1100,13 @@ export default function Dashboard() {
               </div>
 
               {shouldShowAccountRangeCard(selectedAccount) && (
-                <div className="mb-2 sm:mb-3">
+                <div className="mb-4 sm:mb-5">
                   <AccountRangeCard account={selectedAccount} stats={displayAccountStats!} />
                 </div>
               )}
 
               {/* ROW 2: Full Width Chart */}
-              <div className="mb-2 sm:mb-3">
+              <div className="mb-12 sm:mb-14 lg:mb-[4.25rem]">
                 <PerformanceChart
                   data={accountDailyData}
                   account={selectedAccount}
@@ -981,7 +1132,7 @@ export default function Dashboard() {
               </div>
 
               {/* ROW 4: Full Width Calendar */}
-              <div className="mb-4 sm:mb-5">
+              <div className="mb-6 sm:mb-8 lg:mb-10">
                 <TradingCalendar account={selectedAccount} dailyData={accountDailyData} trades={accountTrades} />
               </div>
 

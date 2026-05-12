@@ -281,19 +281,34 @@ export function RuleEnginePanel({
                 </span>
               </div>
               {apexPaScaling.isMaxTier ? (
-                <p className="text-xs font-medium text-emerald-500/90 pt-0.5">Max Tier Reached</p>
+                <div className="space-y-1.5 pt-2">
+                  <div className="flex justify-between text-xs">
+                    <span className="text-muted-foreground">Tier status</span>
+                    <span className="font-medium text-emerald-500/95">Max Tier Reached</span>
+                  </div>
+                  <Progress value={100} className="h-1.5 [&>div]:bg-emerald-500/80" />
+                </div>
               ) : (
-                <p className="text-xs text-muted-foreground pt-0.5 leading-snug">
-                  Next Tier:{" "}
-                  <span className="font-mono text-slate-200">
-                    $
-                    {(apexPaScaling.amountToNextTier ?? 0).toLocaleString(undefined, {
-                      minimumFractionDigits: 2,
-                      maximumFractionDigits: 2,
-                    })}
-                  </span>{" "}
-                  to Level {apexPaScaling.nextLevel}
-                </p>
+                <div className="space-y-2 pt-2">
+                  <div className="flex justify-between gap-2 text-xs">
+                    <span className="text-muted-foreground">Next tier</span>
+                    <span className="text-right font-mono text-slate-200">
+                      Level {apexPaScaling.nextLevel}
+                      <span className="block text-[11px] font-normal text-muted-foreground">
+                        $
+                        {(apexPaScaling.amountToNextTier ?? 0).toLocaleString(undefined, {
+                          minimumFractionDigits: 2,
+                          maximumFractionDigits: 2,
+                        })}{" "}
+                        to go
+                      </span>
+                    </span>
+                  </div>
+                  <Progress
+                    value={apexPaScaling.progressToNextTierPercent}
+                    className="h-1.5 [&>div]:bg-gradient-to-r from-cyan-500/90 to-emerald-500/90"
+                  />
+                </div>
               )}
             </div>
           </RuleCard>

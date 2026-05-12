@@ -34,6 +34,8 @@ export interface ApexPaScalingTierResult {
   nextLevel: number | null
   maxLevel: number
   isMaxTier: boolean
+  /** 0–100 progress within current profit band toward the next tier (display only; max tier = 100) */
+  progressToNextTierPercent: number
 }
 
 /** Ordered by ascending minProfit; first tier always minProfit 0 */
@@ -86,10 +88,14 @@ export function getApexPaScalingTier(
 
   let amountToNextTier: number | null = null
   let nextLevel: number | null = null
+  let progressToNextTierPercent = 100
   if (!isMaxTier) {
     const next = tiers[idx + 1]
     nextLevel = next.level
     amountToNextTier = Math.max(0, next.minProfit - profit)
+    const band = next.minProfit - current.minProfit
+    progressToNextTierPercent =
+      band <= 0 ? 100 : Math.min(100, Math.max(0, ((profit - current.minProfit) / band) * 100))
   }
 
   return {
@@ -101,5 +107,6 @@ export function getApexPaScalingTier(
     nextLevel,
     maxLevel: last.level,
     isMaxTier,
+    progressToNextTierPercent,
   }
 }

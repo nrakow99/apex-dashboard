@@ -196,7 +196,7 @@ export function AccountRangeCard({ account, stats }: AccountRangeCardProps) {
   )
 
   return (
-    <Card className="glass-card overflow-hidden rounded-[20px] border-white/10 bg-slate-950/35 px-3 py-2.5 shadow-[inset_0_1px_0_0_rgba(255,255,255,0.04)] backdrop-blur-xl sm:rounded-[24px] sm:px-4 sm:py-3">
+    <Card className="glass-card overflow-hidden rounded-[20px] border-white/10 bg-slate-950/35 px-3 py-3.5 shadow-[inset_0_1px_0_0_rgba(255,255,255,0.04)] backdrop-blur-xl sm:rounded-[24px] sm:px-4 sm:py-4">
       <div className="mb-1.5 flex items-center justify-between gap-2">
         <h2 className="text-[10px] font-semibold uppercase tracking-[0.16em] text-slate-400">
           Account range
@@ -204,10 +204,10 @@ export function AccountRangeCard({ account, stats }: AccountRangeCardProps) {
       </div>
 
       {/* Range bar: floor (left) → target (right) */}
-      <div className="relative mb-2">
+      <div className="relative mb-2.5">
         <div
           className={cn(
-            "relative h-2 overflow-visible rounded-full sm:h-2.5",
+            "relative h-2.5 overflow-visible rounded-full ring-1 ring-white/10 sm:h-3",
             "bg-gradient-to-r from-red-500/55 via-amber-400/20 to-emerald-500/50",
             "shadow-[inset_0_1px_2px_rgba(0,0,0,0.35)]",
           )}
@@ -227,21 +227,21 @@ export function AccountRangeCard({ account, stats }: AccountRangeCardProps) {
 
           {/* START */}
           <div
-            className="absolute top-1/2 z-20 flex -translate-x-1/2 -translate-y-1/2 flex-col items-center"
+            className="absolute top-1/2 z-20 flex -translate-x-1/2 -translate-y-1/2 flex-col items-center gap-0.5"
             style={{ left: `${startPct}%` }}
           >
-            <span className="whitespace-nowrap rounded-md border border-cyan-400/35 bg-slate-950/90 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider text-cyan-200 shadow-[0_0_12px_-4px_rgba(34,211,238,0.55)]">
+            <span className="whitespace-nowrap rounded-full border border-cyan-400/40 bg-slate-950/95 px-2 py-0.5 text-[8px] font-semibold uppercase tracking-[0.12em] text-cyan-100/95">
               Start
             </span>
-            <span className="mt-0.5 h-1.5 w-1.5 rounded-full border-2 border-cyan-300/80 bg-slate-950 shadow-[0_0_12px_rgba(34,211,238,0.65)] sm:h-2 sm:w-2 sm:mt-1" />
+            <span className="h-1.5 w-1.5 rounded-full border border-cyan-300/70 bg-cyan-400/90 shadow-[0_0_10px_rgba(34,211,238,0.5)] sm:h-2 sm:w-2" />
           </div>
 
           {/* Balance */}
           <div
-            className="absolute top-1/2 z-20 -translate-x-1/2 -translate-y-1/2"
+            className="absolute top-1/2 z-30 -translate-x-1/2 -translate-y-1/2"
             style={{ left: `${balancePct}%` }}
           >
-            <span className="block h-2.5 w-2.5 rounded-full border-2 border-white/90 bg-emerald-400 shadow-[0_0_14px_rgba(52,211,153,0.55)] ring-2 ring-emerald-400/25 sm:h-3 sm:w-3" />
+            <span className="block h-3.5 w-3.5 rounded-full border-2 border-white bg-emerald-400 shadow-[0_0_16px_rgba(52,211,153,0.65)] ring-4 ring-emerald-400/15 sm:h-4 sm:w-4" />
           </div>
         </div>
 
@@ -252,8 +252,8 @@ export function AccountRangeCard({ account, stats }: AccountRangeCardProps) {
       </div>
 
       {/* Three columns */}
-      <div className="grid grid-cols-1 gap-2 border-t border-white/10 pt-2 sm:grid-cols-3 sm:gap-4 sm:pt-3">
-        <div className="space-y-0.5 text-center sm:text-left">
+      <div className="grid grid-cols-1 gap-2 border-t border-white/10 pt-2.5 sm:grid-cols-3 sm:gap-3 sm:pt-3 lg:gap-6">
+        <div className="space-y-0.5 text-center sm:text-left sm:pr-1">
           <p className="text-[9px] font-medium uppercase tracking-[0.14em] text-slate-500 sm:text-[10px]">{leftFloorTitle}</p>
           {leftFloorDisplay}
         </div>
@@ -264,21 +264,21 @@ export function AccountRangeCard({ account, stats }: AccountRangeCardProps) {
           </p>
           <p className="text-[10px] text-slate-500">balance</p>
         </div>
-        <div className="space-y-0.5 text-center sm:text-right">
+        <div className="space-y-0.5 text-center sm:text-right sm:pl-1">
           <p className="text-[9px] font-medium uppercase tracking-[0.14em] text-slate-500 sm:text-[10px]">{rightTitle}</p>
           {rightValue}
         </div>
       </div>
 
       {/* Bottom metrics */}
-      <div className="mt-2 grid grid-cols-2 gap-3 border-t border-white/10 pt-2 sm:mt-2 sm:gap-4 sm:pt-2.5">
-        <div>
+      <div className="mt-2.5 flex flex-col gap-2 border-t border-white/10 pt-2.5 sm:mt-3 sm:flex-row sm:items-end sm:justify-between sm:gap-6 sm:pt-3">
+        <div className="min-w-0 flex-1">
           <p className="text-[9px] font-medium uppercase tracking-[0.14em] text-slate-500 sm:text-[10px]">{bottomLeftLabel}</p>
-          <div className="mt-0.5">{bottomLeftValue}</div>
+          <div className="mt-1 text-sm sm:text-base">{bottomLeftValue}</div>
         </div>
-        <div className="text-right">
+        <div className="min-w-0 flex-1 text-right">
           <p className="text-[9px] font-medium uppercase tracking-[0.14em] text-slate-500 sm:text-[10px]">{bottomRightLabel}</p>
-          <div className="mt-0.5">{bottomRightValue}</div>
+          <div className="mt-1 text-sm sm:text-base">{bottomRightValue}</div>
         </div>
       </div>
 

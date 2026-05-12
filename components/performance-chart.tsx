@@ -231,7 +231,7 @@ export function PerformanceChart({ data, account, stats }: PerformanceChartProps
   // Empty state - uses same flex layout as main chart for consistency
   if (data.length === 0) {
     return (
-      <Card className="h-[220px] sm:h-[252px] lg:h-[268px] flex flex-col p-2.5 sm:p-3 rounded-[24px] glass-card">
+      <Card className="h-[272px] sm:h-[308px] lg:h-[332px] flex flex-col p-2.5 sm:p-3 rounded-[24px] glass-card">
         {/* Header */}
         <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
           <div>
@@ -335,7 +335,7 @@ export function PerformanceChart({ data, account, stats }: PerformanceChartProps
   }
 
   return (
-      <Card className="h-[220px] sm:h-[252px] lg:h-[268px] flex flex-col p-2.5 sm:p-3 rounded-[24px] glass-card">
+      <Card className="h-[272px] sm:h-[308px] lg:h-[332px] flex flex-col p-2.5 sm:p-3 rounded-[24px] glass-card">
       {/* Header */}
       <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
         <div>
@@ -373,8 +373,8 @@ export function PerformanceChart({ data, account, stats }: PerformanceChartProps
             <AreaChart data={chartData} margin={{ top: 6, right: 12, left: 2, bottom: 0 }}>
               <defs>
                 <linearGradient id="balanceGradient" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="0%" stopColor="#10b981" stopOpacity={0.2} />
-                  <stop offset="50%" stopColor="#10b981" stopOpacity={0.1} />
+                  <stop offset="0%" stopColor="#34d399" stopOpacity={0.28} />
+                  <stop offset="45%" stopColor="#10b981" stopOpacity={0.14} />
                   <stop offset="100%" stopColor="#10b981" stopOpacity={0} />
                 </linearGradient>
                 <linearGradient id="drawdownGradient" x1="0" y1="0" x2="0" y2="1">
@@ -383,14 +383,14 @@ export function PerformanceChart({ data, account, stats }: PerformanceChartProps
                 </linearGradient>
                 {/* Glow filter for active point */}
                 <filter id="glow" x="-50%" y="-50%" width="200%" height="200%">
-                  <feGaussianBlur stdDeviation="3" result="coloredBlur" />
+                  <feGaussianBlur stdDeviation="4" result="coloredBlur" />
                   <feMerge>
                     <feMergeNode in="coloredBlur" />
                     <feMergeNode in="SourceGraphic" />
                   </feMerge>
                 </filter>
               </defs>
-              <CartesianGrid strokeDasharray="3 3" stroke="#374151" strokeOpacity={0.3} vertical={false} />
+              <CartesianGrid strokeDasharray="3 3" stroke="#374151" strokeOpacity={0.22} vertical={false} />
               <XAxis
                 dataKey="date"
                 axisLine={false}
@@ -414,31 +414,31 @@ export function PerformanceChart({ data, account, stats }: PerformanceChartProps
                   stroke: "#6b7280",
                   strokeWidth: 1,
                   strokeDasharray: "4 4",
-                  strokeOpacity: 0.5,
+                  strokeOpacity: 0.45,
                 }}
               />
               {/* Starting balance reference line */}
               <ReferenceLine
                 y={account.startingBalance}
-                stroke="#6b7280"
+                stroke="#64748b"
                 strokeDasharray="4 4"
                 strokeWidth={1}
-                strokeOpacity={0.4}
+                strokeOpacity={0.38}
               />
               {/* Payout threshold for PA accounts */}
               {account.type === "PA" && (
                 <ReferenceLine
                   y={PA_CONSTANTS.MIN_BALANCE_FOR_PAYOUT}
-                  stroke="#eab308"
+                  stroke="#ca8a04"
                   strokeDasharray="6 4"
-                  strokeWidth={1.5}
-                  strokeOpacity={0.6}
+                  strokeWidth={1.25}
+                  strokeOpacity={0.52}
                   label={{
                     value: "Payout Threshold",
                     position: "right",
                     fill: "#eab308",
                     fontSize: 10,
-                    opacity: 0.8,
+                    opacity: 0.72,
                   }}
                 />
               )}
@@ -446,9 +446,10 @@ export function PerformanceChart({ data, account, stats }: PerformanceChartProps
               <Area
                 type={account.drawdownType === "Intraday" ? "monotone" : "stepAfter"}
                 dataKey="minBalance"
-                stroke="#ef4444"
+                stroke="#f87171"
                 strokeWidth={2}
                 strokeDasharray="6 4"
+                strokeOpacity={0.88}
                 fill="none"
                 dot={false}
                 activeDot={false}
@@ -457,8 +458,8 @@ export function PerformanceChart({ data, account, stats }: PerformanceChartProps
               <Area
                 type="monotone"
                 dataKey="balance"
-                stroke="#10b981"
-                strokeWidth={2.5}
+                stroke="#34d399"
+                strokeWidth={3}
                 fill="url(#balanceGradient)"
                 dot={(props) => {
                   const { cx, cy, payload } = props
@@ -467,16 +468,16 @@ export function PerformanceChart({ data, account, stats }: PerformanceChartProps
                     <circle
                       cx={cx}
                       cy={cy}
-                      r={payload.isStartingPoint ? 4 : 5}
-                      fill={payload.isStartingPoint ? "#6b7280" : "#10b981"}
-                      stroke={payload.isStartingPoint ? "#4b5563" : "#065f46"}
+                      r={payload.isStartingPoint ? 4 : 6}
+                      fill={payload.isStartingPoint ? "#94a3b8" : "#34d399"}
+                      stroke={payload.isStartingPoint ? "#475569" : "#047857"}
                       strokeWidth={2}
                     />
                   )
                 }}
                 activeDot={{
-                  r: 8,
-                  fill: "#10b981",
+                  r: 9,
+                  fill: "#34d399",
                   stroke: "#065f46",
                   strokeWidth: 3,
                   filter: "url(#glow)",
@@ -487,15 +488,22 @@ export function PerformanceChart({ data, account, stats }: PerformanceChartProps
             <AreaChart data={chartData.filter((d) => !d.isStartingPoint)} margin={{ top: 6, right: 12, left: 2, bottom: 0 }}>
               <defs>
                 <linearGradient id="pnlGradientPos" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="0%" stopColor="#10b981" stopOpacity={0.2} />
+                  <stop offset="0%" stopColor="#34d399" stopOpacity={0.26} />
                   <stop offset="100%" stopColor="#10b981" stopOpacity={0} />
                 </linearGradient>
                 <linearGradient id="pnlGradientNeg" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="0%" stopColor="#ef4444" stopOpacity={0.2} />
+                  <stop offset="0%" stopColor="#ef4444" stopOpacity={0.22} />
                   <stop offset="100%" stopColor="#ef4444" stopOpacity={0} />
                 </linearGradient>
+                <filter id="glow" x="-50%" y="-50%" width="200%" height="200%">
+                  <feGaussianBlur stdDeviation="4" result="coloredBlur" />
+                  <feMerge>
+                    <feMergeNode in="coloredBlur" />
+                    <feMergeNode in="SourceGraphic" />
+                  </feMerge>
+                </filter>
               </defs>
-              <CartesianGrid strokeDasharray="3 3" stroke="#374151" strokeOpacity={0.3} vertical={false} />
+              <CartesianGrid strokeDasharray="3 3" stroke="#374151" strokeOpacity={0.22} vertical={false} />
               <XAxis
                 dataKey="date"
                 axisLine={false}
@@ -518,15 +526,15 @@ export function PerformanceChart({ data, account, stats }: PerformanceChartProps
                   stroke: "#6b7280",
                   strokeWidth: 1,
                   strokeDasharray: "4 4",
-                  strokeOpacity: 0.5,
+                  strokeOpacity: 0.45,
                 }}
               />
-              <ReferenceLine y={0} stroke="#4b5563" strokeWidth={1.5} />
+              <ReferenceLine y={0} stroke="#64748b" strokeWidth={1.25} strokeOpacity={0.45} />
               <Area
                 type="monotone"
                 dataKey="dailyPnl"
-                stroke="#10b981"
-                strokeWidth={2.5}
+                stroke="#34d399"
+                strokeWidth={3}
                 fill="url(#pnlGradientPos)"
                 dot={(props) => {
                   const { cx, cy, payload } = props
@@ -536,15 +544,15 @@ export function PerformanceChart({ data, account, stats }: PerformanceChartProps
                     <circle
                       cx={cx}
                       cy={cy}
-                      r={5}
-                      fill={isPositive ? "#10b981" : "#ef4444"}
-                      stroke={isPositive ? "#065f46" : "#7f1d1d"}
+                      r={6}
+                      fill={isPositive ? "#34d399" : "#f87171"}
+                      stroke={isPositive ? "#047857" : "#991b1b"}
                       strokeWidth={2}
                     />
                   )
                 }}
                 activeDot={{
-                  r: 8,
+                  r: 9,
                   strokeWidth: 3,
                   filter: "url(#glow)",
                 }}

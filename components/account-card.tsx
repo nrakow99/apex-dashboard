@@ -2,6 +2,7 @@
 
 import { Card } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
+import { Button } from "@/components/ui/button"
 import { Progress } from "@/components/ui/progress"
 import { cn } from "@/lib/utils"
 import type { Account, Trade, Payout } from "@/lib/types"
@@ -15,13 +16,21 @@ interface AccountCardProps {
   trades: Trade[]
   payouts: Payout[]
   onClick?: () => void
+  /** Shown for passed evals that have not been activated yet */
+  onActivatePa?: () => void
 }
 
 function fmtMoney(n: number) {
   return n.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })
 }
 
-export function AccountCard({ account, trades, payouts, onClick }: AccountCardProps) {
+export function AccountCard({
+  account,
+  trades,
+  payouts,
+  onClick,
+  onActivatePa,
+}: AccountCardProps) {
   const rawStats = calculateAccountStats(account, trades, payouts)
   const stats = applyIntradayManualDrawdownToStats(account, rawStats)
   const rules = getAccountRules(account)
@@ -316,6 +325,22 @@ export function AccountCard({ account, trades, payouts, onClick }: AccountCardPr
           <div className="flex items-center gap-2 pt-2 border-t border-white/10">
             <div className="w-2 h-2 rounded-full bg-cyan-400" />
             <span className="text-xs text-muted-foreground">Scaling Plan Active</span>
+          </div>
+        )}
+
+        {onActivatePa && (
+          <div className="pt-3 border-t border-white/10 flex justify-end">
+            <Button
+              type="button"
+              size="sm"
+              className="text-xs bg-gradient-to-r from-emerald-600/90 to-cyan-600/90 hover:from-emerald-500 hover:to-cyan-500 shadow-md shadow-emerald-900/25"
+              onClick={(e) => {
+                e.stopPropagation()
+                onActivatePa()
+              }}
+            >
+              Activate PA
+            </Button>
           </div>
         )}
       </div>
