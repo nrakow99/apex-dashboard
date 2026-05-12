@@ -16,7 +16,8 @@ import { Card } from "@/components/ui/card"
 import { TrendingUp } from "lucide-react"
 import { cn } from "@/lib/utils"
 import type { DailyPnL, Account } from "@/lib/types"
-import { PA_CONSTANTS, EOD_CONSTANTS } from "@/lib/types"
+import { PA_CONSTANTS } from "@/lib/types"
+import { getAccountRules } from "@/lib/rules"
 import { isTradingDayComplete, getTodayDateStr } from "@/lib/storage"
 
 interface AccountStats {
@@ -59,20 +60,18 @@ interface ChartDataPoint {
 export function PerformanceChart({ data, account, stats }: PerformanceChartProps) {
   const [view, setView] = useState<ChartView>("balance")
 
-  // Build chart data with starting point and proper EOD drawdown tracking
-  // IMPORTANT: The min balance line only steps up after COMPLETED days (not intraday)
+  // Build chart data with starting point and proper floor tracking per drawdown type
   const chartData = useMemo(() => {
     const result: ChartDataPoint[] = []
     const todayStr = getTodayDateStr()
     const dayComplete = isTradingDayComplete()
+    const isIntraday = account.drawdownType === "Intraday"
 
-    // Get account creation date (use first trade date or today)
     const firstTradeDate = data.length > 0 ? data[0].date : todayStr
     const startDate = new Date(firstTradeDate)
-    startDate.setDate(startDate.getDate() - 1) // Day before first trade
+    startDate.setDate(startDate.getDate() - 1)
     const startDateStr = startDate.toISOString().split("T")[0]
 
-    // Always add starting balance point
     result.push({
       date: new Date(startDateStr).toLocaleDateString("en-US", { month: "short", day: "numeric" }),
       fullDate: startDateStr,
@@ -84,23 +83,22 @@ export function PerformanceChart({ data, account, stats }: PerformanceChartProps
       isIncompleteDay: false,
     })
 
-    // Track highest COMPLETED EOD balance for proper floor calculation
-    // The floor only updates after a day is complete (2:00 PM)
-    let highestCompletedEodBalance = account.startingBalance
+    let highestBalance = account.startingBalance
 
-    // Add actual trade data points
     for (const d of data) {
-      // Is this day complete? (Not today, or today after 2PM)
       const isComplete = d.date !== todayStr || dayComplete
-      
-      // If day is complete, update the highest EOD balance
-      if (isComplete) {
-        highestCompletedEodBalance = Math.max(highestCompletedEodBalance, d.balance)
+
+      if (isIntraday) {
+        // Intraday: always update peak (no EOD gate)
+        highestBalance = Math.max(highestBalance, d.balance)
+      } else {
+        // EOD: only completed days raise the floor
+        if (isComplete) {
+          highestBalance = Math.max(highestBalance, d.balance)
+        }
       }
-      
-      // The floor is based on highest COMPLETED EOD balance only
-      // It does NOT trail intraday!
-      const activeFloorAtPoint = highestCompletedEodBalance - account.maxDrawdown
+
+      const activeFloorAtPoint = highestBalance - account.maxDrawdown
 
       result.push({
         date: new Date(d.date).toLocaleDateString("en-US", { month: "short", day: "numeric" }),
@@ -108,7 +106,7 @@ export function PerformanceChart({ data, account, stats }: PerformanceChartProps
         balance: d.balance,
         dailyPnl: d.pnl,
         minBalance: activeFloorAtPoint,
-        maxBalanceAtPoint: highestCompletedEodBalance,
+        maxBalanceAtPoint: highestBalance,
         isStartingPoint: false,
         isIncompleteDay: !isComplete,
       })
@@ -193,13 +191,13 @@ export function PerformanceChart({ data, account, stats }: PerformanceChartProps
           <div className="flex items-center justify-between gap-3">
             <div className="flex items-center gap-2">
               <div className="w-2 h-2 rounded-full bg-red-500" />
-              <span className="text-[11px] text-muted-foreground uppercase tracking-wider">EOD Floor</span>
+              <span className="text-[11px] text-muted-foreground uppercase tracking-wider">Active Floor</span>
             </div>
             <span className="font-mono font-semibold text-[13px] text-red-400">{formatValue(point.minBalance)}</span>
           </div>
-          {point.isIncompleteDay && (
+          {point.isIncompleteDay && account.drawdownType !== "Intraday" && (
             <div className="text-xs text-amber-500 mt-1">
-              * Day not complete - floor uses prior EOD
+              * Day not complete — floor uses prior EOD
             </div>
           )}
           {!point.isStartingPoint && (
@@ -315,7 +313,7 @@ export function PerformanceChart({ data, account, stats }: PerformanceChartProps
           </div>
           <div className="flex items-center gap-2">
             <div className="w-5 h-0.5 border-t-2 border-dashed border-red-500/50" />
-            <span>Active EOD Floor</span>
+            <span>Active Floor</span>
           </div>
         </div>
       </Card>
@@ -329,7 +327,9 @@ export function PerformanceChart({ data, account, stats }: PerformanceChartProps
         <div>
           <h2 className="text-base sm:text-lg font-semibold">Performance</h2>
           <p className="text-xs sm:text-sm text-muted-foreground hidden sm:block">
-            {view === "balance" ? "Balance over time with EOD drawdown tracking" : "Daily profit and loss"}
+            {view === "balance"
+              ? `Balance over time · ${getAccountRules(account).floorLabel}`
+              : "Daily profit and loss"}
           </p>
         </div>
         <div className="flex gap-1 p-1 bg-muted/50 rounded-lg">
@@ -428,9 +428,9 @@ export function PerformanceChart({ data, account, stats }: PerformanceChartProps
                   }}
                 />
               )}
-              {/* EOD Drawdown line (dynamic per point) */}
+              {/* Active floor line — steps for EOD, trails smoothly for Intraday */}
               <Area
-                type="stepAfter"
+                type={account.drawdownType === "Intraday" ? "monotone" : "stepAfter"}
                 dataKey="minBalance"
                 stroke="#ef4444"
                 strokeWidth={2}
@@ -548,7 +548,7 @@ export function PerformanceChart({ data, account, stats }: PerformanceChartProps
           </div>
           <div className="flex items-center gap-2">
             <div className="w-5 h-0.5 border-t-2 border-dashed border-red-500" />
-            <span>Active EOD Floor</span>
+            <span>{getAccountRules(account).floorLabel}</span>
           </div>
           <div className="flex items-center gap-2">
             <div className="w-5 h-0.5 border-t border-dashed border-muted-foreground/50" />

@@ -31,6 +31,7 @@ import {
   getConsistencyInfo,
   getPayoutEligibility,
 } from "@/lib/storage"
+import { getAccountRules } from "@/lib/rules"
 import {
   fetchAccounts,
   fetchTrades,
@@ -44,7 +45,7 @@ import {
   deleteTrade,
 } from "@/lib/supabase/database"
 import { createClient } from "@/lib/supabase/client"
-import type { Trade, Payout, Account, AccountType, DailyPnL } from "@/lib/types"
+import type { Trade, Payout, Account, AccountType, DrawdownType, Firm, DailyPnL } from "@/lib/types"
 
 type ViewMode = "accounts" | "detail"
 
@@ -136,7 +137,9 @@ export default function Dashboard() {
   }, [selectedAccount, allTrades, allPayouts])
 
   const consistencyInfo = useMemo(() => {
-    if (!selectedAccount || selectedAccount.type !== "PA") return null
+    if (!selectedAccount) return null
+    const rules = getAccountRules(selectedAccount)
+    if (!rules.hasConsistency) return null
     return getConsistencyInfo(selectedAccount.id, allTrades, selectedAccount, allPayouts)
   }, [selectedAccount, allTrades, allPayouts])
 
@@ -166,7 +169,10 @@ export default function Dashboard() {
     try {
       const result = await createAccount({
         name: accountData.name,
+        firm: accountData.firm,
         type: accountData.type,
+        drawdownType: accountData.drawdownType,
+        accountSize: accountData.accountSize,
         startingBalance: accountData.startingBalance,
         profitTarget: accountData.profitTarget,
         maxDrawdown: accountData.maxDrawdown,
@@ -214,6 +220,8 @@ export default function Dashboard() {
     setIsSaving(true)
     try {
       const accountPayoutCount = allPayouts.filter((p) => p.accountId === selectedAccount.id).length
+      const isLucid = selectedAccount.firm === "Lucid"
+      const splitPercent = isLucid ? 0.9 : 1.0
 
       const result = await createPayout({
         accountId: selectedAccount.id,
@@ -221,6 +229,9 @@ export default function Dashboard() {
         amount: payoutData.amount,
         payoutNumber: accountPayoutCount + 1,
         notes: payoutData.notes,
+        traderReceived: isLucid ? payoutData.amount * splitPercent : undefined,
+        firmSplit: isLucid ? payoutData.amount * (1 - splitPercent) : undefined,
+        payoutSplitPercent: isLucid ? splitPercent : undefined,
       })
 
       if (result.error) throw result.error
@@ -268,19 +279,25 @@ export default function Dashboard() {
 
   const handleUpdateAccount = async (accountId: string, updates: {
     name: string
+    firm: Firm
     type: AccountType
     status: "Active" | "Inactive" | "Breached" | "Passed"
+    drawdownType: DrawdownType
+    accountSize: number
     startingBalance: number
     maxDrawdown: number
-    dailyLossLimit: number
-    profitTarget?: number
+    dailyLossLimit: number | null
+    profitTarget?: number | null
   }) => {
     setIsSaving(true)
     try {
       const result = await updateAccount(accountId, {
         name: updates.name,
+        firm: updates.firm,
         type: updates.type,
         status: updates.status,
+        drawdownType: updates.drawdownType,
+        accountSize: updates.accountSize,
         startingBalance: updates.startingBalance,
         maxDrawdown: updates.maxDrawdown,
         dailyLossLimit: updates.dailyLossLimit,
@@ -683,7 +700,7 @@ export default function Dashboard() {
 
               {/* ROW 4: Full Width Calendar */}
               <div className="mb-6 sm:mb-8">
-                <TradingCalendar dailyData={accountDailyData} trades={accountTrades} />
+                <TradingCalendar account={selectedAccount} dailyData={accountDailyData} trades={accountTrades} />
               </div>
 
               {/* ROW 5: Trade History + Payout Status (PA only) */}
@@ -698,7 +715,7 @@ export default function Dashboard() {
                 />
                 {selectedAccount.type === "PA" && payoutEligibility && (
                   <PayoutStatusPanel
-                    accountId={selectedAccount.id}
+                    account={selectedAccount}
                     eligibility={payoutEligibility}
                     payouts={accountPayouts}
                     onAddPayout={handleAddPayout}

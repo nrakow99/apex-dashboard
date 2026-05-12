@@ -1,15 +1,17 @@
 "use client"
 
 import { createClient } from "@/lib/supabase/client"
-import type { Account, Trade, Payout } from "@/lib/types"
+import type { Account, Trade, Payout, Firm, DrawdownType } from "@/lib/types"
 
-// Type definitions for database rows
 interface AccountRow {
   id: string
   user_id: string
   name: string
+  firm: Firm
   type: "Eval" | "PA" | "Live"
-  status: "Active" | "Inactive" | "Breached"
+  status: "Active" | "Inactive" | "Breached" | "Passed"
+  drawdown_type: DrawdownType
+  account_size: number
   starting_balance: number
   profit_target: number | null
   max_drawdown: number
@@ -37,22 +39,27 @@ interface PayoutRow {
   amount: number
   payout_number: number
   notes: string | null
+  trader_received: number | null
+  firm_split: number | null
+  payout_split_percent: number | null
   created_at: string
 }
 
-// Transform database row to app type
 function rowToAccount(row: AccountRow): Account {
   return {
     id: row.id,
     name: row.name,
+    firm: row.firm ?? "Apex",
     type: row.type,
-    status: row.status === "Inactive" ? "Active" : row.status as "Active" | "Passed" | "Breached",
-    balance: row.starting_balance, // Will be calculated from trades
+    status: row.status === "Inactive" ? "Active" : (row.status as "Active" | "Passed" | "Breached"),
+    drawdownType: (row.drawdown_type ?? "EOD") as DrawdownType,
+    accountSize: row.account_size ?? 50000,
+    balance: row.starting_balance,
     startingBalance: row.starting_balance,
-    maxBalance: row.starting_balance, // Will be calculated from trades
+    maxBalance: row.starting_balance,
     profitTarget: row.profit_target ?? undefined,
     maxDrawdown: row.max_drawdown,
-    dailyLossLimit: row.daily_loss_limit ?? 1000,
+    dailyLossLimit: row.daily_loss_limit ?? 0,
   }
 }
 
@@ -75,96 +82,79 @@ function rowToPayout(row: PayoutRow): Payout {
     amount: Number(row.amount),
     payoutNumber: row.payout_number,
     notes: row.notes ?? undefined,
+    traderReceived: row.trader_received ?? undefined,
+    firmSplit: row.firm_split ?? undefined,
+    payoutSplitPercent: row.payout_split_percent ?? undefined,
   }
 }
 
-// Fetch all accounts for current user
 export async function fetchAccounts(): Promise<{ data: Account[] | null; error: Error | null }> {
   const supabase = createClient()
-  
   const { data, error } = await supabase
     .from("accounts")
     .select("*")
     .order("created_at", { ascending: true })
-
-  if (error) {
-    return { data: null, error: new Error(error.message) }
-  }
-
+  if (error) return { data: null, error: new Error(error.message) }
   return { data: (data as AccountRow[]).map(rowToAccount), error: null }
 }
 
-// Fetch all trades for current user
 export async function fetchTrades(): Promise<{ data: Trade[] | null; error: Error | null }> {
   const supabase = createClient()
-  
   const { data, error } = await supabase
     .from("trades")
     .select("*")
     .order("date", { ascending: true })
-
-  if (error) {
-    return { data: null, error: new Error(error.message) }
-  }
-
+  if (error) return { data: null, error: new Error(error.message) }
   return { data: (data as TradeRow[]).map(rowToTrade), error: null }
 }
 
-// Fetch all payouts for current user
 export async function fetchPayouts(): Promise<{ data: Payout[] | null; error: Error | null }> {
   const supabase = createClient()
-  
   const { data, error } = await supabase
     .from("payouts")
     .select("*")
     .order("created_at", { ascending: true })
-
-  if (error) {
-    return { data: null, error: new Error(error.message) }
-  }
-
+  if (error) return { data: null, error: new Error(error.message) }
   return { data: (data as PayoutRow[]).map(rowToPayout), error: null }
 }
 
-// Create a new account
 export async function createAccount(account: {
   name: string
+  firm: Firm
   type: "Eval" | "PA" | "Live"
+  drawdownType: DrawdownType
+  accountSize: number
   startingBalance: number
   profitTarget?: number
   maxDrawdown?: number
   dailyLossLimit?: number
 }): Promise<{ data: Account | null; error: Error | null }> {
   const supabase = createClient()
-  
   const { data: { user } } = await supabase.auth.getUser()
-  if (!user) {
-    return { data: null, error: new Error("Not authenticated") }
-  }
+  if (!user) return { data: null, error: new Error("Not authenticated") }
 
   const { data, error } = await supabase
     .from("accounts")
     .insert({
       user_id: user.id,
       name: account.name,
+      firm: account.firm,
       type: account.type,
       status: "Active",
+      drawdown_type: account.drawdownType,
+      account_size: account.accountSize,
       starting_balance: account.startingBalance,
       profit_target: account.profitTarget ?? null,
       max_drawdown: account.maxDrawdown ?? 2000,
-      daily_loss_limit: account.dailyLossLimit ?? 1000,
+      daily_loss_limit: account.dailyLossLimit ?? null,
     })
     .select()
     .single()
 
-  if (error) {
-    return { data: null, error: new Error(error.message) }
-  }
-
+  if (error) return { data: null, error: new Error(error.message) }
   return { data: rowToAccount(data as AccountRow), error: null }
 }
 
-// Create a new trade
 export async function createTrade(trade: {
   accountId: string
   date: string
@@ -173,11 +163,8 @@ export async function createTrade(trade: {
   notes?: string
 }): Promise<{ data: Trade | null; error: Error | null }> {
   const supabase = createClient()
-  
   const { data: { user } } = await supabase.auth.getUser()
-  if (!user) {
-    return { data: null, error: new Error("Not authenticated") }
-  }
+  if (!user) return { data: null, error: new Error("Not authenticated") }
 
   const { data, error } = await supabase
     .from("trades")
@@ -192,27 +179,23 @@ export async function createTrade(trade: {
     .select()
     .single()
 
-  if (error) {
-    return { data: null, error: new Error(error.message) }
-  }
-
+  if (error) return { data: null, error: new Error(error.message) }
   return { data: rowToTrade(data as TradeRow), error: null }
 }
 
-// Create a new payout
 export async function createPayout(payout: {
   accountId: string
   date: string
   amount: number
   payoutNumber: number
   notes?: string
+  traderReceived?: number
+  firmSplit?: number
+  payoutSplitPercent?: number
 }): Promise<{ data: Payout | null; error: Error | null }> {
   const supabase = createClient()
-  
   const { data: { user } } = await supabase.auth.getUser()
-  if (!user) {
-    return { data: null, error: new Error("Not authenticated") }
-  }
+  if (!user) return { data: null, error: new Error("Not authenticated") }
 
   const { data, error } = await supabase
     .from("payouts")
@@ -223,84 +206,61 @@ export async function createPayout(payout: {
       amount: payout.amount,
       payout_number: payout.payoutNumber,
       notes: payout.notes ?? null,
+      trader_received: payout.traderReceived ?? null,
+      firm_split: payout.firmSplit ?? null,
+      payout_split_percent: payout.payoutSplitPercent ?? null,
     })
     .select()
     .single()
 
-  if (error) {
-    return { data: null, error: new Error(error.message) }
-  }
-
+  if (error) return { data: null, error: new Error(error.message) }
   return { data: rowToPayout(data as PayoutRow), error: null }
 }
 
-// Delete an account (and all related trades/payouts via cascade)
 export async function deleteAccount(accountId: string): Promise<{ error: Error | null }> {
   const supabase = createClient()
-  
-  const { error } = await supabase
-    .from("accounts")
-    .delete()
-    .eq("id", accountId)
-
-  if (error) {
-    return { error: new Error(error.message) }
-  }
-
+  const { error } = await supabase.from("accounts").delete().eq("id", accountId)
+  if (error) return { error: new Error(error.message) }
   return { error: null }
 }
 
-// Delete a trade
 export async function deleteTrade(tradeId: string): Promise<{ error: Error | null }> {
   const supabase = createClient()
-  
-  const { error } = await supabase
-    .from("trades")
-    .delete()
-    .eq("id", tradeId)
-
-  if (error) {
-    return { error: new Error(error.message) }
-  }
-
+  const { error } = await supabase.from("trades").delete().eq("id", tradeId)
+  if (error) return { error: new Error(error.message) }
   return { error: null }
 }
 
-// Delete a payout
 export async function deletePayout(payoutId: string): Promise<{ error: Error | null }> {
   const supabase = createClient()
-  
-  const { error } = await supabase
-    .from("payouts")
-    .delete()
-    .eq("id", payoutId)
-
-  if (error) {
-    return { error: new Error(error.message) }
-  }
-
+  const { error } = await supabase.from("payouts").delete().eq("id", payoutId)
+  if (error) return { error: new Error(error.message) }
   return { error: null }
 }
 
-// Update an account
 export async function updateAccount(
   accountId: string,
   updates: {
     name?: string
+    firm?: Firm
     type?: "Eval" | "PA" | "Live"
     status?: "Active" | "Inactive" | "Breached" | "Passed"
+    drawdownType?: DrawdownType
+    accountSize?: number
     startingBalance?: number
     profitTarget?: number | null
     maxDrawdown?: number
-    dailyLossLimit?: number
+    dailyLossLimit?: number | null
   }
 ): Promise<{ data: Account | null; error: Error | null }> {
   const supabase = createClient()
-
   const updateData: Record<string, unknown> = {}
   if (updates.name !== undefined) updateData.name = updates.name
+  if (updates.firm !== undefined) updateData.firm = updates.firm
   if (updates.type !== undefined) updateData.type = updates.type
   if (updates.status !== undefined) updateData.status = updates.status
+  if (updates.drawdownType !== undefined) updateData.drawdown_type = updates.drawdownType
+  if (updates.accountSize !== undefined) updateData.account_size = updates.accountSize
   if (updates.startingBalance !== undefined) updateData.starting_balance = updates.startingBalance
   if (updates.profitTarget !== undefined) updateData.profit_target = updates.profitTarget
   if (updates.maxDrawdown !== undefined) updateData.max_drawdown = updates.maxDrawdown
@@ -313,14 +273,10 @@ export async function updateAccount(
     .select()
     .single()
 
-  if (error) {
-    return { data: null, error: new Error(error.message) }
-  }
-
+  if (error) return { data: null, error: new Error(error.message) }
   return { data: rowToAccount(data as AccountRow), error: null }
 }
 
-// Update a trade
 export async function updateTrade(
   tradeId: string,
   updates: {
@@ -332,7 +288,6 @@ export async function updateTrade(
   }
 ): Promise<{ data: Trade | null; error: Error | null }> {
   const supabase = createClient()
-
   const updateData: Record<string, unknown> = {}
   if (updates.date !== undefined) updateData.date = updates.date
   if (updates.accountId !== undefined) updateData.account_id = updates.accountId
@@ -347,9 +302,6 @@ export async function updateTrade(
     .select()
     .single()
 
-  if (error) {
-    return { data: null, error: new Error(error.message) }
-  }
-
+  if (error) return { data: null, error: new Error(error.message) }
   return { data: rowToTrade(data as TradeRow), error: null }
 }

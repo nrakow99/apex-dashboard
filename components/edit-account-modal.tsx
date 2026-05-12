@@ -18,7 +18,45 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import { Loader2 } from "lucide-react"
-import type { Account, AccountType } from "@/lib/types"
+import { cn } from "@/lib/utils"
+import type { Account, AccountType, Firm, DrawdownType } from "@/lib/types"
+import { getAccountRules } from "@/lib/rules"
+
+const ACCOUNT_SIZES = [25000, 50000, 100000, 150000]
+
+function SegmentedControl<T extends string>({
+  options,
+  value,
+  onChange,
+  disabled,
+}: {
+  options: { value: T; label: string }[]
+  value: T
+  onChange: (v: T) => void
+  disabled?: boolean
+}) {
+  return (
+    <div className="flex gap-0 p-1 bg-muted/40 rounded-lg">
+      {options.map((opt) => (
+        <button
+          key={opt.value}
+          type="button"
+          onClick={() => !disabled && onChange(opt.value)}
+          disabled={disabled}
+          className={cn(
+            "flex-1 py-1.5 px-2 rounded-md text-sm font-medium transition-all",
+            value === opt.value
+              ? "bg-background text-foreground shadow-sm"
+              : "text-muted-foreground hover:text-foreground",
+            disabled && "opacity-50 cursor-not-allowed"
+          )}
+        >
+          {opt.label}
+        </button>
+      ))}
+    </div>
+  )
+}
 
 interface EditAccountModalProps {
   account: Account | null
@@ -26,27 +64,33 @@ interface EditAccountModalProps {
   onOpenChange: (open: boolean) => void
   onSave: (accountId: string, updates: {
     name: string
+    firm: Firm
     type: AccountType
     status: "Active" | "Inactive" | "Breached" | "Passed"
+    drawdownType: DrawdownType
+    accountSize: number
     startingBalance: number
     maxDrawdown: number
-    dailyLossLimit: number
-    profitTarget?: number
+    dailyLossLimit: number | null
+    profitTarget?: number | null
   }) => Promise<void>
   isSaving?: boolean
 }
 
-export function EditAccountModal({ 
-  account, 
-  open, 
-  onOpenChange, 
+export function EditAccountModal({
+  account,
+  open,
+  onOpenChange,
   onSave,
-  isSaving = false 
+  isSaving = false,
 }: EditAccountModalProps) {
-  const [formData, setFormData] = useState({
+  const [form, setForm] = useState({
     name: "",
+    firm: "Apex" as Firm,
     type: "Eval" as AccountType,
     status: "Active" as "Active" | "Inactive" | "Breached" | "Passed",
+    drawdownType: "EOD" as DrawdownType,
+    accountSize: 50000,
     startingBalance: "",
     maxDrawdown: "",
     dailyLossLimit: "",
@@ -55,84 +99,95 @@ export function EditAccountModal({
 
   useEffect(() => {
     if (account) {
-      setFormData({
+      setForm({
         name: account.name,
+        firm: account.firm ?? "Apex",
         type: account.type,
         status: account.status,
+        drawdownType: account.drawdownType ?? "EOD",
+        accountSize: account.accountSize ?? 50000,
         startingBalance: account.startingBalance.toString(),
         maxDrawdown: account.maxDrawdown.toString(),
-        dailyLossLimit: account.dailyLossLimit.toString(),
+        dailyLossLimit: (account.dailyLossLimit ?? "").toString(),
         profitTarget: account.profitTarget?.toString() ?? "",
       })
     }
   }, [account])
 
+  const set = <K extends keyof typeof form>(k: K, v: (typeof form)[K]) =>
+    setForm((f) => ({ ...f, [k]: v }))
+
+  const rules = getAccountRules({
+    firm: form.firm,
+    type: form.type,
+    drawdownType: form.drawdownType,
+    accountSize: form.accountSize,
+  })
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!account) return
-
     await onSave(account.id, {
-      name: formData.name,
-      type: formData.type,
-      status: formData.status,
-      startingBalance: parseFloat(formData.startingBalance) || 50000,
-      maxDrawdown: parseFloat(formData.maxDrawdown) || 2000,
-      dailyLossLimit: parseFloat(formData.dailyLossLimit) || 1000,
-      profitTarget: formData.type === "Eval" && formData.profitTarget 
-        ? parseFloat(formData.profitTarget) 
-        : undefined,
+      name: form.name,
+      firm: form.firm,
+      type: form.type,
+      status: form.status,
+      drawdownType: form.drawdownType,
+      accountSize: form.accountSize,
+      startingBalance: parseFloat(form.startingBalance) || account.startingBalance,
+      maxDrawdown: parseFloat(form.maxDrawdown) || rules.maxDrawdown,
+      dailyLossLimit: rules.hasDLL ? (parseFloat(form.dailyLossLimit) || rules.dailyLossLimit) : null,
+      profitTarget: form.type === "Eval" && form.profitTarget ? parseFloat(form.profitTarget) : null,
     })
   }
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-[450px] bg-card border-border">
+      <DialogContent className="sm:max-w-[480px] bg-card border-border max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>Edit Account</DialogTitle>
         </DialogHeader>
         <form onSubmit={handleSubmit} className="space-y-4 mt-4">
           <div className="space-y-2">
-            <Label htmlFor="edit-account-name">Account Name</Label>
+            <Label>Account Name</Label>
             <Input
-              id="edit-account-name"
-              value={formData.name}
-              onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+              value={form.name}
+              onChange={(e) => set("name", e.target.value)}
               className="bg-background"
+              disabled={isSaving}
+            />
+          </div>
+
+          <div className="space-y-2">
+            <Label>Firm</Label>
+            <SegmentedControl
+              options={[{ value: "Apex", label: "Apex" }, { value: "Lucid", label: "Lucid" }]}
+              value={form.firm}
+              onChange={(v) => set("firm", v)}
               disabled={isSaving}
             />
           </div>
 
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-2">
-              <Label htmlFor="edit-account-type">Type</Label>
-              <Select
-                value={formData.type}
-                onValueChange={(value: AccountType) => setFormData({ ...formData, type: value })}
-                disabled={isSaving}
-              >
-                <SelectTrigger className="bg-background">
-                  <SelectValue />
-                </SelectTrigger>
+              <Label>Account Type</Label>
+              <Select value={form.type} onValueChange={(v: AccountType) => set("type", v)} disabled={isSaving}>
+                <SelectTrigger className="bg-background"><SelectValue /></SelectTrigger>
                 <SelectContent>
                   <SelectItem value="Eval">Eval</SelectItem>
-                  <SelectItem value="PA">PA</SelectItem>
+                  <SelectItem value="PA">PA / Funded</SelectItem>
                   <SelectItem value="Live">Live</SelectItem>
                 </SelectContent>
               </Select>
             </div>
-
             <div className="space-y-2">
-              <Label htmlFor="edit-account-status">Status</Label>
+              <Label>Status</Label>
               <Select
-                value={formData.status}
-                onValueChange={(value: "Active" | "Inactive" | "Breached" | "Passed") => 
-                  setFormData({ ...formData, status: value })
-                }
+                value={form.status}
+                onValueChange={(v: "Active" | "Inactive" | "Breached" | "Passed") => set("status", v)}
                 disabled={isSaving}
               >
-                <SelectTrigger className="bg-background">
-                  <SelectValue />
-                </SelectTrigger>
+                <SelectTrigger className="bg-background"><SelectValue /></SelectTrigger>
                 <SelectContent>
                   <SelectItem value="Active">Active</SelectItem>
                   <SelectItem value="Passed">Passed</SelectItem>
@@ -145,51 +200,61 @@ export function EditAccountModal({
 
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-2">
-              <Label htmlFor="edit-starting-balance">Starting Balance ($)</Label>
-              <Input
-                id="edit-starting-balance"
-                type="number"
-                value={formData.startingBalance}
-                onChange={(e) => setFormData({ ...formData, startingBalance: e.target.value })}
-                className="bg-background font-mono"
-                disabled={isSaving}
-              />
+              <Label>Account Size</Label>
+              <Select value={String(form.accountSize)} onValueChange={(v) => set("accountSize", Number(v))} disabled={isSaving}>
+                <SelectTrigger className="bg-background"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  {ACCOUNT_SIZES.map((s) => (
+                    <SelectItem key={s} value={String(s)}>${s.toLocaleString()}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
-
             <div className="space-y-2">
-              <Label htmlFor="edit-max-drawdown">Max Drawdown ($)</Label>
+              <Label>Starting Balance ($)</Label>
               <Input
-                id="edit-max-drawdown"
                 type="number"
-                value={formData.maxDrawdown}
-                onChange={(e) => setFormData({ ...formData, maxDrawdown: e.target.value })}
+                value={form.startingBalance}
+                onChange={(e) => set("startingBalance", e.target.value)}
                 className="bg-background font-mono"
                 disabled={isSaving}
               />
             </div>
           </div>
 
+          {form.firm === "Apex" && (
+            <div className="space-y-2">
+              <Label>Drawdown Type</Label>
+              <SegmentedControl
+                options={[
+                  { value: "EOD", label: "EOD Drawdown" },
+                  { value: "Intraday", label: "Intraday Trailing" },
+                ]}
+                value={form.drawdownType}
+                onChange={(v) => set("drawdownType", v)}
+                disabled={isSaving}
+              />
+            </div>
+          )}
+
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-2">
-              <Label htmlFor="edit-daily-loss">Daily Loss Limit ($)</Label>
+              <Label>Max Drawdown ($)</Label>
               <Input
-                id="edit-daily-loss"
                 type="number"
-                value={formData.dailyLossLimit}
-                onChange={(e) => setFormData({ ...formData, dailyLossLimit: e.target.value })}
+                value={form.maxDrawdown}
+                onChange={(e) => set("maxDrawdown", e.target.value)}
                 className="bg-background font-mono"
                 disabled={isSaving}
               />
             </div>
-
-            {formData.type === "Eval" && (
+            {rules.hasDLL && (
               <div className="space-y-2">
-                <Label htmlFor="edit-profit-target">Profit Target ($)</Label>
+                <Label>Daily Loss Limit ($)</Label>
                 <Input
-                  id="edit-profit-target"
                   type="number"
-                  value={formData.profitTarget}
-                  onChange={(e) => setFormData({ ...formData, profitTarget: e.target.value })}
+                  value={form.dailyLossLimit}
+                  onChange={(e) => set("dailyLossLimit", e.target.value)}
                   className="bg-background font-mono"
                   disabled={isSaving}
                 />
@@ -197,28 +262,25 @@ export function EditAccountModal({
             )}
           </div>
 
-          <div className="flex justify-end gap-2 pt-4">
-            <Button 
-              type="button" 
-              variant="ghost" 
-              onClick={() => onOpenChange(false)}
-              disabled={isSaving}
-            >
+          {form.type === "Eval" && (
+            <div className="space-y-2">
+              <Label>Profit Target ($)</Label>
+              <Input
+                type="number"
+                value={form.profitTarget}
+                onChange={(e) => set("profitTarget", e.target.value)}
+                className="bg-background font-mono"
+                disabled={isSaving}
+              />
+            </div>
+          )}
+
+          <div className="flex justify-end gap-2 pt-2">
+            <Button type="button" variant="ghost" onClick={() => onOpenChange(false)} disabled={isSaving}>
               Cancel
             </Button>
-            <Button 
-              type="submit" 
-              className="bg-emerald-600 hover:bg-emerald-700"
-              disabled={isSaving}
-            >
-              {isSaving ? (
-                <>
-                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                  Saving...
-                </>
-              ) : (
-                "Save Changes"
-              )}
+            <Button type="submit" className="bg-emerald-600 hover:bg-emerald-700" disabled={isSaving}>
+              {isSaving ? <><Loader2 className="h-4 w-4 mr-2 animate-spin" />Saving...</> : "Save Changes"}
             </Button>
           </div>
         </form>

@@ -5,10 +5,11 @@ import { Card } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { ChevronLeft, ChevronRight, X, TrendingUp, TrendingDown, Minus, Star } from "lucide-react"
 import { cn } from "@/lib/utils"
-import type { DailyPnL, Trade } from "@/lib/types"
-import { PA_CONSTANTS } from "@/lib/types"
+import type { Account, DailyPnL, Trade } from "@/lib/types"
+import { getAccountRules } from "@/lib/rules"
 
 interface TradingCalendarProps {
+  account: Account
   dailyData: DailyPnL[]
   trades: Trade[]
 }
@@ -21,9 +22,13 @@ interface DayStats {
   winPercent: number
 }
 
-export function TradingCalendar({ dailyData, trades }: TradingCalendarProps) {
+export function TradingCalendar({ account, dailyData, trades }: TradingCalendarProps) {
   const [currentDate, setCurrentDate] = useState(new Date())
   const [selectedDate, setSelectedDate] = useState<string | null>(null)
+
+  const rules = getAccountRules(account)
+  const isPA = account.type === "PA"
+  const minQualifyingProfit = rules.minDailyProfit
 
   const getDaysInMonth = (date: Date) => {
     return new Date(date.getFullYear(), date.getMonth() + 1, 0).getDate()
@@ -127,7 +132,7 @@ export function TradingCalendar({ dailyData, trades }: TradingCalendarProps) {
           const isWeekend = new Date(currentDate.getFullYear(), currentDate.getMonth(), day).getDay() === 0 ||
                            new Date(currentDate.getFullYear(), currentDate.getMonth(), day).getDay() === 6
           const hasTrades = dayStats && dayStats.tradeCount > 0
-          const qualifiesForPayout = dayStats && dayStats.pnl >= PA_CONSTANTS.MIN_PROFIT_DAY
+          const qualifiesForPayout = isPA && dayStats && dayStats.pnl >= minQualifyingProfit
 
           return (
             <button
@@ -148,7 +153,6 @@ export function TradingCalendar({ dailyData, trades }: TradingCalendarProps) {
                 !hasTrades && "cursor-default"
               )}
             >
-              {/* $250+ indicator */}
               {qualifiesForPayout && (
                 <div className="absolute top-0.5 right-0.5 sm:top-1 sm:right-1">
                   <Star className="h-2 w-2 sm:h-3 sm:w-3 text-amber-400 fill-amber-400" />
@@ -234,11 +238,11 @@ export function TradingCalendar({ dailyData, trades }: TradingCalendarProps) {
                     {selectedDayStats.winPercent}%
                   </span>
                 </div>
-                {selectedDayStats.pnl >= PA_CONSTANTS.MIN_PROFIT_DAY && (
+                {isPA && selectedDayStats.pnl >= minQualifyingProfit && (
                   <>
                     <span className="hidden sm:inline text-muted-foreground/30">|</span>
                     <span className="text-xs sm:text-sm font-semibold text-amber-400 flex items-center gap-1">
-                      <Star className="h-3 w-3 fill-amber-400" /> $250+ Day
+                      <Star className="h-3 w-3 fill-amber-400" /> Qualifying Day (${minQualifyingProfit}+)
                     </span>
                   </>
                 )}
@@ -305,12 +309,14 @@ export function TradingCalendar({ dailyData, trades }: TradingCalendarProps) {
           <div className="w-3 h-3 sm:w-4 sm:h-4 rounded bg-red-500/20 border sm:border-2 border-red-500/40" />
           <span>Loss</span>
         </div>
-        <div className="flex items-center gap-1.5 sm:gap-2 text-xs sm:text-sm text-muted-foreground">
-          <div className="w-3 h-3 sm:w-4 sm:h-4 rounded bg-emerald-500/20 border sm:border-2 border-amber-400/60 flex items-center justify-center">
-            <Star className="h-1.5 w-1.5 sm:h-2 sm:w-2 text-amber-400 fill-amber-400" />
+        {isPA && (
+          <div className="flex items-center gap-1.5 sm:gap-2 text-xs sm:text-sm text-muted-foreground">
+            <div className="w-3 h-3 sm:w-4 sm:h-4 rounded bg-emerald-500/20 border sm:border-2 border-amber-400/60 flex items-center justify-center">
+              <Star className="h-1.5 w-1.5 sm:h-2 sm:w-2 text-amber-400 fill-amber-400" />
+            </div>
+            <span>Qualifying Day</span>
           </div>
-          <span>$250+</span>
-        </div>
+        )}
       </div>
     </Card>
   )

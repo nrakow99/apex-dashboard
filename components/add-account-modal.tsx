@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import {
   Dialog,
   DialogContent,
@@ -19,43 +19,90 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import { Plus } from "lucide-react"
-import type { Account, AccountType } from "@/lib/types"
+import type { Account, AccountType, Firm, DrawdownType } from "@/lib/types"
+import { getAccountRules } from "@/lib/rules"
+import { cn } from "@/lib/utils"
 
 interface AddAccountModalProps {
   onAddAccount: (account: Omit<Account, "id">) => void
 }
 
+const ACCOUNT_SIZES = [25000, 50000, 100000, 150000]
+
+function SegmentedControl<T extends string>({
+  options,
+  value,
+  onChange,
+}: {
+  options: { value: T; label: string }[]
+  value: T
+  onChange: (v: T) => void
+}) {
+  return (
+    <div className="flex gap-0 p-1 bg-muted/40 rounded-lg">
+      {options.map((opt) => (
+        <button
+          key={opt.value}
+          type="button"
+          onClick={() => onChange(opt.value)}
+          className={cn(
+            "flex-1 py-1.5 px-2 rounded-md text-sm font-medium transition-all",
+            value === opt.value
+              ? "bg-background text-foreground shadow-sm"
+              : "text-muted-foreground hover:text-foreground"
+          )}
+        >
+          {opt.label}
+        </button>
+      ))}
+    </div>
+  )
+}
+
 export function AddAccountModal({ onAddAccount }: AddAccountModalProps) {
   const [open, setOpen] = useState(false)
-  const [formData, setFormData] = useState({
+  const [form, setForm] = useState({
     name: "",
+    firm: "Apex" as Firm,
     type: "Eval" as AccountType,
-    startingBalance: "50000",
+    drawdownType: "EOD" as DrawdownType,
+    accountSize: 50000,
   })
+
+  // Auto-derive rules whenever firm/type/drawdown/size changes
+  const rules = getAccountRules({ ...form, maxDrawdown: 0, dailyLossLimit: 0 })
+
+  // Reset drawdown type when Lucid is selected (Lucid defaults to EOD)
+  useEffect(() => {
+    if (form.firm === "Lucid" && form.drawdownType === "Intraday") {
+      setForm((f) => ({ ...f, drawdownType: "EOD" }))
+    }
+  }, [form.firm, form.drawdownType])
+
+  const set = <K extends keyof typeof form>(k: K, v: (typeof form)[K]) =>
+    setForm((f) => ({ ...f, [k]: v }))
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
-    const startingBalance = parseFloat(formData.startingBalance) || 50000
-    
     onAddAccount({
-      name: formData.name || `${formData.type} Account`,
-      type: formData.type,
+      name: form.name || `${form.firm} ${(form.accountSize / 1000).toFixed(0)}K ${form.type}`,
+      firm: form.firm,
+      type: form.type,
       status: "Active",
-      balance: startingBalance,
-      startingBalance,
-      maxBalance: startingBalance,
-      profitTarget: formData.type === "Eval" ? 3000 : undefined,
-      maxDrawdown: 2000,
-      dailyLossLimit: 1000,
+      drawdownType: form.drawdownType,
+      accountSize: form.accountSize,
+      balance: form.accountSize,
+      startingBalance: form.accountSize,
+      maxBalance: form.accountSize,
+      profitTarget: rules.hasProfitTarget ? rules.profitTarget : undefined,
+      maxDrawdown: rules.maxDrawdown,
+      dailyLossLimit: rules.dailyLossLimit,
     })
-    
     setOpen(false)
-    setFormData({
-      name: "",
-      type: "Eval",
-      startingBalance: "50000",
-    })
+    setForm({ name: "", firm: "Apex", type: "Eval", drawdownType: "EOD", accountSize: 50000 })
   }
+
+  const showDrawdownSelector = form.firm === "Apex"
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
@@ -65,58 +112,123 @@ export function AddAccountModal({ onAddAccount }: AddAccountModalProps) {
           Add Account
         </Button>
       </DialogTrigger>
-      <DialogContent className="sm:max-w-[400px] bg-card border-border">
+      <DialogContent className="sm:max-w-[420px] bg-card border-border">
         <DialogHeader>
           <DialogTitle>Add New Account</DialogTitle>
         </DialogHeader>
-        <form onSubmit={handleSubmit} className="space-y-5 mt-4">
+        <form onSubmit={handleSubmit} className="space-y-4 mt-4">
+
+          {/* Account Name */}
           <div className="space-y-2">
-            <Label htmlFor="account-name">Account Name</Label>
+            <Label>Account Name</Label>
             <Input
-              id="account-name"
-              placeholder="e.g., Apex 50K Eval"
-              value={formData.name}
-              onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+              placeholder={`e.g., ${form.firm} ${(form.accountSize / 1000).toFixed(0)}K ${form.type}`}
+              value={form.name}
+              onChange={(e) => set("name", e.target.value)}
               className="bg-background"
             />
           </div>
 
+          {/* Firm */}
           <div className="space-y-2">
-            <Label htmlFor="account-type">Account Type</Label>
+            <Label>Firm</Label>
+            <SegmentedControl
+              options={[{ value: "Apex", label: "Apex" }, { value: "Lucid", label: "Lucid" }]}
+              value={form.firm}
+              onChange={(v) => set("firm", v)}
+            />
+          </div>
+
+          {/* Account Type */}
+          <div className="space-y-2">
+            <Label>Account Type</Label>
+            <SegmentedControl
+              options={[
+                { value: "Eval", label: "Eval" },
+                { value: "PA", label: "PA / Funded" },
+                { value: "Live", label: "Live" },
+              ]}
+              value={form.type}
+              onChange={(v) => set("type", v)}
+            />
+          </div>
+
+          {/* Account Size */}
+          <div className="space-y-2">
+            <Label>Account Size</Label>
             <Select
-              value={formData.type}
-              onValueChange={(value: AccountType) => setFormData({ ...formData, type: value })}
+              value={String(form.accountSize)}
+              onValueChange={(v) => set("accountSize", Number(v))}
             >
               <SelectTrigger className="bg-background">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="Eval">Eval</SelectItem>
-                <SelectItem value="PA">PA (Performance Account)</SelectItem>
-                <SelectItem value="Live">Live</SelectItem>
+                {ACCOUNT_SIZES.map((s) => (
+                  <SelectItem key={s} value={String(s)}>
+                    ${s.toLocaleString()}
+                  </SelectItem>
+                ))}
               </SelectContent>
             </Select>
           </div>
 
-          <div className="space-y-2">
-            <Label htmlFor="starting-balance">Starting Balance ($)</Label>
-            <Input
-              id="starting-balance"
-              type="number"
-              placeholder="50000"
-              value={formData.startingBalance}
-              onChange={(e) => setFormData({ ...formData, startingBalance: e.target.value })}
-              className="bg-background font-mono"
-            />
+          {/* Drawdown Type (Apex only) */}
+          {showDrawdownSelector && (
+            <div className="space-y-2">
+              <Label>Drawdown Type</Label>
+              <SegmentedControl
+                options={[
+                  { value: "EOD", label: "EOD Drawdown" },
+                  { value: "Intraday", label: "Intraday Trailing" },
+                ]}
+                value={form.drawdownType}
+                onChange={(v) => set("drawdownType", v)}
+              />
+              <p className="text-[11px] text-muted-foreground">
+                {form.drawdownType === "Intraday"
+                  ? "Floor trails peak balance in real time"
+                  : "Floor updates after the trading day close"}
+              </p>
+            </div>
+          )}
+
+          {/* Rule preview */}
+          <div className="p-3 rounded-lg bg-muted/30 border border-border/50 text-xs text-muted-foreground space-y-1">
+            <div className="font-medium text-foreground mb-1">Account Rules</div>
+            <div className="flex justify-between">
+              <span>Max Drawdown</span>
+              <span className="font-mono">${rules.maxDrawdown.toLocaleString()}</span>
+            </div>
+            {rules.hasDLL && (
+              <div className="flex justify-between">
+                <span>Daily Loss Limit</span>
+                <span className="font-mono">${rules.dailyLossLimit.toLocaleString()}</span>
+              </div>
+            )}
+            {rules.hasProfitTarget && (
+              <div className="flex justify-between">
+                <span>Profit Target</span>
+                <span className="font-mono">${rules.profitTarget.toLocaleString()}</span>
+              </div>
+            )}
+            {rules.maxContracts && (
+              <div className="flex justify-between">
+                <span>Max Size</span>
+                <span className="font-mono">{rules.maxContracts}</span>
+              </div>
+            )}
+            {rules.hasConsistency && (
+              <div className="flex justify-between">
+                <span>Consistency Rule</span>
+                <span className="font-mono">{rules.consistencyPercent}%</span>
+              </div>
+            )}
           </div>
 
-          <div className="flex justify-end gap-3 pt-4">
-            <Button type="button" variant="ghost" onClick={() => setOpen(false)}>
-              Cancel
-            </Button>
-            <Button type="submit" className="bg-emerald-600 hover:bg-emerald-700">
-              Create Account
-            </Button>
+          <div className="flex justify-end gap-3 pt-2">
+            <Button type="button" variant="ghost" onClick={() => setOpen(false)}>Cancel</Button>
+            <Button type="submit" className="bg-emerald-600 hover:bg-emerald-700">Create Account</Button>
           </div>
         </form>
       </DialogContent>

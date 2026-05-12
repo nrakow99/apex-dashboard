@@ -1,97 +1,33 @@
-import type { Account, Trade, Payout, DailyPnL, DrawdownInfo } from "./types"
-import { PA_CONSTANTS, EOD_CONSTANTS } from "./types"
+import type { Account, Trade, Payout, DailyPnL } from "./types"
+import { EOD_CONSTANTS } from "./types"
+import { getAccountRules } from "./rules"
 
-const STORAGE_KEYS = {
-  accounts: "apex-tracker-accounts",
-  trades: "apex-tracker-trades",
-  payouts: "apex-tracker-payouts",
-} as const
+// ─── EOD Time Utilities ───────────────────────────────────────────────────────
 
-// Storage utilities
-export function loadAccounts(): Account[] {
-  if (typeof window === "undefined") return []
-  try {
-    const data = localStorage.getItem(STORAGE_KEYS.accounts)
-    return data ? JSON.parse(data) : []
-  } catch {
-    return []
-  }
-}
-
-export function saveAccounts(accounts: Account[]): void {
-  if (typeof window === "undefined") return
-  localStorage.setItem(STORAGE_KEYS.accounts, JSON.stringify(accounts))
-}
-
-export function loadTrades(): Trade[] {
-  if (typeof window === "undefined") return []
-  try {
-    const data = localStorage.getItem(STORAGE_KEYS.trades)
-    return data ? JSON.parse(data) : []
-  } catch {
-    return []
-  }
-}
-
-export function saveTrades(trades: Trade[]): void {
-  if (typeof window === "undefined") return
-  localStorage.setItem(STORAGE_KEYS.trades, JSON.stringify(trades))
-}
-
-export function loadPayouts(): Payout[] {
-  if (typeof window === "undefined") return []
-  try {
-    const data = localStorage.getItem(STORAGE_KEYS.payouts)
-    return data ? JSON.parse(data) : []
-  } catch {
-    return []
-  }
-}
-
-export function savePayouts(payouts: Payout[]): void {
-  if (typeof window === "undefined") return
-  localStorage.setItem(STORAGE_KEYS.payouts, JSON.stringify(payouts))
-}
-
-// EOD Time Utilities
 export function isTradingDayComplete(): boolean {
   const now = new Date()
-  const hours = now.getHours()
-  const minutes = now.getMinutes()
-  return hours > EOD_CONSTANTS.CLOSE_HOUR || 
-    (hours === EOD_CONSTANTS.CLOSE_HOUR && minutes >= EOD_CONSTANTS.CLOSE_MINUTE)
+  const h = now.getHours()
+  const m = now.getMinutes()
+  return h > EOD_CONSTANTS.CLOSE_HOUR || (h === EOD_CONSTANTS.CLOSE_HOUR && m >= EOD_CONSTANTS.CLOSE_MINUTE)
 }
 
 export function getTimeUntilClose(): string {
   const now = new Date()
-  const closeTime = new Date()
-  closeTime.setHours(EOD_CONSTANTS.CLOSE_HOUR, EOD_CONSTANTS.CLOSE_MINUTE, 0, 0)
-  
-  if (now >= closeTime) {
-    return "Closed"
-  }
-  
-  const diffMs = closeTime.getTime() - now.getTime()
-  const diffMins = Math.floor(diffMs / 60000)
+  const close = new Date()
+  close.setHours(EOD_CONSTANTS.CLOSE_HOUR, EOD_CONSTANTS.CLOSE_MINUTE, 0, 0)
+  if (now >= close) return "Closed"
+  const diffMins = Math.floor((close.getTime() - now.getTime()) / 60000)
   const hours = Math.floor(diffMins / 60)
   const mins = diffMins % 60
-  
-  if (hours > 0) {
-    return `${hours}h ${mins}m`
-  }
-  return `${mins}m`
+  return hours > 0 ? `${hours}h ${mins}m` : `${mins}m`
 }
 
 export function getTodayDateStr(): string {
   return new Date().toISOString().split("T")[0]
 }
 
-// Check if a date is today
-function isToday(dateStr: string): boolean {
-  return dateStr === getTodayDateStr()
-}
+// ─── Daily PnL calculation ────────────────────────────────────────────────────
 
-// Calculation utilities
 export function calculateDailyPnLData(
   accountId: string,
   trades: Trade[],
@@ -101,42 +37,30 @@ export function calculateDailyPnLData(
   const accountTrades = trades.filter((t) => t.accountId === accountId)
   if (accountTrades.length === 0) return []
 
-  // Group trades by date
   const tradesByDate: Record<string, Trade[]> = {}
   for (const trade of accountTrades) {
-    if (!tradesByDate[trade.date]) {
-      tradesByDate[trade.date] = []
-    }
+    if (!tradesByDate[trade.date]) tradesByDate[trade.date] = []
     tradesByDate[trade.date].push(trade)
   }
 
-  // Get all unique dates sorted
   const dates = Object.keys(tradesByDate).sort()
+  let runningBalance = account.startingBalance
 
-  // Calculate running balance (payouts reduce balance but not maxBalance)
-  const accountPayouts = payouts.filter((p) => p.accountId === accountId)
-  const totalPayouts = accountPayouts.reduce((sum, p) => sum + p.amount, 0)
-  const baseBalance = account.startingBalance
-
-  let runningBalance = baseBalance
-  const dailyData: DailyPnL[] = []
-
-  for (const date of dates) {
+  return dates.map((date) => {
     const dayTrades = tradesByDate[date]
     const dailyPnL = dayTrades.reduce((sum, t) => sum + t.pnl, 0)
     runningBalance += dailyPnL
-    
-    dailyData.push({
+    return {
       date,
       accountId,
       pnl: dailyPnL,
       balance: runningBalance,
       tradesCount: dayTrades.length,
-    })
-  }
-
-  return dailyData
+    }
+  })
 }
+
+// ─── Account stats ────────────────────────────────────────────────────────────
 
 export function calculateAccountStats(
   account: Account,
@@ -145,59 +69,52 @@ export function calculateAccountStats(
 ) {
   const accountTrades = trades.filter((t) => t.accountId === account.id)
   const accountPayouts = payouts.filter((p) => p.accountId === account.id)
-  
+
   const totalPnL = accountTrades.reduce((sum, t) => sum + t.pnl, 0)
   const totalPayouts = accountPayouts.reduce((sum, p) => sum + p.amount, 0)
-  
-  // Current balance = starting + pnl - payouts
+
   const currentBalance = account.startingBalance + totalPnL - totalPayouts
-  
-  // Get daily data for EOD calculations
+
   const dailyData = calculateDailyPnLData(account.id, trades, account, payouts)
-  
-  // Find today's date and check if trading day is complete
+
   const todayStr = getTodayDateStr()
   const dayComplete = isTradingDayComplete()
-  
-  // Calculate highest COMPLETED EOD balance
-  // Only include days that are fully complete (not today unless after 2PM)
+  const isIntraday = account.drawdownType === "Intraday"
+
   let highestCompletedEodBalance = account.startingBalance
   let lastCompletedEodBalance = account.startingBalance
-  
+
   for (const day of dailyData) {
-    const isCompleteDay = day.date !== todayStr || dayComplete
-    if (isCompleteDay) {
-      lastCompletedEodBalance = day.balance
+    if (isIntraday) {
       highestCompletedEodBalance = Math.max(highestCompletedEodBalance, day.balance)
+      lastCompletedEodBalance = day.balance
+    } else {
+      const isCompleteDay = day.date !== todayStr || dayComplete
+      if (isCompleteDay) {
+        lastCompletedEodBalance = day.balance
+        highestCompletedEodBalance = Math.max(highestCompletedEodBalance, day.balance)
+      }
     }
   }
-  
-  // Active EOD Floor = highest completed EOD - drawdown limit
-  // This is the OFFICIAL floor that doesn't change until 2PM
-  const activeEodFloor = highestCompletedEodBalance - account.maxDrawdown
-  
-  // Projected EOD Floor = if today closed now, what would the floor be?
+
+  const peakBalance = isIntraday
+    ? Math.max(highestCompletedEodBalance, currentBalance)
+    : highestCompletedEodBalance
+
+  const activeEodFloor = peakBalance - account.maxDrawdown
   const projectedHighest = Math.max(highestCompletedEodBalance, currentBalance)
   const projectedEodFloor = projectedHighest - account.maxDrawdown
-  
-  // Drawdown remaining is based on ACTIVE floor (not projected)
   const drawdownRemaining = currentBalance - activeEodFloor
-  
-  // For backwards compatibility, also include the old-style values
-  // maxBalance = highest ever (including incomplete day) for display purposes
-  const maxBalance = Math.max(highestCompletedEodBalance, currentBalance)
-  const minBalance = activeEodFloor // Use active floor as the official minimum
 
   return {
     currentBalance,
     totalPnL,
     totalPayouts,
-    maxBalance,
-    minBalance,
+    maxBalance: Math.max(highestCompletedEodBalance, currentBalance),
+    minBalance: activeEodFloor,
     drawdownRemaining,
     tradingDays: dailyData.filter((d) => d.tradesCount > 0).length,
     isSafe: drawdownRemaining > 0,
-    // New EOD-specific fields
     highestCompletedEodBalance,
     lastCompletedEodBalance,
     activeEodFloor,
@@ -207,23 +124,22 @@ export function calculateAccountStats(
   }
 }
 
+// ─── Consistency info ─────────────────────────────────────────────────────────
+
 export function getConsistencyInfo(accountId: string, trades: Trade[], account: Account, payouts: Payout[]) {
+  const rules = getAccountRules(account)
   const dailyData = calculateDailyPnLData(accountId, trades, account, payouts)
   const totalProfit = dailyData.reduce((sum, d) => sum + Math.max(0, d.pnl), 0)
   const largestWinningDay = Math.max(0, ...dailyData.map((d) => d.pnl))
-  const maxAllowedDay = totalProfit * 0.5
+  const maxAllowedDay = totalProfit * (rules.consistencyPercent / 100)
   const isValid = totalProfit <= 0 || largestWinningDay <= maxAllowedDay
   const maxAllowedProfitToday = totalProfit > 0 ? maxAllowedDay - largestWinningDay : Infinity
-  
-  // Calculate additional profit needed to satisfy consistency
-  // requiredTotalProfit = largestWinningDay / 0.5 = largestWinningDay * 2
-  // additionalProfitNeeded = requiredTotalProfit - totalProfit
-  const requiredTotalProfit = largestWinningDay * 2
+  const requiredTotalProfit = rules.consistencyPercent > 0
+    ? largestWinningDay / (rules.consistencyPercent / 100)
+    : 0
   const additionalProfitNeeded = Math.max(0, requiredTotalProfit - totalProfit)
-  
-  // Count days with $250+ profit for PA requirement
-  const daysWithMinProfit = dailyData.filter((d) => d.pnl >= 250).length
-  
+  const daysWithMinProfit = dailyData.filter((d) => d.pnl >= rules.minDailyProfit).length
+
   return {
     largestWinningDay,
     totalProfit,
@@ -235,89 +151,184 @@ export function getConsistencyInfo(accountId: string, trades: Trade[], account: 
   }
 }
 
-// Get payout eligibility for PA account
+// ─── Payout eligibility ───────────────────────────────────────────────────────
+
+// Returns pnl for each day since last payout (or all days if no payouts)
+function getCycleData(
+  accountId: string,
+  trades: Trade[],
+  account: Account,
+  payouts: Payout[]
+) {
+  const accountPayouts = payouts.filter((p) => p.accountId === accountId)
+  const lastPayout = accountPayouts.length > 0
+    ? accountPayouts.sort((a, b) => a.date.localeCompare(b.date)).at(-1)
+    : null
+  const cutoffDate = lastPayout?.date ?? null
+
+  const accountTrades = trades.filter(
+    (t) => t.accountId === accountId && (cutoffDate === null || t.date > cutoffDate)
+  )
+
+  const tradesByDate: Record<string, number> = {}
+  for (const t of accountTrades) {
+    tradesByDate[t.date] = (tradesByDate[t.date] ?? 0) + t.pnl
+  }
+
+  const dailyPnLs = Object.values(tradesByDate)
+  const cycleProfit = dailyPnLs.reduce((s, v) => s + v, 0)
+
+  return { cycleProfit, dailyPnLs }
+}
+
 export function getPayoutEligibility(
   accountId: string,
   trades: Trade[],
   account: Account,
   payouts: Payout[]
 ) {
-  const consistencyInfo = getConsistencyInfo(accountId, trades, account, payouts)
+  const rules = getAccountRules(account)
   const stats = calculateAccountStats(account, trades, payouts)
   const accountPayouts = payouts.filter((p) => p.accountId === accountId)
   const payoutCount = accountPayouts.length
-  
-  // Calculate available to withdraw (balance - safety net)
-  const availableToWithdraw = Math.max(0, stats.currentBalance - PA_CONSTANTS.SAFETY_NET)
-  
-  // Get current payout tier (which payout is next)
-  const currentPayoutTier = Math.min(payoutCount, 5) // 0-5 index
-  const maxPayoutAllowed = PA_CONSTANTS.PAYOUT_TIERS[currentPayoutTier] || PA_CONSTANTS.PAYOUT_TIERS[5]
-  
-  // Actual max you can withdraw (min of available and tier max)
-  const maxWithdrawable = Math.min(availableToWithdraw, maxPayoutAllowed)
-  
-  // Check all conditions
-  const conditions = {
-    hasEnoughTradingDays: stats.tradingDays >= PA_CONSTANTS.MIN_QUALIFYING_DAYS,
-    hasEnoughProfitDays: consistencyInfo.daysWithMinProfit >= PA_CONSTANTS.MIN_QUALIFYING_DAYS,
-    isConsistent: consistencyInfo.isValid,
-    hasMinBalance: stats.currentBalance >= PA_CONSTANTS.MIN_BALANCE_FOR_PAYOUT,
-    isAboveSafetyNet: stats.currentBalance > PA_CONSTANTS.SAFETY_NET,
-    hasMinWithdrawable: availableToWithdraw >= PA_CONSTANTS.MIN_PAYOUT_AMOUNT,
-    hasPayoutsRemaining: payoutCount < 6,
+
+  // ── Lucid cycle-based payout ──────────────────────────────────────────────
+
+  if (account.firm === "Lucid") {
+    const { cycleProfit, dailyPnLs } = getCycleData(accountId, trades, account, payouts)
+    const cycleProfitDays = dailyPnLs.filter((v) => v >= rules.minDailyProfit).length
+    const rawPayout = cycleProfit > 0 ? cycleProfit * rules.payoutMaxPercent : 0
+    const availablePayout = Math.min(rawPayout, rules.payoutAbsoluteCap)
+    const maxWithdrawable = availablePayout >= rules.minPayoutAmount ? availablePayout : 0
+    const traderReceives = maxWithdrawable * rules.payoutSplit
+    const lucidSplit = maxWithdrawable * (1 - rules.payoutSplit)
+
+    const conditions = {
+      hasEnoughProfitDays: cycleProfitDays >= rules.minProfitDays,
+      hasPositiveCycleProfit: cycleProfit > 0,
+      hasMinWithdrawable: maxWithdrawable >= rules.minPayoutAmount,
+      hasPayoutsRemaining: payoutCount < rules.maxPayouts,
+    }
+    const isEligible = Object.values(conditions).every(Boolean)
+
+    const missingConditions: string[] = []
+    if (!conditions.hasEnoughProfitDays) {
+      const needed = rules.minProfitDays - cycleProfitDays
+      missingConditions.push(`${needed} more $${rules.minDailyProfit}+ profit day${needed > 1 ? "s" : ""} this cycle`)
+    }
+    if (!conditions.hasPositiveCycleProfit) missingConditions.push("Cycle profit must be positive")
+    if (!conditions.hasMinWithdrawable) missingConditions.push(`Below minimum payout ($${rules.minPayoutAmount})`)
+    if (!conditions.hasPayoutsRemaining) missingConditions.push(`All ${rules.maxPayouts} payouts used`)
+
+    return {
+      isEligible,
+      firm: "Lucid" as const,
+      conditions,
+      missingConditions,
+      availableToWithdraw: maxWithdrawable,
+      maxWithdrawable,
+      payoutCount,
+      maxPayouts: rules.maxPayouts,
+      cycleProfit,
+      cycleProfitDays,
+      minProfitDays: rules.minProfitDays,
+      minDailyProfit: rules.minDailyProfit,
+      payoutMaxPercent: rules.payoutMaxPercent,
+      payoutAbsoluteCap: rules.payoutAbsoluteCap,
+      payoutSplit: rules.payoutSplit,
+      traderReceives,
+      lucidSplit,
+      minPayoutAmount: rules.minPayoutAmount,
+      stats,
+      // Apex compat fields (unused for Lucid)
+      maxPayoutAllowed: maxWithdrawable,
+      currentPayoutTier: payoutCount + 1,
+      safetyNet: 0,
+      consistencyInfo: getConsistencyInfo(accountId, trades, account, payouts),
+    }
   }
-  
+
+  // ── Apex safety-net payout ────────────────────────────────────────────────
+
+  const consistencyInfo = getConsistencyInfo(accountId, trades, account, payouts)
+  const availableToWithdraw = Math.max(0, stats.currentBalance - rules.safetyNet)
+  const currentPayoutTier = Math.min(payoutCount, rules.maxPayouts - 1)
+  const maxPayoutAllowed = rules.payoutCaps[currentPayoutTier] ?? rules.payoutCaps.at(-1) ?? 0
+  const maxWithdrawable = Math.min(availableToWithdraw, maxPayoutAllowed)
+
+  const conditions = {
+    hasEnoughTradingDays: stats.tradingDays >= rules.minTradingDays,
+    hasEnoughProfitDays: consistencyInfo.daysWithMinProfit >= rules.minProfitDays,
+    isConsistent: !rules.hasConsistency || consistencyInfo.isValid,
+    hasMinBalance: stats.currentBalance >= rules.minBalanceToRequest,
+    isAboveSafetyNet: stats.currentBalance > rules.safetyNet,
+    hasMinWithdrawable: availableToWithdraw >= rules.minPayoutAmount,
+    hasPayoutsRemaining: payoutCount < rules.maxPayouts,
+  }
   const isEligible = Object.values(conditions).every(Boolean)
-  
-  // Generate missing conditions list
+
   const missingConditions: string[] = []
   if (!conditions.hasEnoughProfitDays) {
-    const needed = PA_CONSTANTS.MIN_QUALIFYING_DAYS - consistencyInfo.daysWithMinProfit
-    missingConditions.push(`${needed} more $${PA_CONSTANTS.MIN_PROFIT_DAY}+ profit day${needed > 1 ? "s" : ""}`)
+    const needed = rules.minProfitDays - consistencyInfo.daysWithMinProfit
+    missingConditions.push(`${needed} more $${rules.minDailyProfit}+ profit day${needed > 1 ? "s" : ""}`)
   }
   if (!conditions.isConsistent) {
     missingConditions.push(`$${consistencyInfo.additionalProfitNeeded.toLocaleString()} more profit for consistency`)
   }
   if (!conditions.hasMinBalance) {
-    const needed = PA_CONSTANTS.MIN_BALANCE_FOR_PAYOUT - stats.currentBalance
+    const needed = rules.minBalanceToRequest - stats.currentBalance
     missingConditions.push(`$${needed.toLocaleString()} more to reach minimum balance`)
   }
   if (!conditions.hasMinWithdrawable) {
-    missingConditions.push(`Below minimum payout amount ($${PA_CONSTANTS.MIN_PAYOUT_AMOUNT})`)
+    missingConditions.push(`Below minimum payout amount ($${rules.minPayoutAmount})`)
   }
   if (!conditions.hasPayoutsRemaining) {
-    missingConditions.push("All 6 payouts have been used")
+    missingConditions.push(`All ${rules.maxPayouts} payouts have been used`)
   }
-  
+
   return {
     isEligible,
+    firm: "Apex" as const,
     conditions,
     missingConditions,
     availableToWithdraw,
-    maxPayoutAllowed,
     maxWithdrawable,
     payoutCount,
-    currentPayoutTier: currentPayoutTier + 1, // 1-indexed for display
-    safetyNet: PA_CONSTANTS.SAFETY_NET,
+    maxPayouts: rules.maxPayouts,
+    maxPayoutAllowed,
+    currentPayoutTier: currentPayoutTier + 1,
+    safetyNet: rules.safetyNet,
     consistencyInfo,
     stats,
+    // Lucid compat fields (unused for Apex)
+    cycleProfit: 0,
+    cycleProfitDays: 0,
+    minProfitDays: rules.minProfitDays,
+    minDailyProfit: rules.minDailyProfit,
+    payoutMaxPercent: 0,
+    payoutAbsoluteCap: 0,
+    payoutSplit: 1.0,
+    traderReceives: maxWithdrawable,
+    lucidSplit: 0,
+    minPayoutAmount: rules.minPayoutAmount,
   }
 }
 
-// Get today's date in YYYY-MM-DD format
+// ─── Initial seed data ────────────────────────────────────────────────────────
+
 function getTodayDate(): string {
-  const today = new Date()
-  return today.toISOString().split("T")[0]
+  return new Date().toISOString().split("T")[0]
 }
 
-// Initial data setup - the exact accounts and trade specified
 const INITIAL_ACCOUNTS: Account[] = [
   {
     id: "apex-50k-eval",
     name: "Apex 50K Eval",
+    firm: "Apex",
     type: "Eval",
     status: "Active",
+    drawdownType: "EOD",
+    accountSize: 50000,
     balance: 50000,
     startingBalance: 50000,
     maxBalance: 50000,
@@ -328,8 +339,11 @@ const INITIAL_ACCOUNTS: Account[] = [
   {
     id: "apex-50k-pa",
     name: "Apex 50K PA",
+    firm: "Apex",
     type: "PA",
     status: "Active",
+    drawdownType: "EOD",
+    accountSize: 50000,
     balance: 50670,
     startingBalance: 50000,
     maxBalance: 50670,
@@ -338,38 +352,50 @@ const INITIAL_ACCOUNTS: Account[] = [
   },
 ]
 
-// Initialize storage with real data if empty
-export function initializeStorage(): { accounts: Account[]; trades: Trade[]; payouts: Payout[] } {
-  if (typeof window === "undefined") {
-    return { accounts: [], trades: [], payouts: [] }
-  }
+// localStorage fallback (used only outside Supabase context)
+const STORAGE_KEYS = {
+  accounts: "apex-tracker-accounts",
+  trades: "apex-tracker-trades",
+  payouts: "apex-tracker-payouts",
+} as const
 
+export function loadAccounts(): Account[] {
+  if (typeof window === "undefined") return []
+  try { return JSON.parse(localStorage.getItem(STORAGE_KEYS.accounts) ?? "[]") } catch { return [] }
+}
+export function saveAccounts(accounts: Account[]): void {
+  if (typeof window === "undefined") return
+  localStorage.setItem(STORAGE_KEYS.accounts, JSON.stringify(accounts))
+}
+export function loadTrades(): Trade[] {
+  if (typeof window === "undefined") return []
+  try { return JSON.parse(localStorage.getItem(STORAGE_KEYS.trades) ?? "[]") } catch { return [] }
+}
+export function saveTrades(trades: Trade[]): void {
+  if (typeof window === "undefined") return
+  localStorage.setItem(STORAGE_KEYS.trades, JSON.stringify(trades))
+}
+export function loadPayouts(): Payout[] {
+  if (typeof window === "undefined") return []
+  try { return JSON.parse(localStorage.getItem(STORAGE_KEYS.payouts) ?? "[]") } catch { return [] }
+}
+export function savePayouts(payouts: Payout[]): void {
+  if (typeof window === "undefined") return
+  localStorage.setItem(STORAGE_KEYS.payouts, JSON.stringify(payouts))
+}
+
+export function initializeStorage(): { accounts: Account[]; trades: Trade[]; payouts: Payout[] } {
+  if (typeof window === "undefined") return { accounts: [], trades: [], payouts: [] }
   let accounts = loadAccounts()
   let trades = loadTrades()
   let payouts = loadPayouts()
-
-  // If no accounts exist, initialize with the real data
   if (accounts.length === 0) {
     accounts = INITIAL_ACCOUNTS
     saveAccounts(accounts)
-
-    // Add the single real trade for PA account
-    const today = getTodayDate()
-    trades = [
-      {
-        id: "trade-1",
-        date: today,
-        accountId: "apex-50k-pa",
-        symbol: "NQM6",
-        pnl: 670,
-      },
-    ]
+    trades = [{ id: "trade-1", date: getTodayDate(), accountId: "apex-50k-pa", symbol: "NQM6", pnl: 670 }]
     saveTrades(trades)
-
-    // No payouts yet
     payouts = []
     savePayouts(payouts)
   }
-
   return { accounts, trades, payouts }
 }
