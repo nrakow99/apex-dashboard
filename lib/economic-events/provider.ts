@@ -32,6 +32,12 @@ export type EconomicEventsProviderDiagnostics = {
   normalizedEventTitlesSample?: string[] | null
   highImpactTitlesSample?: string[] | null
   redFolderTitlesSample?: string[] | null
+  skippedMissingDate?: number | null
+  skippedInvalidDate?: number | null
+  skippedMissingTitle?: number | null
+  skippedMissingCurrency?: number | null
+  skippedUnknownReason?: number | null
+  skippedEventSamples?: unknown[] | null
 }
 
 export type SelectedEconomicEventsProvider = {

@@ -19,6 +19,17 @@ type ParsedEventInstant = {
   marketDatetime: string
 }
 
+type SkipReason =
+  | "missing_date"
+  | "invalid_date"
+  | "missing_title"
+  | "missing_currency"
+  | "unknown"
+
+type NormalizationResult =
+  | { event: EconomicEvent; reason?: never }
+  | { event?: never; reason: SkipReason }
+
 function stableId(parts: string): string {
   return createHash("sha256").update(parts).digest("hex").slice(0, 16)
 }
@@ -115,6 +126,14 @@ function readMetric(row: ForexFactoryLikeRow, keys: string[]): string | null {
   return null
 }
 
+function readRequiredString(row: ForexFactoryLikeRow, keys: string[]): string | null {
+  for (const key of keys) {
+    const value = row[key]
+    if (typeof value === "string" && value.trim()) return value.trim()
+  }
+  return null
+}
+
 function readTimestamp(row: ForexFactoryLikeRow): Date | null {
   const raw = row.timestamp ?? row.unix ?? row.epoch
   if (typeof raw !== "number" || !Number.isFinite(raw)) return null
@@ -201,6 +220,17 @@ function normalizeTimeString(raw: string | null): string | null {
   return `${String(hour).padStart(2, "0")}:${String(minute).padStart(2, "0")}:00`
 }
 
+function parseIsoInstant(raw: string): ParsedEventInstant | null {
+  const d = new Date(raw)
+  if (Number.isNaN(d.getTime())) return null
+
+  return {
+    instant: d,
+    hasSpecificTime: true,
+    marketDatetime: formatInTimeZone(d, NY, "yyyy-MM-dd HH:mm:ss"),
+  }
+}
+
 function parseEventInstant(row: ForexFactoryLikeRow, from: string): ParsedEventInstant | null {
   const timestamp = readTimestamp(row)
   if (timestamp) {
@@ -212,6 +242,12 @@ function parseEventInstant(row: ForexFactoryLikeRow, from: string): ParsedEventI
   }
 
   const timezone = readTimezone(row)
+
+  const providerDate = readString(row, ["date"])
+  if (providerDate && /^\d{4}-\d{2}-\d{2}T/.test(providerDate)) {
+    const parsed = parseIsoInstant(providerDate)
+    if (parsed) return parsed
+  }
 
   const datetime = readString(row, ["datetime", "dateTime", "date_time", "iso", "utc", "date"])
   if (datetime) {
@@ -295,15 +331,20 @@ function rowsFromResponse(json: unknown): ForexFactoryLikeRow[] {
   return []
 }
 
-function normalizeRow(row: ForexFactoryLikeRow, index: number, from: string): EconomicEvent | null {
+function normalizeRow(row: ForexFactoryLikeRow, index: number, from: string): NormalizationResult {
   // Field aliases are intentionally centralized so the provider can be adapted
   // quickly once the exact third-party response shape is known.
-  const title = readString(row, ["indicator", "title", "event", "name", "description"]) ?? "Economic release"
+  const title = readRequiredString(row, ["indicator", "title"])
+  if (!title) return { reason: "missing_title" }
+
+  const rawDate = readString(row, ["date", "datetime", "dateTime", "date_time", "iso", "utc", "timestamp", "unix", "epoch"])
+  if (!rawDate) return { reason: "missing_date" }
+
   const rawCurrency = readString(row, ["currency", "ccy", "symbol"])?.toUpperCase() ?? null
   const country = readString(row, ["country", "countryCode", "country_code"]) ?? (rawCurrency === "USD" ? "US" : rawCurrency ?? "ZZ")
   const currency = rawCurrency ?? (isUsdEvent({ currency: rawCurrency, country, title }) ? "USD" : null)
   const parsed = parseEventInstant(row, from)
-  if (!parsed) return null
+  if (!parsed) return { reason: "invalid_date" }
 
   const { instant, hasSpecificTime, marketDatetime } = parsed
   const date = nyDateString(instant)
@@ -314,21 +355,27 @@ function normalizeRow(row: ForexFactoryLikeRow, index: number, from: string): Ec
     ? `forex_factory-${rawId}`
     : `forex_factory-${stableId(`${date}|${time}|${title}|${country}|${currency ?? ""}|${index}`)}`
 
-  return enrichEconomicEvent({
-    id,
-    date,
-    time: hasSpecificTime ? time : null,
-    datetime: instant.toISOString(),
-    marketDatetime,
-    country,
-    currency,
-    title,
-    impact,
-    forecast: readMetric(row, ["forecast", "consensus", "estimate", "expected"]),
-    previous: readMetric(row, ["previous", "prev", "prior"]),
-    actual: readMetric(row, ["actual", "result"]),
-    source: "forex_factory",
-  })
+  try {
+    return {
+      event: enrichEconomicEvent({
+        id,
+        date,
+        time: hasSpecificTime ? time : null,
+        datetime: instant.toISOString(),
+        marketDatetime,
+        country,
+        currency,
+        title,
+        impact,
+        forecast: readMetric(row, ["forecast", "consensus", "estimate", "expected"]),
+        previous: readMetric(row, ["previous", "prev", "prior"]),
+        actual: readMetric(row, ["actual", "result"]),
+        source: "forex_factory",
+      }),
+    }
+  } catch {
+    return { reason: "unknown" }
+  }
 }
 
 function buildUrl(baseUrl: string, from: string, to: string): URL {
@@ -370,6 +417,12 @@ export function createForexFactoryEconomicEventsProvider(
     normalizedEventTitlesSample: null,
     highImpactTitlesSample: null,
     redFolderTitlesSample: null,
+    skippedMissingDate: null,
+    skippedInvalidDate: null,
+    skippedMissingTitle: null,
+    skippedMissingCurrency: null,
+    skippedUnknownReason: null,
+    skippedEventSamples: null,
   }
 
   return {
@@ -399,6 +452,12 @@ export function createForexFactoryEconomicEventsProvider(
         normalizedEventTitlesSample: null,
         highImpactTitlesSample: null,
         redFolderTitlesSample: null,
+        skippedMissingDate: 0,
+        skippedInvalidDate: 0,
+        skippedMissingTitle: 0,
+        skippedMissingCurrency: 0,
+        skippedUnknownReason: 0,
+        skippedEventSamples: [],
       }
 
       if (!baseUrl?.trim()) {
@@ -447,15 +506,38 @@ export function createForexFactoryEconomicEventsProvider(
       diagnostics.rawCount = rows.length
       const normalizedBeforeFiltering: EconomicEvent[] = []
       const out: EconomicEvent[] = []
+      const skippedEventSamples: unknown[] = []
       let i = 0
       for (const row of rows) {
-        const ev = normalizeRow(row, i, from)
-        if (ev) {
-          normalizedBeforeFiltering.push(ev)
-          if (ev.date >= from && ev.date <= to) out.push(ev)
+        const result = normalizeRow(row, i, from)
+        if (result.event) {
+          normalizedBeforeFiltering.push(result.event)
+          if (result.event.date >= from && result.event.date <= to) out.push(result.event)
+        } else {
+          if (result.reason === "missing_date") {
+            diagnostics.skippedMissingDate = (diagnostics.skippedMissingDate ?? 0) + 1
+          } else if (result.reason === "invalid_date") {
+            diagnostics.skippedInvalidDate = (diagnostics.skippedInvalidDate ?? 0) + 1
+          } else if (result.reason === "missing_title") {
+            diagnostics.skippedMissingTitle = (diagnostics.skippedMissingTitle ?? 0) + 1
+          } else if (result.reason === "missing_currency") {
+            diagnostics.skippedMissingCurrency = (diagnostics.skippedMissingCurrency ?? 0) + 1
+          } else {
+            diagnostics.skippedUnknownReason = (diagnostics.skippedUnknownReason ?? 0) + 1
+          }
+
+          if (skippedEventSamples.length < 10) {
+            skippedEventSamples.push(
+              compactDebugValue({
+                reason: result.reason,
+                row,
+              }),
+            )
+          }
         }
         i += 1
       }
+      diagnostics.skippedEventSamples = skippedEventSamples
       diagnostics.normalizedCountBeforeFiltering = normalizedBeforeFiltering.length
       diagnostics.normalizedUsdCount = normalizedBeforeFiltering.filter((e) => e.currency === "USD").length
       diagnostics.normalizedHighImpactCount = normalizedBeforeFiltering.filter((e) => e.impact === "high").length
@@ -481,6 +563,12 @@ export function createForexFactoryEconomicEventsProvider(
         normalizedEventTitlesSample: diagnostics.normalizedEventTitlesSample,
         highImpactTitlesSample: diagnostics.highImpactTitlesSample,
         redFolderTitlesSample: diagnostics.redFolderTitlesSample,
+        skippedMissingDate: diagnostics.skippedMissingDate,
+        skippedInvalidDate: diagnostics.skippedInvalidDate,
+        skippedMissingTitle: diagnostics.skippedMissingTitle,
+        skippedMissingCurrency: diagnostics.skippedMissingCurrency,
+        skippedUnknownReason: diagnostics.skippedUnknownReason,
+        skippedEventSamples: diagnostics.skippedEventSamples,
         normalizedEventSample: diagnostics.normalizedEventSample,
         usdRedFolderEvents: out.filter((e) => e.currency === "USD" && e.impact === "high" && e.isRedFolder).length,
       })
