@@ -31,6 +31,8 @@ export type EconomicEvent = {
   time: string | null
   /** Instant as ISO 8601 (UTC). */
   datetime: string
+  /** Provider event wall-clock in America/New_York market time when available. */
+  marketDatetime?: string
   country: string
   currency?: string | null
   title: string

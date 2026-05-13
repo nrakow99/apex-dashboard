@@ -8,7 +8,7 @@ import type {
 import { isUsdEvent } from "./analytics"
 
 const HIGH_US_KEYWORDS =
-  /\b(cpi|ppi|pce|nfp|non[- ]farm|payrolls|fomc|fed funds|interest rate decision|unemployment|jobless|gdp|retail sales|ism|pmi)\b/i
+  /\b(cpi|ppi|pce|nfp|non[- ]farm|payrolls|fomc|fed chair|fed funds|interest rate decision|unemployment|jobless|average hourly earnings|gdp|retail sales|ism|pmi)\b/i
 
 export function impactLevelToDisplay(level: EconomicImpactLevel): EconomicEventImpactDisplay {
   if (level === "high") return "High"
@@ -63,7 +63,7 @@ export function filterEconomicEventsForView(
     case "high":
       return events.filter((e) => e.impact === "high")
     case "red-folder":
-      return events.filter((e) => isUsdEvent(e) && e.impact === "high" && e.isRedFolder)
+      return events.filter((e) => e.currency === "USD" && e.impact === "high" && e.isRedFolder)
     default:
       return events
   }

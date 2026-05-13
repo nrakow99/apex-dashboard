@@ -4,6 +4,7 @@ import type { EconomicEventsProvider } from "./provider"
 import type { EconomicEvent } from "./types"
 import { enrichEconomicEvent } from "./enrich"
 import { formatMetricDisplay, inferImpactLevel } from "./utils"
+import { isUsdEvent } from "./analytics"
 
 const FINNHUB_BASE = "https://finnhub.io/api/v1"
 
@@ -62,7 +63,8 @@ function nyTimeLabel(d: Date): string {
 function normalizeRow(row: FinnhubCalendarRow, index: number, from: string): EconomicEvent | null {
   const title = (row.event ?? "").trim() || "Economic release"
   const country = (row.country ?? "").trim() || "ZZ"
-  const currency = row.currency?.trim() || null
+  const rawCurrency = row.currency?.trim().toUpperCase() || null
+  const currency = rawCurrency ?? (isUsdEvent({ currency: rawCurrency, country, title }) ? "USD" : null)
 
   let instant = parseEventInstant(row)
   if (!instant) {
@@ -83,6 +85,7 @@ function normalizeRow(row: FinnhubCalendarRow, index: number, from: string): Eco
     date,
     time: /^\d{4}-\d{2}-\d{2}$/.test((row.time ?? "").trim()) ? null : time,
     datetime: instant.toISOString(),
+    marketDatetime: `${date} ${time}:00`,
     country,
     currency,
     title,
@@ -131,6 +134,11 @@ export function createFinnhubEconomicEventsProvider(
         }
         i += 1
       }
+      console.info("[economic-events] finnhub", {
+        rawEvents: rows.length,
+        normalizedEvents: out.length,
+        usdRedFolderEvents: out.filter((e) => e.currency === "USD" && e.impact === "high" && e.isRedFolder).length,
+      })
       return out
     },
   }
