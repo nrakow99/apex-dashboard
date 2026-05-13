@@ -84,6 +84,8 @@ export async function GET(req: Request) {
       forexFactoryTopLevelKeys: forexDiagnostics?.topLevelKeys ?? null,
       forexFactoryRawLength: forexDiagnostics?.rawLength ?? null,
       forexFactorySampleItem: forexDiagnostics?.sampleItem ?? null,
+      normalizedEventCount: forexDiagnostics?.normalizedCount ?? null,
+      normalizedEventSample: forexDiagnostics?.normalizedEventSample ?? null,
     }
   }
 
@@ -110,6 +112,28 @@ export async function GET(req: Request) {
     )
   } catch (primaryError) {
     const fallbackReason = safeFallbackReason(primaryError)
+    const forexDiagnostics =
+      providerSelection.name === "forex_factory"
+        ? providerSelection.provider.getDiagnostics?.()
+        : undefined
+
+    if (providerSelection.name === "forex_factory" && forexDiagnostics?.statusCode === 200) {
+      return NextResponse.json(
+        {
+          events: [],
+          ...getDebugFields(providerSelection.name, fallbackReason),
+          meta: {
+            from,
+            to,
+            provider: providerSelection.name,
+            error: "forex_factory_normalization_failed",
+            stale: false,
+            cacheSeconds: revalidateSec,
+          },
+        },
+        { status: 200, headers },
+      )
+    }
 
     if (providerSelection.fallbackProvider && providerSelection.fallbackName) {
       try {

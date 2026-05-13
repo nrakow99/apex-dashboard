@@ -24,6 +24,7 @@ export type EconomicEventsProviderDiagnostics = {
   topLevelKeys?: string[] | null
   rawLength?: number | null
   sampleItem?: unknown
+  normalizedEventSample?: unknown
 }
 
 export type SelectedEconomicEventsProvider = {

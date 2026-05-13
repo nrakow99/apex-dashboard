@@ -136,6 +136,20 @@ function readTimezone(row: ForexFactoryLikeRow): string {
 }
 
 function readImpact(row: ForexFactoryLikeRow, title: string, country: string, currency: string | null): EconomicImpactLevel {
+  const importance = row.importance
+  const numericImportance =
+    typeof importance === "number"
+      ? importance
+      : typeof importance === "string"
+        ? Number(importance)
+        : Number.NaN
+
+  if (Number.isFinite(numericImportance)) {
+    if (numericImportance >= 2) return "high"
+    if (numericImportance === 1) return "medium"
+    return "low"
+  }
+
   const rawImpact = readString(row, ["impact", "importance", "priority", "folder", "severity"])
   return inferImpactLevel(rawImpact ?? undefined, title, country, currency)
 }
@@ -199,7 +213,7 @@ function parseEventInstant(row: ForexFactoryLikeRow, from: string): ParsedEventI
 
   const timezone = readTimezone(row)
 
-  const datetime = readString(row, ["datetime", "dateTime", "date_time", "iso", "utc"])
+  const datetime = readString(row, ["datetime", "dateTime", "date_time", "iso", "utc", "date"])
   if (datetime) {
     if (/^\d{4}-\d{2}-\d{2}$/.test(datetime)) {
       const d = toDate(`${datetime} 12:00:00`, { timeZone: NY })
@@ -284,7 +298,7 @@ function rowsFromResponse(json: unknown): ForexFactoryLikeRow[] {
 function normalizeRow(row: ForexFactoryLikeRow, index: number, from: string): EconomicEvent | null {
   // Field aliases are intentionally centralized so the provider can be adapted
   // quickly once the exact third-party response shape is known.
-  const title = readString(row, ["title", "event", "name", "description"]) ?? "Economic release"
+  const title = readString(row, ["indicator", "title", "event", "name", "description"]) ?? "Economic release"
   const rawCurrency = readString(row, ["currency", "ccy", "symbol"])?.toUpperCase() ?? null
   const country = readString(row, ["country", "countryCode", "country_code"]) ?? (rawCurrency === "USD" ? "US" : rawCurrency ?? "ZZ")
   const currency = rawCurrency ?? (isUsdEvent({ currency: rawCurrency, country, title }) ? "USD" : null)
@@ -348,6 +362,7 @@ export function createForexFactoryEconomicEventsProvider(
     topLevelKeys: null,
     rawLength: null,
     sampleItem: null,
+    normalizedEventSample: null,
   }
 
   return {
@@ -369,6 +384,7 @@ export function createForexFactoryEconomicEventsProvider(
         topLevelKeys: null,
         rawLength: null,
         sampleItem: null,
+        normalizedEventSample: null,
       }
 
       if (!baseUrl?.trim()) {
@@ -423,9 +439,11 @@ export function createForexFactoryEconomicEventsProvider(
         i += 1
       }
       diagnostics.normalizedCount = out.length
+      diagnostics.normalizedEventSample = compactDebugValue(out[0] ?? null)
       console.info("[economic-events] forex_factory", {
         rawEvents: rows.length,
         normalizedEvents: out.length,
+        normalizedEventSample: diagnostics.normalizedEventSample,
         usdRedFolderEvents: out.filter((e) => e.currency === "USD" && e.impact === "high" && e.isRedFolder).length,
       })
       return out
