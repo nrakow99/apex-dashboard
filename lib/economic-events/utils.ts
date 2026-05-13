@@ -5,6 +5,7 @@ import type {
   CalendarEventDisplay,
   EventsViewFilter,
 } from "./types"
+import { isUsdEvent } from "./analytics"
 
 const HIGH_US_KEYWORDS =
   /\b(cpi|ppi|pce|nfp|non[- ]farm|payrolls|fomc|fed funds|interest rate decision|unemployment|jobless|gdp|retail sales|ism|pmi)\b/i
@@ -62,7 +63,7 @@ export function filterEconomicEventsForView(
     case "high":
       return events.filter((e) => e.impact === "high")
     case "red-folder":
-      return events.filter((e) => e.currency === "USD" && e.impact === "high" && e.isRedFolder)
+      return events.filter((e) => isUsdEvent(e) && e.impact === "high" && e.isRedFolder)
     default:
       return events
   }
@@ -70,7 +71,7 @@ export function filterEconomicEventsForView(
 
 export function toCalendarEventDisplay(ev: EconomicEvent): CalendarEventDisplay {
   const impact = impactLevelToDisplay(ev.impact)
-  const us = ev.country?.toUpperCase() === "US" || ev.currency === "USD"
+  const us = isUsdEvent(ev)
   const isUsdHigh = us && ev.impact === "high"
 
   return {
