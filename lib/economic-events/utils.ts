@@ -62,7 +62,7 @@ export function filterEconomicEventsForView(
     case "high":
       return events.filter((e) => e.impact === "high")
     case "red-folder":
-      return events.filter((e) => e.isRedFolder)
+      return events.filter((e) => e.currency === "USD" && e.impact === "high" && e.isRedFolder)
     default:
       return events
   }

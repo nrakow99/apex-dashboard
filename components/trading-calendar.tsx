@@ -86,7 +86,7 @@ export function TradingCalendar({ account, dailyData, trades }: TradingCalendarP
   const [calendarMode, setCalendarMode] = useState<CalendarMode>("pnl")
   const [eventsModalDate, setEventsModalDate] = useState<string | null>(null)
   const [eventImpactFilter, setEventImpactFilter] = useState<EventImpactFilter>("all")
-  const [eventsViewFilter, setEventsViewFilter] = useState<EventsViewFilter>("all")
+  const [eventsViewFilter, setEventsViewFilter] = useState<EventsViewFilter>("red-folder")
 
   const rules = getAccountRules(account)
   const isPA = account.type === "PA"
