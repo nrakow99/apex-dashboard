@@ -99,6 +99,9 @@ export async function GET(req: Request) {
       skippedMissingCurrency: forexDiagnostics?.skippedMissingCurrency ?? null,
       skippedUnknownReason: forexDiagnostics?.skippedUnknownReason ?? null,
       skippedEventSamples: forexDiagnostics?.skippedEventSamples ?? null,
+      normalizationLoopIterations: forexDiagnostics?.normalizationLoopIterations ?? null,
+      normalizationLoopSuccessfulReturns: forexDiagnostics?.normalizationLoopSuccessfulReturns ?? null,
+      normalizationLoopNullReturns: forexDiagnostics?.normalizationLoopNullReturns ?? null,
     }
   }
 

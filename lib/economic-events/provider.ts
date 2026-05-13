@@ -38,6 +38,9 @@ export type EconomicEventsProviderDiagnostics = {
   skippedMissingCurrency?: number | null
   skippedUnknownReason?: number | null
   skippedEventSamples?: unknown[] | null
+  normalizationLoopIterations?: number | null
+  normalizationLoopSuccessfulReturns?: number | null
+  normalizationLoopNullReturns?: number | null
 }
 
 export type SelectedEconomicEventsProvider = {

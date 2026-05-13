@@ -423,6 +423,9 @@ export function createForexFactoryEconomicEventsProvider(
     skippedMissingCurrency: null,
     skippedUnknownReason: null,
     skippedEventSamples: null,
+    normalizationLoopIterations: null,
+    normalizationLoopSuccessfulReturns: null,
+    normalizationLoopNullReturns: null,
   }
 
   return {
@@ -458,6 +461,9 @@ export function createForexFactoryEconomicEventsProvider(
         skippedMissingCurrency: 0,
         skippedUnknownReason: 0,
         skippedEventSamples: [],
+        normalizationLoopIterations: 0,
+        normalizationLoopSuccessfulReturns: 0,
+        normalizationLoopNullReturns: 0,
       }
 
       if (!baseUrl?.trim()) {
@@ -509,11 +515,17 @@ export function createForexFactoryEconomicEventsProvider(
       const skippedEventSamples: unknown[] = []
       let i = 0
       for (const row of rows) {
+        diagnostics.normalizationLoopIterations = (diagnostics.normalizationLoopIterations ?? 0) + 1
         const result = normalizeRow(row, i, from)
-        if (result.event) {
+        if ("event" in result && result.event) {
+          diagnostics.normalizationLoopSuccessfulReturns =
+            (diagnostics.normalizationLoopSuccessfulReturns ?? 0) + 1
           normalizedBeforeFiltering.push(result.event)
+          diagnostics.normalizedEventSample ??= compactDebugValue(result.event)
           if (result.event.date >= from && result.event.date <= to) out.push(result.event)
         } else {
+          diagnostics.normalizationLoopNullReturns =
+            (diagnostics.normalizationLoopNullReturns ?? 0) + 1
           if (result.reason === "missing_date") {
             diagnostics.skippedMissingDate = (diagnostics.skippedMissingDate ?? 0) + 1
           } else if (result.reason === "invalid_date") {
@@ -552,9 +564,12 @@ export function createForexFactoryEconomicEventsProvider(
         .slice(0, 20)
         .map((e) => e.title)
       diagnostics.normalizedCount = out.length
-      diagnostics.normalizedEventSample = compactDebugValue(out[0] ?? null)
+      diagnostics.normalizedEventSample ??= compactDebugValue(normalizedBeforeFiltering[0] ?? null)
       console.info("[economic-events] forex_factory", {
         rawEvents: rows.length,
+        normalizationLoopIterations: diagnostics.normalizationLoopIterations,
+        normalizationLoopSuccessfulReturns: diagnostics.normalizationLoopSuccessfulReturns,
+        normalizationLoopNullReturns: diagnostics.normalizationLoopNullReturns,
         normalizedEventsBeforeFiltering: diagnostics.normalizedCountBeforeFiltering,
         normalizedEvents: out.length,
         normalizedUsdEvents: diagnostics.normalizedUsdCount,
