@@ -25,6 +25,13 @@ export type EconomicEventsProviderDiagnostics = {
   rawLength?: number | null
   sampleItem?: unknown
   normalizedEventSample?: unknown
+  normalizedCountBeforeFiltering?: number | null
+  normalizedUsdCount?: number | null
+  normalizedHighImpactCount?: number | null
+  normalizedRedFolderCount?: number | null
+  normalizedEventTitlesSample?: string[] | null
+  highImpactTitlesSample?: string[] | null
+  redFolderTitlesSample?: string[] | null
 }
 
 export type SelectedEconomicEventsProvider = {

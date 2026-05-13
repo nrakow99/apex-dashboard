@@ -86,6 +86,13 @@ export async function GET(req: Request) {
       forexFactorySampleItem: forexDiagnostics?.sampleItem ?? null,
       normalizedEventCount: forexDiagnostics?.normalizedCount ?? null,
       normalizedEventSample: forexDiagnostics?.normalizedEventSample ?? null,
+      normalizedEventCountBeforeFiltering: forexDiagnostics?.normalizedCountBeforeFiltering ?? null,
+      normalizedUsdCount: forexDiagnostics?.normalizedUsdCount ?? null,
+      normalizedHighImpactCount: forexDiagnostics?.normalizedHighImpactCount ?? null,
+      normalizedRedFolderCount: forexDiagnostics?.normalizedRedFolderCount ?? null,
+      normalizedEventTitlesSample: forexDiagnostics?.normalizedEventTitlesSample ?? null,
+      highImpactTitlesSample: forexDiagnostics?.highImpactTitlesSample ?? null,
+      redFolderTitlesSample: forexDiagnostics?.redFolderTitlesSample ?? null,
     }
   }
 

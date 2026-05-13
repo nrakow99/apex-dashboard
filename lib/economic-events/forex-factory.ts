@@ -363,6 +363,13 @@ export function createForexFactoryEconomicEventsProvider(
     rawLength: null,
     sampleItem: null,
     normalizedEventSample: null,
+    normalizedCountBeforeFiltering: null,
+    normalizedUsdCount: null,
+    normalizedHighImpactCount: null,
+    normalizedRedFolderCount: null,
+    normalizedEventTitlesSample: null,
+    highImpactTitlesSample: null,
+    redFolderTitlesSample: null,
   }
 
   return {
@@ -385,6 +392,13 @@ export function createForexFactoryEconomicEventsProvider(
         rawLength: null,
         sampleItem: null,
         normalizedEventSample: null,
+        normalizedCountBeforeFiltering: null,
+        normalizedUsdCount: null,
+        normalizedHighImpactCount: null,
+        normalizedRedFolderCount: null,
+        normalizedEventTitlesSample: null,
+        highImpactTitlesSample: null,
+        redFolderTitlesSample: null,
       }
 
       if (!baseUrl?.trim()) {
@@ -431,18 +445,42 @@ export function createForexFactoryEconomicEventsProvider(
 
       const rows = rowsFromResponse(json)
       diagnostics.rawCount = rows.length
+      const normalizedBeforeFiltering: EconomicEvent[] = []
       const out: EconomicEvent[] = []
       let i = 0
       for (const row of rows) {
         const ev = normalizeRow(row, i, from)
-        if (ev && ev.date >= from && ev.date <= to) out.push(ev)
+        if (ev) {
+          normalizedBeforeFiltering.push(ev)
+          if (ev.date >= from && ev.date <= to) out.push(ev)
+        }
         i += 1
       }
+      diagnostics.normalizedCountBeforeFiltering = normalizedBeforeFiltering.length
+      diagnostics.normalizedUsdCount = normalizedBeforeFiltering.filter((e) => e.currency === "USD").length
+      diagnostics.normalizedHighImpactCount = normalizedBeforeFiltering.filter((e) => e.impact === "high").length
+      diagnostics.normalizedRedFolderCount = normalizedBeforeFiltering.filter((e) => e.isRedFolder).length
+      diagnostics.normalizedEventTitlesSample = normalizedBeforeFiltering.slice(0, 20).map((e) => e.title)
+      diagnostics.highImpactTitlesSample = normalizedBeforeFiltering
+        .filter((e) => e.impact === "high")
+        .slice(0, 20)
+        .map((e) => e.title)
+      diagnostics.redFolderTitlesSample = normalizedBeforeFiltering
+        .filter((e) => e.isRedFolder)
+        .slice(0, 20)
+        .map((e) => e.title)
       diagnostics.normalizedCount = out.length
       diagnostics.normalizedEventSample = compactDebugValue(out[0] ?? null)
       console.info("[economic-events] forex_factory", {
         rawEvents: rows.length,
+        normalizedEventsBeforeFiltering: diagnostics.normalizedCountBeforeFiltering,
         normalizedEvents: out.length,
+        normalizedUsdEvents: diagnostics.normalizedUsdCount,
+        normalizedHighImpactEvents: diagnostics.normalizedHighImpactCount,
+        normalizedRedFolderEvents: diagnostics.normalizedRedFolderCount,
+        normalizedEventTitlesSample: diagnostics.normalizedEventTitlesSample,
+        highImpactTitlesSample: diagnostics.highImpactTitlesSample,
+        redFolderTitlesSample: diagnostics.redFolderTitlesSample,
         normalizedEventSample: diagnostics.normalizedEventSample,
         usdRedFolderEvents: out.filter((e) => e.currency === "USD" && e.impact === "high" && e.isRedFolder).length,
       })
