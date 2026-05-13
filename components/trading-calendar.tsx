@@ -12,19 +12,12 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog"
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select"
 import { Badge } from "@/components/ui/badge"
 import { ChevronLeft, ChevronRight, X, TrendingUp, TrendingDown, Minus, Star } from "lucide-react"
 import { cn } from "@/lib/utils"
 import type { Account, DailyPnL, Trade } from "@/lib/types"
 import { getAccountRules } from "@/lib/rules"
-import type { EconomicEventImpactDisplay, EventsViewFilter } from "@/lib/economic-events/types"
+import type { EconomicEventImpactDisplay } from "@/lib/economic-events/types"
 import { formatEventCountdown } from "@/lib/economic-events/countdown"
 import {
   buildCalendarEventsByDate,
@@ -49,14 +42,6 @@ interface DayStats {
 }
 
 type CalendarMode = "pnl" | "events"
-type EventImpactFilter = "all" | EconomicEventImpactDisplay
-
-const EVENT_VIEW_FILTERS: { id: EventsViewFilter; label: string }[] = [
-  { id: "all", label: "All Events" },
-  { id: "usd", label: "USD Only" },
-  { id: "high", label: "High Impact" },
-  { id: "red-folder", label: "Red Folder" },
-]
 
 function dotClassForImpact(impact: EconomicEventImpactDisplay): string {
   if (impact === "High") return "bg-red-500 shadow-[0_0_6px_rgba(239,68,68,0.65)]"
@@ -85,8 +70,6 @@ export function TradingCalendar({ account, dailyData, trades }: TradingCalendarP
   const [selectedDate, setSelectedDate] = useState<string | null>(null)
   const [calendarMode, setCalendarMode] = useState<CalendarMode>("pnl")
   const [eventsModalDate, setEventsModalDate] = useState<string | null>(null)
-  const [eventImpactFilter, setEventImpactFilter] = useState<EventImpactFilter>("all")
-  const [eventsViewFilter, setEventsViewFilter] = useState<EventsViewFilter>("red-folder")
 
   const rules = getAccountRules(account)
   const isPA = account.type === "PA"
@@ -107,8 +90,8 @@ export function TradingCalendar({ account, dailyData, trades }: TradingCalendarP
   }, [eventsModalDate])
 
   const filteredEconomicEvents = useMemo(
-    () => filterEconomicEventsForView(economicEventsMerged, eventsViewFilter),
-    [economicEventsMerged, eventsViewFilter],
+    () => filterEconomicEventsForView(economicEventsMerged, "red-folder"),
+    [economicEventsMerged],
   )
 
   const eventsByDate = useMemo(
@@ -119,10 +102,8 @@ export function TradingCalendar({ account, dailyData, trades }: TradingCalendarP
   const modalDayEvents = useMemo(() => {
     if (!eventsModalDate) return []
     const raw = eventsByDate.get(eventsModalDate) ?? []
-    const sorted = sortCalendarEventsDisplay(raw)
-    if (eventImpactFilter === "all") return sorted
-    return sorted.filter((e) => e.impact === eventImpactFilter)
-  }, [eventsModalDate, eventsByDate, eventImpactFilter])
+    return sortCalendarEventsDisplay(raw)
+  }, [eventsModalDate, eventsByDate])
 
   const getDaysInMonth = (date: Date) => {
     return new Date(date.getFullYear(), date.getMonth() + 1, 0).getDate()
@@ -173,19 +154,16 @@ export function TradingCalendar({ account, dailyData, trades }: TradingCalendarP
   const handleCalendarModeChange = (value: string) => {
     setCalendarMode(value as CalendarMode)
     resetSelections()
-    setEventImpactFilter("all")
   }
 
   const prevMonth = () => {
     setCurrentDate(new Date(currentDate.getFullYear(), currentDate.getMonth() - 1, 1))
     resetSelections()
-    setEventImpactFilter("all")
   }
 
   const nextMonth = () => {
     setCurrentDate(new Date(currentDate.getFullYear(), currentDate.getMonth() + 1, 1))
     resetSelections()
-    setEventImpactFilter("all")
   }
 
   const handlePnlDayClick = (day: number) => {
@@ -200,7 +178,6 @@ export function TradingCalendar({ account, dailyData, trades }: TradingCalendarP
     const dateKey = formatDateKey(currentDate.getFullYear(), currentDate.getMonth(), day)
     const list = eventsByDate.get(dateKey)
     if (list && list.length > 0) {
-      setEventImpactFilter("all")
       setEventsModalDate(dateKey)
     }
   }
@@ -264,24 +241,10 @@ export function TradingCalendar({ account, dailyData, trades }: TradingCalendarP
       </div>
 
       {calendarMode === "events" && (
-        <div className="mb-3 flex flex-wrap gap-2">
-          {EVENT_VIEW_FILTERS.map(({ id, label }) => (
-            <Button
-              key={id}
-              type="button"
-              variant="outline"
-              size="sm"
-              className={cn(
-                "h-8 rounded-xl border-white/10 bg-slate-900/55 px-3 text-xs font-medium transition-all",
-                eventsViewFilter === id
-                  ? "border-cyan-500/45 bg-gradient-to-r from-cyan-500/15 to-emerald-500/10 text-slate-100 shadow-[inset_0_0_0_1px_rgba(103,232,249,0.25)]"
-                  : "text-muted-foreground hover:border-white/15 hover:bg-slate-900/80 hover:text-slate-200",
-              )}
-              onClick={() => setEventsViewFilter(id)}
-            >
-              {label}
-            </Button>
-          ))}
+        <div className="mb-3">
+          <span className="rounded-full border border-red-400/20 bg-red-500/10 px-3 py-1 text-[11px] font-medium uppercase tracking-wide text-red-100/80">
+            Showing USD red-folder events only
+          </span>
         </div>
       )}
 
@@ -319,7 +282,7 @@ export function TradingCalendar({ account, dailyData, trades }: TradingCalendarP
           const dotEvents = sortedForDots.slice(0, 3)
           const moreCount = dayEvents.length - dotEvents.length
           const maxImp = maxImpactForDay(dayEvents)
-          const hasUsdHighMacro = dayEvents.some((e) => e.isUsdHigh)
+          const hasRedFolder = dayEvents.some((e) => e.isRedFolder)
 
           if (calendarMode === "pnl") {
             return (
@@ -432,8 +395,8 @@ export function TradingCalendar({ account, dailyData, trades }: TradingCalendarP
                   maxImp === "Low" &&
                   "border-blue-500/40 shadow-[0_0_14px_-6px_rgba(59,130,246,0.45)] ring-1 ring-blue-500/25",
                 hasEconEvents &&
-                  hasUsdHighMacro &&
-                  "shadow-[0_0_20px_-8px_rgba(251,191,36,0.55)] ring-2 ring-amber-400/45",
+                  hasRedFolder &&
+                  "shadow-[0_0_20px_-8px_rgba(239,68,68,0.6)] ring-2 ring-red-400/45",
               )}
             >
               <span className="text-[15px] font-semibold leading-none text-slate-100 sm:text-base lg:text-[15px] xl:text-[16px]">
@@ -628,7 +591,6 @@ export function TradingCalendar({ account, dailyData, trades }: TradingCalendarP
         onOpenChange={(open) => {
           if (!open) {
             setEventsModalDate(null)
-            setEventImpactFilter("all")
           }
         }}
       >
@@ -639,27 +601,9 @@ export function TradingCalendar({ account, dailyData, trades }: TradingCalendarP
           </DialogHeader>
 
           <div className="space-y-3">
-            <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-              <span className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Impact filter</span>
-              <Select
-                value={eventImpactFilter}
-                onValueChange={(v) => setEventImpactFilter(v as EventImpactFilter)}
-              >
-                <SelectTrigger className="h-9 w-full rounded-xl border-white/15 bg-slate-900/70 sm:w-[220px]">
-                  <SelectValue placeholder="All levels" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">All Levels</SelectItem>
-                  <SelectItem value="High">High Impact</SelectItem>
-                  <SelectItem value="Medium">Medium Impact</SelectItem>
-                  <SelectItem value="Low">Low Impact</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-
             {modalDayEvents.length === 0 ? (
               <p className="rounded-2xl border border-white/10 bg-slate-900/40 px-4 py-6 text-center text-sm text-muted-foreground">
-                No events match this filter.
+                No USD red-folder events for this day.
               </p>
             ) : (
               <ul className="space-y-2">
@@ -737,7 +681,6 @@ export function TradingCalendar({ account, dailyData, trades }: TradingCalendarP
               className="rounded-xl border border-white/10 bg-slate-900/70"
               onClick={() => {
                 setEventsModalDate(null)
-                setEventImpactFilter("all")
               }}
             >
               Close

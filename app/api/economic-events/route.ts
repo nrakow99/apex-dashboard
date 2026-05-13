@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server"
-import { createFinnhubEconomicEventsProvider } from "@/lib/economic-events/finnhub"
 import { resolveFetchRevalidateSeconds, resolveHttpCacheControl } from "@/lib/economic-events/cache-policy"
+import { getSelectedEconomicEventsProvider } from "@/lib/economic-events/provider"
 
 function defaultFromTo(): { from: string; to: string } {
   const now = new Date()
@@ -20,40 +20,63 @@ export async function GET(req: Request) {
   const to = qpTo && /^\d{4}-\d{2}-\d{2}$/.test(qpTo) ? qpTo : defaults.to
 
   const revalidateSec = resolveFetchRevalidateSeconds(from, to)
+  const providerSelection = getSelectedEconomicEventsProvider(revalidateSec)
+  const headers = {
+    "Cache-Control": resolveHttpCacheControl(from, to),
+  }
 
   try {
-    const provider = createFinnhubEconomicEventsProvider(undefined, revalidateSec)
-    const events = await provider.fetchEvents(from, to, revalidateSec)
+    const events = await providerSelection.provider.fetchEvents(from, to, revalidateSec)
     return NextResponse.json(
       {
         events,
         meta: {
           from,
           to,
-          provider: "finnhub",
+          provider: providerSelection.name,
           stale: false,
           cacheSeconds: revalidateSec,
         },
       },
-      {
-        headers: {
-          "Cache-Control": resolveHttpCacheControl(from, to),
-        },
-      },
+      { headers },
     )
   } catch {
+    if (providerSelection.fallbackProvider && providerSelection.fallbackName) {
+      try {
+        const events = await providerSelection.fallbackProvider.fetchEvents(from, to, revalidateSec)
+        return NextResponse.json(
+          {
+            events,
+            meta: {
+              from,
+              to,
+              provider: providerSelection.fallbackName,
+              requestedProvider: providerSelection.name,
+              fallback: true,
+              stale: false,
+              cacheSeconds: revalidateSec,
+            },
+          },
+          { headers },
+        )
+      } catch {
+        // Fall through to the stable empty response below.
+      }
+    }
+
     return NextResponse.json(
       {
         events: [],
         meta: {
           from,
           to,
-          provider: "finnhub",
+          provider: providerSelection.name,
           error: "fetch_failed",
           stale: false,
+          cacheSeconds: revalidateSec,
         },
       },
-      { status: 200 },
+      { status: 200, headers },
     )
   }
 }

@@ -1,6 +1,6 @@
 export type EconomicImpactLevel = "high" | "medium" | "low"
 
-export type EconomicEventSource = "finnhub" | "trading-economics" | "fmp"
+export type EconomicEventSource = "finnhub" | "forex_factory" | "trading-economics" | "fmp"
 
 export type EconomicSeverityScore = number
 
