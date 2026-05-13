@@ -17,6 +17,8 @@ function countUsdRedFolder(events: EconomicEvent[]): number {
 }
 
 function hasForexFactoryApiHost(): boolean {
+  if (process.env.FOREX_FACTORY_API_HOST?.trim()) return true
+
   const rawUrl = process.env.FOREX_FACTORY_API_URL?.trim()
   if (!rawUrl) return false
 
@@ -72,6 +74,11 @@ export async function GET(req: Request) {
       rawForexFactoryCount: forexDiagnostics?.rawCount ?? null,
       normalizedForexFactoryCount: forexDiagnostics?.normalizedCount ?? null,
       forexFactoryStatusCode: forexDiagnostics?.statusCode ?? null,
+      forexFactoryRequestHost: forexDiagnostics?.requestHost ?? null,
+      forexFactoryRequestPath: forexDiagnostics?.requestPath ?? null,
+      forexFactoryRequestCountries: forexDiagnostics?.requestCountries ?? null,
+      forexFactoryAuthHeaderPresent: forexDiagnostics?.authHeaderPresent ?? null,
+      rapidApiKeyLength: forexDiagnostics?.rapidApiKeyLength ?? null,
     }
   }
 

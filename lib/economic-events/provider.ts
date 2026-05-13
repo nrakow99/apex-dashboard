@@ -14,6 +14,11 @@ export type EconomicEventsProviderDiagnostics = {
   rawCount?: number | null
   normalizedCount?: number | null
   statusCode?: number | null
+  requestHost?: string | null
+  requestPath?: string | null
+  requestCountries?: string | null
+  authHeaderPresent?: boolean | null
+  rapidApiKeyLength?: number | null
 }
 
 export type SelectedEconomicEventsProvider = {

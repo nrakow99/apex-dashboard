@@ -7,6 +7,10 @@ import { formatMetricDisplay, inferImpactLevel } from "./utils"
 import { isUsdEvent } from "./analytics"
 
 const NY = "America/New_York"
+const RAPIDAPI_DEFAULT_URL =
+  "https://ultimate-economic-calendar.p.rapidapi.com/economic-events/tradingview"
+const RAPIDAPI_DEFAULT_HOST = "ultimate-economic-calendar.p.rapidapi.com"
+const RAPIDAPI_COUNTRIES = "US"
 
 type ForexFactoryLikeRow = Record<string, unknown>
 type ParsedEventInstant = {
@@ -247,11 +251,13 @@ function normalizeRow(row: ForexFactoryLikeRow, index: number, from: string): Ec
   })
 }
 
-function buildUrl(baseUrl: string, from: string, to: string): string {
+function buildUrl(baseUrl: string, from: string, to: string): URL {
   const url = new URL(baseUrl)
-  if (!url.searchParams.has("from") && !url.searchParams.has("start")) url.searchParams.set("from", from)
-  if (!url.searchParams.has("to") && !url.searchParams.has("end")) url.searchParams.set("to", to)
-  return url.toString()
+  url.search = ""
+  url.searchParams.set("from", from)
+  url.searchParams.set("to", to)
+  url.searchParams.set("countries", RAPIDAPI_COUNTRIES)
+  return url
 }
 
 export function createForexFactoryEconomicEventsProvider(
@@ -260,11 +266,17 @@ export function createForexFactoryEconomicEventsProvider(
   defaultRevalidateSeconds = 600,
 ): EconomicEventsProvider {
   const key = apiKey ?? process.env.FOREX_FACTORY_API_KEY
-  const baseUrl = apiUrl ?? process.env.FOREX_FACTORY_API_URL
+  const baseUrl = apiUrl ?? process.env.FOREX_FACTORY_API_URL ?? RAPIDAPI_DEFAULT_URL
+  const configuredHost = process.env.FOREX_FACTORY_API_HOST
   let diagnostics: EconomicEventsProviderDiagnostics = {
     rawCount: null,
     normalizedCount: null,
     statusCode: null,
+    requestHost: null,
+    requestPath: null,
+    requestCountries: null,
+    authHeaderPresent: null,
+    rapidApiKeyLength: null,
   }
 
   return {
@@ -276,19 +288,33 @@ export function createForexFactoryEconomicEventsProvider(
         rawCount: null,
         normalizedCount: null,
         statusCode: null,
+        requestHost: null,
+        requestPath: null,
+        requestCountries: null,
+        authHeaderPresent: null,
+        rapidApiKeyLength: key?.trim().length ?? 0,
       }
 
       if (!baseUrl?.trim()) {
         throw new Error("FOREX_FACTORY_API_URL is not configured")
       }
 
-      const headers: Record<string, string> = { Accept: "application/json" }
-      if (key?.trim()) {
-        headers["X-API-Key"] = key.trim()
-        headers.Authorization = `Bearer ${key.trim()}`
+      const requestUrl = buildUrl(baseUrl.trim(), from, to)
+      const requestHost = configuredHost?.trim() || requestUrl.host
+      const trimmedKey = key?.trim()
+      diagnostics.requestHost = requestHost
+      diagnostics.requestPath = requestUrl.pathname
+      diagnostics.requestCountries = requestUrl.searchParams.get("countries")
+      diagnostics.authHeaderPresent = Boolean(trimmedKey)
+      diagnostics.rapidApiKeyLength = trimmedKey?.length ?? 0
+
+      const headers: Record<string, string> = {
+        "Content-Type": "application/json",
+        "x-rapidapi-host": requestHost,
+        "x-rapidapi-key": trimmedKey ?? "",
       }
 
-      const res = await fetch(buildUrl(baseUrl.trim(), from, to), {
+      const res = await fetch(requestUrl.toString(), {
         headers,
         next: { revalidate: revalidateSeconds ?? defaultRevalidateSeconds },
       })
