@@ -17,8 +17,13 @@ export type EconomicEventsProviderDiagnostics = {
   requestHost?: string | null
   requestPath?: string | null
   requestCountries?: string | null
+  requestQuery?: string | null
   authHeaderPresent?: boolean | null
   rapidApiKeyLength?: number | null
+  rawType?: string | null
+  topLevelKeys?: string[] | null
+  rawLength?: number | null
+  sampleItem?: unknown
 }
 
 export type SelectedEconomicEventsProvider = {

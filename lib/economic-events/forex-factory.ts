@@ -32,6 +32,72 @@ function isRecord(value: unknown): value is ForexFactoryLikeRow {
   return Boolean(asRecord(value))
 }
 
+function rawTypeOf(value: unknown): string {
+  if (value === null) return "null"
+  if (Array.isArray(value)) return "array"
+  return typeof value
+}
+
+function topLevelKeysOf(value: unknown): string[] | null {
+  const record = asRecord(value)
+  return record ? Object.keys(record).slice(0, 50) : null
+}
+
+function firstArrayItemFrom(value: unknown): unknown {
+  if (Array.isArray(value)) return value[0] ?? null
+
+  const record = asRecord(value)
+  if (!record) return null
+
+  for (const item of Object.values(record)) {
+    if (Array.isArray(item)) return item[0] ?? null
+  }
+
+  for (const item of Object.values(record)) {
+    const nested = asRecord(item)
+    if (!nested) continue
+    for (const nestedItem of Object.values(nested)) {
+      if (Array.isArray(nestedItem)) return nestedItem[0] ?? null
+    }
+  }
+
+  return null
+}
+
+function rawLengthOf(value: unknown): number | null {
+  if (Array.isArray(value)) return value.length
+
+  const record = asRecord(value)
+  if (!record) return null
+
+  for (const item of Object.values(record)) {
+    if (Array.isArray(item)) return item.length
+  }
+
+  for (const item of Object.values(record)) {
+    const nested = asRecord(item)
+    if (!nested) continue
+    for (const nestedItem of Object.values(nested)) {
+      if (Array.isArray(nestedItem)) return nestedItem.length
+    }
+  }
+
+  return null
+}
+
+function compactDebugValue(value: unknown): unknown {
+  if (value === null || value === undefined) return null
+
+  const json = JSON.stringify(value)
+  if (!json) return null
+  if (json.length <= 4000) return value
+
+  return {
+    truncated: true,
+    preview: json.slice(0, 4000),
+  }
+}
+
 function readString(row: ForexFactoryLikeRow, keys: string[]): string | null {
   for (const key of keys) {
     const value = row[key]
@@ -275,8 +341,13 @@ export function createForexFactoryEconomicEventsProvider(
     requestHost: null,
     requestPath: null,
     requestCountries: null,
+    requestQuery: null,
     authHeaderPresent: null,
     rapidApiKeyLength: null,
+    rawType: null,
+    topLevelKeys: null,
+    rawLength: null,
+    sampleItem: null,
   }
 
   return {
@@ -291,8 +362,13 @@ export function createForexFactoryEconomicEventsProvider(
         requestHost: null,
         requestPath: null,
         requestCountries: null,
+        requestQuery: null,
         authHeaderPresent: null,
         rapidApiKeyLength: key?.trim().length ?? 0,
+        rawType: null,
+        topLevelKeys: null,
+        rawLength: null,
+        sampleItem: null,
       }
 
       if (!baseUrl?.trim()) {
@@ -305,6 +381,7 @@ export function createForexFactoryEconomicEventsProvider(
       diagnostics.requestHost = requestHost
       diagnostics.requestPath = requestUrl.pathname
       diagnostics.requestCountries = requestUrl.searchParams.get("countries")
+      diagnostics.requestQuery = requestUrl.searchParams.toString()
       diagnostics.authHeaderPresent = Boolean(trimmedKey)
       diagnostics.rapidApiKeyLength = trimmedKey?.length ?? 0
 
@@ -323,6 +400,19 @@ export function createForexFactoryEconomicEventsProvider(
       if (!res.ok) throw new Error(`ForexFactory-style provider failed: ${res.status}`)
 
       const json = (await res.json()) as unknown
+      diagnostics.rawType = rawTypeOf(json)
+      diagnostics.topLevelKeys = topLevelKeysOf(json)
+      diagnostics.rawLength = rawLengthOf(json)
+      diagnostics.sampleItem = compactDebugValue(firstArrayItemFrom(json))
+
+      console.info("[economic-events] forex_factory raw", {
+        rawType: diagnostics.rawType,
+        topLevelKeys: diagnostics.topLevelKeys,
+        rawLength: diagnostics.rawLength,
+        sampleItem: diagnostics.sampleItem,
+        requestQuery: diagnostics.requestQuery,
+      })
+
       const rows = rowsFromResponse(json)
       diagnostics.rawCount = rows.length
       const out: EconomicEvent[] = []

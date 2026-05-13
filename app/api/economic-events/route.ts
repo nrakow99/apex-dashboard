@@ -77,8 +77,13 @@ export async function GET(req: Request) {
       forexFactoryRequestHost: forexDiagnostics?.requestHost ?? null,
       forexFactoryRequestPath: forexDiagnostics?.requestPath ?? null,
       forexFactoryRequestCountries: forexDiagnostics?.requestCountries ?? null,
+      forexFactoryRequestQuery: forexDiagnostics?.requestQuery ?? null,
       forexFactoryAuthHeaderPresent: forexDiagnostics?.authHeaderPresent ?? null,
       rapidApiKeyLength: forexDiagnostics?.rapidApiKeyLength ?? null,
+      forexFactoryRawType: forexDiagnostics?.rawType ?? null,
+      forexFactoryTopLevelKeys: forexDiagnostics?.topLevelKeys ?? null,
+      forexFactoryRawLength: forexDiagnostics?.rawLength ?? null,
+      forexFactorySampleItem: forexDiagnostics?.sampleItem ?? null,
     }
   }
 
