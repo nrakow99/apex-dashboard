@@ -52,6 +52,7 @@ export async function GET(req: Request) {
   }
 
   const debugBase = {
+    debugBuildId: "normalization-loop-fix-v2",
     providerRequested: providerSelection.name,
     hasForexFactoryApiUrl: Boolean(process.env.FOREX_FACTORY_API_URL?.trim()),
     hasForexFactoryApiKey: Boolean(process.env.FOREX_FACTORY_API_KEY?.trim()),
