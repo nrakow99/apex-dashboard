@@ -436,7 +436,7 @@ export function createForexFactoryEconomicEventsProvider(
   defaultRevalidateSeconds = 600,
 ): EconomicEventsProvider {
   const key = apiKey ?? process.env.FOREX_FACTORY_API_KEY
-  const baseUrl = apiUrl ?? process.env.FOREX_FACTORY_API_URL ?? RAPIDAPI_DEFAULT_URL
+  const configuredUrl = apiUrl ?? process.env.FOREX_FACTORY_API_URL
   const configuredHost = process.env.FOREX_FACTORY_API_HOST
   let diagnostics: EconomicEventsProviderDiagnostics = {
     rawCount: null,
@@ -472,6 +472,11 @@ export function createForexFactoryEconomicEventsProvider(
     cacheHit: null,
     cacheAgeSeconds: null,
     providerRateLimited: null,
+    fetchErrorName: null,
+    fetchErrorMessage: null,
+    fetchErrorStackFirstLine: null,
+    resolvedRequestUrl: null,
+    errorBody: null,
   }
 
   return {
@@ -513,15 +518,18 @@ export function createForexFactoryEconomicEventsProvider(
         cacheHit: false,
         cacheAgeSeconds: null,
         providerRateLimited: false,
+        fetchErrorName: null,
+        fetchErrorMessage: null,
+        fetchErrorStackFirstLine: null,
+        resolvedRequestUrl: null,
+        errorBody: null,
       }
 
-      if (!baseUrl?.trim()) {
-        throw new Error("FOREX_FACTORY_API_URL is not configured")
-      }
-
-      const requestUrl = buildUrl(baseUrl.trim(), from, to)
+      void configuredUrl
+      const requestUrl = buildUrl(RAPIDAPI_DEFAULT_URL, from, to)
       const requestHost = configuredHost?.trim() || requestUrl.host
       const trimmedKey = key?.trim()
+      diagnostics.resolvedRequestUrl = requestUrl.toString()
       diagnostics.requestHost = requestHost
       diagnostics.requestPath = requestUrl.pathname
       diagnostics.requestCountries = requestUrl.searchParams.get("countries")
@@ -587,10 +595,19 @@ export function createForexFactoryEconomicEventsProvider(
       const fetchPromise = (async () => {
       lastRapidApiFetchAt.set(key, Date.now())
       const ttlMs = cacheTtlMs(from, to)
-      const res = await fetch(requestUrl.toString(), {
-        headers,
-        next: { revalidate: Math.ceil(ttlMs / 1000) },
-      })
+      let res: Response
+      try {
+        res = await fetch(requestUrl.toString(), {
+          headers,
+          next: { revalidate: Math.ceil(ttlMs / 1000) },
+        })
+      } catch (error) {
+        diagnostics.fetchErrorName = error instanceof Error ? error.name : typeof error
+        diagnostics.fetchErrorMessage = error instanceof Error ? error.message : String(error)
+        diagnostics.fetchErrorStackFirstLine =
+          error instanceof Error ? (error.stack?.split("\n")[0] ?? null) : null
+        throw new Error("fetch_threw")
+      }
       diagnostics.statusCode = res.status
 
       if (res.status === 429) {
@@ -608,7 +625,10 @@ export function createForexFactoryEconomicEventsProvider(
         }
       }
 
-      if (!res.ok) throw new Error(`ForexFactory-style provider failed: ${res.status}`)
+      if (!res.ok) {
+        diagnostics.errorBody = (await res.text()).slice(0, 300)
+        throw new Error(`ForexFactory-style provider failed: ${res.status}`)
+      }
 
       const json = (await res.json()) as unknown
       diagnostics.rawType = rawTypeOf(json)

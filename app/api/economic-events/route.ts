@@ -31,6 +31,7 @@ function hasForexFactoryApiHost(): boolean {
 
 function safeFallbackReason(error: unknown): string {
   if (!(error instanceof Error)) return "provider_fetch_failed"
+  if (error.message === "fetch_threw") return "fetch_threw"
   if (error.message === "FOREX_FACTORY_API_URL is not configured") return error.message
   if (error.message === "Invalid URL") return "FOREX_FACTORY_API_URL is invalid"
   if (/ForexFactory-style provider failed: \d+/.test(error.message)) return error.message
@@ -106,6 +107,11 @@ export async function GET(req: Request) {
       cacheHit: forexDiagnostics?.cacheHit ?? null,
       cacheAgeSeconds: forexDiagnostics?.cacheAgeSeconds ?? null,
       providerRateLimited: forexDiagnostics?.providerRateLimited ?? null,
+      fetchErrorName: forexDiagnostics?.fetchErrorName ?? null,
+      fetchErrorMessage: forexDiagnostics?.fetchErrorMessage ?? null,
+      fetchErrorStackFirstLine: forexDiagnostics?.fetchErrorStackFirstLine ?? null,
+      resolvedRequestUrl: forexDiagnostics?.resolvedRequestUrl ?? null,
+      forexFactoryErrorBody: forexDiagnostics?.errorBody ?? null,
     }
   }
 

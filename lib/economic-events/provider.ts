@@ -44,6 +44,11 @@ export type EconomicEventsProviderDiagnostics = {
   cacheHit?: boolean | null
   cacheAgeSeconds?: number | null
   providerRateLimited?: boolean | null
+  fetchErrorName?: string | null
+  fetchErrorMessage?: string | null
+  fetchErrorStackFirstLine?: string | null
+  resolvedRequestUrl?: string | null
+  errorBody?: string | null
 }
 
 export type SelectedEconomicEventsProvider = {
