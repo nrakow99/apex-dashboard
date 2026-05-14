@@ -41,6 +41,9 @@ export type EconomicEventsProviderDiagnostics = {
   normalizationLoopIterations?: number | null
   normalizationLoopSuccessfulReturns?: number | null
   normalizationLoopNullReturns?: number | null
+  cacheHit?: boolean | null
+  cacheAgeSeconds?: number | null
+  providerRateLimited?: boolean | null
 }
 
 export type SelectedEconomicEventsProvider = {

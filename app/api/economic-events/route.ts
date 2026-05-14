@@ -103,6 +103,9 @@ export async function GET(req: Request) {
       normalizationLoopIterations: forexDiagnostics?.normalizationLoopIterations ?? null,
       normalizationLoopSuccessfulReturns: forexDiagnostics?.normalizationLoopSuccessfulReturns ?? null,
       normalizationLoopNullReturns: forexDiagnostics?.normalizationLoopNullReturns ?? null,
+      cacheHit: forexDiagnostics?.cacheHit ?? null,
+      cacheAgeSeconds: forexDiagnostics?.cacheAgeSeconds ?? null,
+      providerRateLimited: forexDiagnostics?.providerRateLimited ?? null,
     }
   }
 

@@ -11,6 +11,9 @@ const RAPIDAPI_DEFAULT_URL =
   "https://ultimate-economic-calendar.p.rapidapi.com/economic-events/tradingview"
 const RAPIDAPI_DEFAULT_HOST = "ultimate-economic-calendar.p.rapidapi.com"
 const RAPIDAPI_COUNTRIES = "US"
+const FIVE_MINUTES_MS = 5 * 60 * 1000
+const SIX_HOURS_MS = 6 * 60 * 60 * 1000
+const TWENTY_FOUR_HOURS_MS = 24 * 60 * 60 * 1000
 
 type ForexFactoryLikeRow = Record<string, unknown>
 type ParsedEventInstant = {
@@ -30,8 +33,48 @@ type NormalizationResult =
   | { event: EconomicEvent; reason?: never }
   | { event?: never; reason: SkipReason }
 
+type CacheEntry = {
+  events: EconomicEvent[]
+  fetchedAt: number
+  expiresAt: number
+  diagnostics: EconomicEventsProviderDiagnostics
+}
+
+const responseCache = new Map<string, CacheEntry>()
+const inFlightRequests = new Map<string, Promise<EconomicEvent[]>>()
+const lastRapidApiFetchAt = new Map<string, number>()
+
 function stableId(parts: string): string {
   return createHash("sha256").update(parts).digest("hex").slice(0, 16)
+}
+
+function pad2(n: number): string {
+  return String(n).padStart(2, "0")
+}
+
+function localDateString(d: Date): string {
+  return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`
+}
+
+function addDays(d: Date, days: number): Date {
+  const next = new Date(d)
+  next.setDate(next.getDate() + days)
+  return next
+}
+
+function cacheTtlMs(from: string, to: string, now = new Date()): number {
+  const today = localDateString(now)
+  const weekEnd = localDateString(addDays(now, 7))
+  const overlapsTodayOrWeek = from <= weekEnd && to >= today
+  return overlapsTodayOrWeek ? SIX_HOURS_MS : TWENTY_FOUR_HOURS_MS
+}
+
+function cacheKey(from: string, to: string, countries: string | null): string {
+  return `${from}|${to}|${countries ?? ""}`
+}
+
+function cacheAgeSeconds(entry: CacheEntry, now = Date.now()): number {
+  return Math.max(0, Math.floor((now - entry.fetchedAt) / 1000))
 }
 
 function asRecord(value: unknown): Record<string, unknown> | null {
@@ -426,6 +469,9 @@ export function createForexFactoryEconomicEventsProvider(
     normalizationLoopIterations: null,
     normalizationLoopSuccessfulReturns: null,
     normalizationLoopNullReturns: null,
+    cacheHit: null,
+    cacheAgeSeconds: null,
+    providerRateLimited: null,
   }
 
   return {
@@ -464,6 +510,9 @@ export function createForexFactoryEconomicEventsProvider(
         normalizationLoopIterations: 0,
         normalizationLoopSuccessfulReturns: 0,
         normalizationLoopNullReturns: 0,
+        cacheHit: false,
+        cacheAgeSeconds: null,
+        providerRateLimited: false,
       }
 
       if (!baseUrl?.trim()) {
@@ -479,6 +528,55 @@ export function createForexFactoryEconomicEventsProvider(
       diagnostics.requestQuery = requestUrl.searchParams.toString()
       diagnostics.authHeaderPresent = Boolean(trimmedKey)
       diagnostics.rapidApiKeyLength = trimmedKey?.length ?? 0
+      const key = cacheKey(from, to, diagnostics.requestCountries)
+      const now = Date.now()
+      const cached = responseCache.get(key)
+
+      if (cached && cached.expiresAt > now) {
+        diagnostics = {
+          ...diagnostics,
+          ...cached.diagnostics,
+          cacheHit: true,
+          cacheAgeSeconds: cacheAgeSeconds(cached, now),
+          providerRateLimited: false,
+        }
+        return cached.events
+      }
+
+      const inFlight = inFlightRequests.get(key)
+      if (inFlight) {
+        const events = await inFlight
+        const updatedCache = responseCache.get(key)
+        if (updatedCache) {
+          diagnostics = {
+            ...diagnostics,
+            ...updatedCache.diagnostics,
+            cacheHit: true,
+            cacheAgeSeconds: cacheAgeSeconds(updatedCache),
+            providerRateLimited: false,
+          }
+        }
+        return events
+      }
+
+      const lastFetchAt = lastRapidApiFetchAt.get(key)
+      if (lastFetchAt && now - lastFetchAt < FIVE_MINUTES_MS) {
+        if (cached) {
+          diagnostics = {
+            ...diagnostics,
+            ...cached.diagnostics,
+            cacheHit: true,
+            cacheAgeSeconds: cacheAgeSeconds(cached, now),
+            providerRateLimited: false,
+          }
+          return cached.events
+        }
+
+        diagnostics.cacheHit = false
+        diagnostics.cacheAgeSeconds = null
+        diagnostics.providerRateLimited = false
+        return []
+      }
 
       const headers: Record<string, string> = {
         "Content-Type": "application/json",
@@ -486,11 +584,29 @@ export function createForexFactoryEconomicEventsProvider(
         "x-rapidapi-key": trimmedKey ?? "",
       }
 
+      const fetchPromise = (async () => {
+      lastRapidApiFetchAt.set(key, Date.now())
+      const ttlMs = cacheTtlMs(from, to)
       const res = await fetch(requestUrl.toString(), {
         headers,
-        next: { revalidate: revalidateSeconds ?? defaultRevalidateSeconds },
+        next: { revalidate: Math.ceil(ttlMs / 1000) },
       })
       diagnostics.statusCode = res.status
+
+      if (res.status === 429) {
+        diagnostics.providerRateLimited = true
+        if (cached) {
+          diagnostics = {
+            ...diagnostics,
+            ...cached.diagnostics,
+            statusCode: 429,
+            cacheHit: true,
+            cacheAgeSeconds: cacheAgeSeconds(cached),
+            providerRateLimited: true,
+          }
+          return cached.events
+        }
+      }
 
       if (!res.ok) throw new Error(`ForexFactory-style provider failed: ${res.status}`)
 
@@ -565,6 +681,15 @@ export function createForexFactoryEconomicEventsProvider(
         .map((e) => e.title)
       diagnostics.normalizedCount = out.length
       diagnostics.normalizedEventSample ??= compactDebugValue(normalizedBeforeFiltering[0] ?? null)
+      diagnostics.cacheHit = false
+      diagnostics.cacheAgeSeconds = 0
+      diagnostics.providerRateLimited = false
+      responseCache.set(key, {
+        events: out,
+        fetchedAt: Date.now(),
+        expiresAt: Date.now() + ttlMs,
+        diagnostics: { ...diagnostics },
+      })
       console.info("[economic-events] forex_factory", {
         rawEvents: rows.length,
         normalizationLoopIterations: diagnostics.normalizationLoopIterations,
@@ -588,6 +713,14 @@ export function createForexFactoryEconomicEventsProvider(
         usdRedFolderEvents: out.filter((e) => e.currency === "USD" && e.impact === "high" && e.isRedFolder).length,
       })
       return out
+      })()
+
+      inFlightRequests.set(key, fetchPromise)
+      try {
+        return await fetchPromise
+      } finally {
+        inFlightRequests.delete(key)
+      }
     },
   }
 }
