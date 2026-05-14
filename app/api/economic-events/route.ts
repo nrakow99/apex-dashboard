@@ -30,12 +30,12 @@ function hasForexFactoryApiHost(): boolean {
 }
 
 function safeFallbackReason(error: unknown): string {
-  if (!(error instanceof Error)) return "provider_fetch_failed"
+  if (!(error instanceof Error)) return `non_error_thrown:${String(error).slice(0, 120)}`
   if (error.message === "fetch_threw") return "fetch_threw"
   if (error.message === "FOREX_FACTORY_API_URL is not configured") return error.message
   if (error.message === "Invalid URL") return "FOREX_FACTORY_API_URL is invalid"
   if (/ForexFactory-style provider failed: \d+/.test(error.message)) return error.message
-  return "provider_fetch_failed"
+  return error.message ? `provider_error:${error.message.slice(0, 160)}` : "provider_error:unknown"
 }
 
 export async function GET(req: Request) {
@@ -53,7 +53,7 @@ export async function GET(req: Request) {
   }
 
   const debugBase = {
-    debugBuildId: "normalization-loop-fix-v2",
+    debugBuildId: "fetch-debug-v3",
     providerRequested: providerSelection.name,
     hasForexFactoryApiUrl: Boolean(process.env.FOREX_FACTORY_API_URL?.trim()),
     hasForexFactoryApiKey: Boolean(process.env.FOREX_FACTORY_API_KEY?.trim()),
@@ -71,6 +71,8 @@ export async function GET(req: Request) {
 
     return {
       ...debugBase,
+      providerDebugBuildId: forexDiagnostics?.debugBuildId ?? null,
+      providerFilePath: forexDiagnostics?.providerFilePath ?? null,
       providerUsed,
       fallbackReason,
       rawForexFactoryCount: forexDiagnostics?.rawCount ?? null,

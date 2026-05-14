@@ -11,6 +11,8 @@ const RAPIDAPI_DEFAULT_URL =
   "https://ultimate-economic-calendar.p.rapidapi.com/economic-events/tradingview"
 const RAPIDAPI_DEFAULT_HOST = "ultimate-economic-calendar.p.rapidapi.com"
 const RAPIDAPI_COUNTRIES = "US"
+const DEBUG_BUILD_ID = "fetch-debug-v3"
+const PROVIDER_FILE_PATH = "lib/economic-events/forex-factory.ts"
 const FIVE_MINUTES_MS = 5 * 60 * 1000
 const SIX_HOURS_MS = 6 * 60 * 60 * 1000
 const TWENTY_FOUR_HOURS_MS = 24 * 60 * 60 * 1000
@@ -439,6 +441,8 @@ export function createForexFactoryEconomicEventsProvider(
   const configuredUrl = apiUrl ?? process.env.FOREX_FACTORY_API_URL
   const configuredHost = process.env.FOREX_FACTORY_API_HOST
   let diagnostics: EconomicEventsProviderDiagnostics = {
+    debugBuildId: DEBUG_BUILD_ID,
+    providerFilePath: PROVIDER_FILE_PATH,
     rawCount: null,
     normalizedCount: null,
     statusCode: null,
@@ -484,7 +488,16 @@ export function createForexFactoryEconomicEventsProvider(
       return diagnostics
     },
     async fetchEvents(from: string, to: string, revalidateSeconds?: number): Promise<EconomicEvent[]> {
+      console.info("FOREX_FACTORY_PROVIDER_EXECUTED", {
+        debugBuildId: DEBUG_BUILD_ID,
+        providerFilePath: PROVIDER_FILE_PATH,
+        from,
+        to,
+      })
+
       diagnostics = {
+        debugBuildId: DEBUG_BUILD_ID,
+        providerFilePath: PROVIDER_FILE_PATH,
         rawCount: null,
         normalizedCount: null,
         statusCode: null,
@@ -597,6 +610,14 @@ export function createForexFactoryEconomicEventsProvider(
       const ttlMs = cacheTtlMs(from, to)
       let res: Response
       try {
+        console.info("FOREX_FACTORY_FETCH_START", {
+          debugBuildId: DEBUG_BUILD_ID,
+          providerFilePath: PROVIDER_FILE_PATH,
+          resolvedRequestUrl: diagnostics.resolvedRequestUrl,
+          requestHost,
+          requestPath: diagnostics.requestPath,
+          requestCountries: diagnostics.requestCountries,
+        })
         res = await fetch(requestUrl.toString(), {
           headers,
           next: { revalidate: Math.ceil(ttlMs / 1000) },

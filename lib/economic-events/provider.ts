@@ -11,6 +11,8 @@ export interface EconomicEventsProvider {
 export type EconomicCalendarProviderName = "finnhub" | "forex_factory"
 
 export type EconomicEventsProviderDiagnostics = {
+  debugBuildId?: string | null
+  providerFilePath?: string | null
   rawCount?: number | null
   normalizedCount?: number | null
   statusCode?: number | null
