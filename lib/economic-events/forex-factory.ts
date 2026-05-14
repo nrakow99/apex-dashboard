@@ -50,16 +50,16 @@ function stableId(parts: string): string {
   return createHash("sha256").update(parts).digest("hex").slice(0, 16)
 }
 
-function pad2(n: number): string {
-  return String(n).padStart(2, "0")
+function pad2(inputNumber: number): string {
+  return String(inputNumber).padStart(2, "0")
 }
 
-function localDateString(d: Date): string {
-  return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`
+function localDateString(dateValue: Date): string {
+  return `${dateValue.getFullYear()}-${pad2(dateValue.getMonth() + 1)}-${pad2(dateValue.getDate())}`
 }
 
-function addDays(d: Date, days: number): Date {
-  const next = new Date(d)
+function addDays(dateValue: Date, days: number): Date {
+  const next = new Date(dateValue)
   next.setDate(next.getDate() + days)
   return next
 }
@@ -155,8 +155,8 @@ function compactDebugValue(value: unknown): unknown {
 }
 
 function readString(row: ForexFactoryLikeRow, keys: string[]): string | null {
-  for (const key of keys) {
-    const value = row[key]
+  for (const fieldName of keys) {
+    const value = row[fieldName]
     if (typeof value === "string" && value.trim()) return value.trim()
     if (typeof value === "number" && Number.isFinite(value)) return String(value)
   }
@@ -164,16 +164,16 @@ function readString(row: ForexFactoryLikeRow, keys: string[]): string | null {
 }
 
 function readMetric(row: ForexFactoryLikeRow, keys: string[]): string | null {
-  for (const key of keys) {
-    const value = formatMetricDisplay(row[key] as string | number | null | undefined)
+  for (const fieldName of keys) {
+    const value = formatMetricDisplay(row[fieldName] as string | number | null | undefined)
     if (value) return value
   }
   return null
 }
 
 function readRequiredString(row: ForexFactoryLikeRow, keys: string[]): string | null {
-  for (const key of keys) {
-    const value = row[key]
+  for (const fieldName of keys) {
+    const value = row[fieldName]
     if (typeof value === "string" && value.trim()) return value.trim()
   }
   return null
@@ -182,9 +182,9 @@ function readRequiredString(row: ForexFactoryLikeRow, keys: string[]): string | 
 function readTimestamp(row: ForexFactoryLikeRow): Date | null {
   const raw = row.timestamp ?? row.unix ?? row.epoch
   if (typeof raw !== "number" || !Number.isFinite(raw)) return null
-  const ms = raw > 1_000_000_000_000 ? raw : raw * 1000
-  const d = new Date(ms)
-  return Number.isNaN(d.getTime()) ? null : d
+  const timestampMs = raw > 1_000_000_000_000 ? raw : raw * 1000
+  const timestampDate = new Date(timestampMs)
+  return Number.isNaN(timestampDate.getTime()) ? null : timestampDate
 }
 
 function readTimezone(row: ForexFactoryLikeRow): string {
@@ -220,17 +220,17 @@ function readImpact(row: ForexFactoryLikeRow, title: string, country: string, cu
 
 function normalizeDateString(raw: string | null, from: string): string | null {
   if (!raw) return null
-  const s = raw.trim().replace(/,/g, "")
-  if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return s
+  const trimmedDate = raw.trim().replace(/,/g, "")
+  if (/^\d{4}-\d{2}-\d{2}$/.test(trimmedDate)) return trimmedDate
 
-  const slash = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{2,4})$/)
+  const slash = trimmedDate.match(/^(\d{1,2})\/(\d{1,2})\/(\d{2,4})$/)
   if (slash) {
     const [, mm, dd, yyyy] = slash
     const year = yyyy.length === 2 ? `20${yyyy}` : yyyy
     return `${year}-${mm.padStart(2, "0")}-${dd.padStart(2, "0")}`
   }
 
-  const dash = s.match(/^(\d{1,2})-(\d{1,2})-(\d{2,4})$/)
+  const dash = trimmedDate.match(/^(\d{1,2})-(\d{1,2})-(\d{2,4})$/)
   if (dash) {
     const [, mm, dd, yyyy] = dash
     const year = yyyy.length === 2 ? `20${yyyy}` : yyyy
@@ -238,7 +238,7 @@ function normalizeDateString(raw: string | null, from: string): string | null {
   }
 
   const year = from.slice(0, 4)
-  const withYear = /\b\d{4}\b/.test(s) ? s : `${s} ${year}`
+  const withYear = /\b\d{4}\b/.test(trimmedDate) ? trimmedDate : `${trimmedDate} ${year}`
   const parsed = new Date(`${withYear} 12:00:00 UTC`)
   if (Number.isNaN(parsed.getTime())) return null
 
@@ -247,10 +247,10 @@ function normalizeDateString(raw: string | null, from: string): string | null {
 
 function normalizeTimeString(raw: string | null): string | null {
   if (!raw) return null
-  const s = raw.trim().toLowerCase()
-  if (!s || /tentative|all\s*day|day\s*\d+|holiday/.test(s)) return null
+  const timeText = raw.trim().toLowerCase()
+  if (!timeText || /tentative|all\s*day|day\s*\d+|holiday/.test(timeText)) return null
 
-  const match = s.match(/^(\d{1,2})(?::(\d{2}))?\s*([ap]\.?m\.?)?$/i)
+  const match = timeText.match(/^(\d{1,2})(?::(\d{2}))?\s*([ap]\.?m\.?)?$/i)
   if (!match) return null
 
   let hour = Number(match[1])
@@ -266,13 +266,13 @@ function normalizeTimeString(raw: string | null): string | null {
 }
 
 function parseIsoInstant(raw: string): ParsedEventInstant | null {
-  const d = new Date(raw)
-  if (Number.isNaN(d.getTime())) return null
+  const parsedDate = new Date(raw)
+  if (Number.isNaN(parsedDate.getTime())) return null
 
   return {
-    instant: d,
+    instant: parsedDate,
     hasSpecificTime: true,
-    marketDatetime: formatInTimeZone(d, NY, "yyyy-MM-dd HH:mm:ss"),
+    marketDatetime: formatInTimeZone(parsedDate, NY, "yyyy-MM-dd HH:mm:ss"),
   }
 }
 
@@ -297,30 +297,30 @@ function parseEventInstant(row: ForexFactoryLikeRow, from: string): ParsedEventI
   const datetime = readString(row, ["datetime", "dateTime", "date_time", "iso", "utc", "date"])
   if (datetime) {
     if (/^\d{4}-\d{2}-\d{2}$/.test(datetime)) {
-      const d = toDate(`${datetime} 12:00:00`, { timeZone: NY })
-      return Number.isNaN(d.getTime())
+      const dateOnlyInstant = toDate(`${datetime} 12:00:00`, { timeZone: NY })
+      return Number.isNaN(dateOnlyInstant.getTime())
         ? null
-        : { instant: d, hasSpecificTime: false, marketDatetime: `${datetime} 12:00:00` }
+        : { instant: dateOnlyInstant, hasSpecificTime: false, marketDatetime: `${datetime} 12:00:00` }
     }
 
     if (/[zZ]$|[+-]\d{2}:?\d{2}$/.test(datetime)) {
-      const d = new Date(datetime)
-      return Number.isNaN(d.getTime())
+      const offsetInstant = new Date(datetime)
+      return Number.isNaN(offsetInstant.getTime())
         ? null
         : {
-            instant: d,
+            instant: offsetInstant,
             hasSpecificTime: true,
-            marketDatetime: formatInTimeZone(d, NY, "yyyy-MM-dd HH:mm:ss"),
+            marketDatetime: formatInTimeZone(offsetInstant, NY, "yyyy-MM-dd HH:mm:ss"),
           }
     }
 
     const marketDatetime = datetime.replace("T", " ")
-    const d = toDate(marketDatetime, { timeZone: timezone })
-    if (!Number.isNaN(d.getTime())) {
+    const zonedInstant = toDate(marketDatetime, { timeZone: timezone })
+    if (!Number.isNaN(zonedInstant.getTime())) {
       return {
-        instant: d,
+        instant: zonedInstant,
         hasSpecificTime: true,
-        marketDatetime: formatInTimeZone(d, NY, "yyyy-MM-dd HH:mm:ss"),
+        marketDatetime: formatInTimeZone(zonedInstant, NY, "yyyy-MM-dd HH:mm:ss"),
       }
     }
   }
@@ -331,17 +331,17 @@ function parseEventInstant(row: ForexFactoryLikeRow, from: string): ParsedEventI
   const time = normalizeTimeString(readString(row, ["time", "eventTime", "releaseTime", "release_time"]))
   const hasSpecificTime = Boolean(time)
   const marketDatetime = `${date} ${time ?? "12:00:00"}`
-  const d = toDate(marketDatetime, { timeZone: timezone })
+  const fallbackInstant = toDate(marketDatetime, { timeZone: timezone })
 
-  return Number.isNaN(d.getTime()) ? null : { instant: d, hasSpecificTime, marketDatetime }
+  return Number.isNaN(fallbackInstant.getTime()) ? null : { instant: fallbackInstant, hasSpecificTime, marketDatetime }
 }
 
-function nyDateString(d: Date): string {
-  return formatInTimeZone(d, NY, "yyyy-MM-dd")
+function nyDateString(dateValue: Date): string {
+  return formatInTimeZone(dateValue, NY, "yyyy-MM-dd")
 }
 
-function nyTimeLabel(d: Date): string {
-  return formatInTimeZone(d, NY, "HH:mm")
+function nyTimeLabel(dateValue: Date): string {
+  return formatInTimeZone(dateValue, NY, "HH:mm")
 }
 
 function rowsFromResponse(json: unknown): ForexFactoryLikeRow[] {
@@ -366,8 +366,8 @@ function rowsFromResponse(json: unknown): ForexFactoryLikeRow[] {
     if (Array.isArray(candidate)) return candidate.filter(isRecord)
     const nested = asRecord(candidate)
     if (nested) {
-      for (const key of ["events", "items", "calendar", "economicCalendar", "economic_calendar"]) {
-        const value = nested[key]
+      for (const fieldName of ["events", "items", "calendar", "economicCalendar", "economic_calendar"]) {
+        const value = nested[fieldName]
         if (Array.isArray(value)) return value.filter(isRecord)
       }
     }
@@ -432,17 +432,20 @@ function buildUrl(baseUrl: string, from: string, to: string): URL {
   return url
 }
 
+const PROVIDER_RUNTIME_RECOVERED = true
+
 export function createForexFactoryEconomicEventsProvider(
   apiKey?: string,
   apiUrl?: string,
   defaultRevalidateSeconds = 600,
 ): EconomicEventsProvider {
-  const key = apiKey ?? process.env.FOREX_FACTORY_API_KEY
+  const rapidApiKey = apiKey ?? process.env.FOREX_FACTORY_API_KEY
   const configuredUrl = apiUrl ?? process.env.FOREX_FACTORY_API_URL
   const configuredHost = process.env.FOREX_FACTORY_API_HOST
   let diagnostics: EconomicEventsProviderDiagnostics = {
     debugBuildId: DEBUG_BUILD_ID,
     providerFilePath: PROVIDER_FILE_PATH,
+    providerRuntimeRecovered: PROVIDER_RUNTIME_RECOVERED,
     rawCount: null,
     normalizedCount: null,
     statusCode: null,
@@ -491,6 +494,7 @@ export function createForexFactoryEconomicEventsProvider(
       console.info("FOREX_FACTORY_PROVIDER_EXECUTED", {
         debugBuildId: DEBUG_BUILD_ID,
         providerFilePath: PROVIDER_FILE_PATH,
+        providerRuntimeRecovered: PROVIDER_RUNTIME_RECOVERED,
         from,
         to,
       })
@@ -506,7 +510,7 @@ export function createForexFactoryEconomicEventsProvider(
         requestCountries: null,
         requestQuery: null,
         authHeaderPresent: null,
-        rapidApiKeyLength: key?.trim().length ?? 0,
+        rapidApiKeyLength: rapidApiKey?.trim().length ?? 0,
         rawType: null,
         topLevelKeys: null,
         rawLength: null,
@@ -541,17 +545,17 @@ export function createForexFactoryEconomicEventsProvider(
       void configuredUrl
       const requestUrl = buildUrl(RAPIDAPI_DEFAULT_URL, from, to)
       const requestHost = configuredHost?.trim() || requestUrl.host
-      const trimmedKey = key?.trim()
+      const trimmedRapidApiKey = rapidApiKey?.trim()
       diagnostics.resolvedRequestUrl = requestUrl.toString()
       diagnostics.requestHost = requestHost
       diagnostics.requestPath = requestUrl.pathname
       diagnostics.requestCountries = requestUrl.searchParams.get("countries")
       diagnostics.requestQuery = requestUrl.searchParams.toString()
-      diagnostics.authHeaderPresent = Boolean(trimmedKey)
-      diagnostics.rapidApiKeyLength = trimmedKey?.length ?? 0
-      const key = cacheKey(from, to, diagnostics.requestCountries)
+      diagnostics.authHeaderPresent = Boolean(trimmedRapidApiKey)
+      diagnostics.rapidApiKeyLength = trimmedRapidApiKey?.length ?? 0
+      const requestCacheKey = cacheKey(from, to, diagnostics.requestCountries)
       const now = Date.now()
-      const cached = responseCache.get(key)
+      const cached = responseCache.get(requestCacheKey)
 
       if (cached && cached.expiresAt > now) {
         diagnostics = {
@@ -564,10 +568,10 @@ export function createForexFactoryEconomicEventsProvider(
         return cached.events
       }
 
-      const inFlight = inFlightRequests.get(key)
+      const inFlight = inFlightRequests.get(requestCacheKey)
       if (inFlight) {
         const events = await inFlight
-        const updatedCache = responseCache.get(key)
+        const updatedCache = responseCache.get(requestCacheKey)
         if (updatedCache) {
           diagnostics = {
             ...diagnostics,
@@ -580,7 +584,7 @@ export function createForexFactoryEconomicEventsProvider(
         return events
       }
 
-      const lastFetchAt = lastRapidApiFetchAt.get(key)
+      const lastFetchAt = lastRapidApiFetchAt.get(requestCacheKey)
       if (lastFetchAt && now - lastFetchAt < FIVE_MINUTES_MS) {
         if (cached) {
           diagnostics = {
@@ -602,11 +606,11 @@ export function createForexFactoryEconomicEventsProvider(
       const headers: Record<string, string> = {
         "Content-Type": "application/json",
         "x-rapidapi-host": requestHost,
-        "x-rapidapi-key": trimmedKey ?? "",
+        "x-rapidapi-key": trimmedRapidApiKey ?? "",
       }
 
       const fetchPromise = (async () => {
-      lastRapidApiFetchAt.set(key, Date.now())
+      lastRapidApiFetchAt.set(requestCacheKey, Date.now())
       const ttlMs = cacheTtlMs(from, to)
       let res: Response
       try {
@@ -670,10 +674,10 @@ export function createForexFactoryEconomicEventsProvider(
       const normalizedBeforeFiltering: EconomicEvent[] = []
       const out: EconomicEvent[] = []
       const skippedEventSamples: unknown[] = []
-      let i = 0
+      let rowIndex = 0
       for (const row of rows) {
         diagnostics.normalizationLoopIterations = (diagnostics.normalizationLoopIterations ?? 0) + 1
-        const result = normalizeRow(row, i, from)
+        const result = normalizeRow(row, rowIndex, from)
         if ("event" in result && result.event) {
           diagnostics.normalizationLoopSuccessfulReturns =
             (diagnostics.normalizationLoopSuccessfulReturns ?? 0) + 1
@@ -704,28 +708,28 @@ export function createForexFactoryEconomicEventsProvider(
             )
           }
         }
-        i += 1
+        rowIndex += 1
       }
       diagnostics.skippedEventSamples = skippedEventSamples
       diagnostics.normalizedCountBeforeFiltering = normalizedBeforeFiltering.length
-      diagnostics.normalizedUsdCount = normalizedBeforeFiltering.filter((e) => e.currency === "USD").length
-      diagnostics.normalizedHighImpactCount = normalizedBeforeFiltering.filter((e) => e.impact === "high").length
-      diagnostics.normalizedRedFolderCount = normalizedBeforeFiltering.filter((e) => e.isRedFolder).length
-      diagnostics.normalizedEventTitlesSample = normalizedBeforeFiltering.slice(0, 20).map((e) => e.title)
+      diagnostics.normalizedUsdCount = normalizedBeforeFiltering.filter((event) => event.currency === "USD").length
+      diagnostics.normalizedHighImpactCount = normalizedBeforeFiltering.filter((event) => event.impact === "high").length
+      diagnostics.normalizedRedFolderCount = normalizedBeforeFiltering.filter((event) => event.isRedFolder).length
+      diagnostics.normalizedEventTitlesSample = normalizedBeforeFiltering.slice(0, 20).map((event) => event.title)
       diagnostics.highImpactTitlesSample = normalizedBeforeFiltering
-        .filter((e) => e.impact === "high")
+        .filter((event) => event.impact === "high")
         .slice(0, 20)
-        .map((e) => e.title)
+        .map((event) => event.title)
       diagnostics.redFolderTitlesSample = normalizedBeforeFiltering
-        .filter((e) => e.isRedFolder)
+        .filter((event) => event.isRedFolder)
         .slice(0, 20)
-        .map((e) => e.title)
+        .map((event) => event.title)
       diagnostics.normalizedCount = out.length
       diagnostics.normalizedEventSample ??= compactDebugValue(normalizedBeforeFiltering[0] ?? null)
       diagnostics.cacheHit = false
       diagnostics.cacheAgeSeconds = 0
       diagnostics.providerRateLimited = false
-      responseCache.set(key, {
+      responseCache.set(requestCacheKey, {
         events: out,
         fetchedAt: Date.now(),
         expiresAt: Date.now() + ttlMs,
@@ -751,16 +755,16 @@ export function createForexFactoryEconomicEventsProvider(
         skippedUnknownReason: diagnostics.skippedUnknownReason,
         skippedEventSamples: diagnostics.skippedEventSamples,
         normalizedEventSample: diagnostics.normalizedEventSample,
-        usdRedFolderEvents: out.filter((e) => e.currency === "USD" && e.impact === "high" && e.isRedFolder).length,
+        usdRedFolderEvents: out.filter((event) => event.currency === "USD" && event.impact === "high" && event.isRedFolder).length,
       })
       return out
       })()
 
-      inFlightRequests.set(key, fetchPromise)
+      inFlightRequests.set(requestCacheKey, fetchPromise)
       try {
         return await fetchPromise
       } finally {
-        inFlightRequests.delete(key)
+        inFlightRequests.delete(requestCacheKey)
       }
     },
   }

@@ -73,6 +73,7 @@ export async function GET(req: Request) {
       ...debugBase,
       providerDebugBuildId: forexDiagnostics?.debugBuildId ?? null,
       providerFilePath: forexDiagnostics?.providerFilePath ?? null,
+      providerRuntimeRecovered: forexDiagnostics?.providerRuntimeRecovered ?? null,
       providerUsed,
       fallbackReason,
       rawForexFactoryCount: forexDiagnostics?.rawCount ?? null,
