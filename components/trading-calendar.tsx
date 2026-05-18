@@ -1,31 +1,12 @@
 "use client"
 
-import { useEffect, useMemo, useState } from "react"
+import { useMemo, useState } from "react"
 import { Card } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
-import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog"
-import { Badge } from "@/components/ui/badge"
 import { ChevronLeft, ChevronRight, X, TrendingUp, TrendingDown, Minus, Star } from "lucide-react"
 import { cn } from "@/lib/utils"
 import type { Account, DailyPnL, Trade } from "@/lib/types"
 import { getAccountRules } from "@/lib/rules"
-import type { EconomicEventImpactDisplay } from "@/lib/economic-events/types"
-import { formatEventCountdown } from "@/lib/economic-events/countdown"
-import {
-  buildCalendarEventsByDate,
-  filterEconomicEventsForView,
-  maxImpactForDay,
-  sortCalendarEventsDisplay,
-} from "@/lib/economic-events/utils"
-import { useEconomicCalendarPrefetch } from "@/hooks/use-economic-calendar-events"
 
 interface TradingCalendarProps {
   account: Account
@@ -41,69 +22,13 @@ interface DayStats {
   winPercent: number
 }
 
-type CalendarMode = "pnl" | "events"
-
-function dotClassForImpact(impact: EconomicEventImpactDisplay): string {
-  if (impact === "High") return "bg-red-500 shadow-[0_0_6px_rgba(239,68,68,0.65)]"
-  if (impact === "Medium") return "bg-amber-400 shadow-[0_0_6px_rgba(245,158,11,0.55)]"
-  return "bg-blue-400 shadow-[0_0_6px_rgba(59,130,246,0.55)]"
-}
-
-function ImpactBadge({ impact }: { impact: EconomicEventImpactDisplay }) {
-  return (
-    <Badge
-      variant="outline"
-      className={cn(
-        "shrink-0 text-[10px] font-semibold uppercase tracking-wide",
-        impact === "High" && "border-red-400/45 bg-red-500/15 text-red-200",
-        impact === "Medium" && "border-amber-400/45 bg-amber-500/15 text-amber-200",
-        impact === "Low" && "border-blue-400/45 bg-blue-500/15 text-blue-200",
-      )}
-    >
-      {impact}
-    </Badge>
-  )
-}
-
 export function TradingCalendar({ account, dailyData, trades }: TradingCalendarProps) {
   const [currentDate, setCurrentDate] = useState(new Date())
   const [selectedDate, setSelectedDate] = useState<string | null>(null)
-  const [calendarMode, setCalendarMode] = useState<CalendarMode>("pnl")
-  const [eventsModalDate, setEventsModalDate] = useState<string | null>(null)
 
   const rules = getAccountRules(account)
   const isPA = account.type === "PA"
   const minQualifyingProfit = rules.minDailyProfit
-
-  const { mergedEvents: economicEventsMerged, loading: econLoading } =
-    useEconomicCalendarPrefetch(currentDate)
-
-  const [tickNow, setTickNow] = useState(() => new Date())
-  useEffect(() => {
-    if (calendarMode !== "events") return
-    const id = window.setInterval(() => setTickNow(new Date()), 60_000)
-    return () => window.clearInterval(id)
-  }, [calendarMode])
-
-  useEffect(() => {
-    if (eventsModalDate) setTickNow(new Date())
-  }, [eventsModalDate])
-
-  const filteredEconomicEvents = useMemo(
-    () => filterEconomicEventsForView(economicEventsMerged, "red-folder"),
-    [economicEventsMerged],
-  )
-
-  const eventsByDate = useMemo(
-    () => buildCalendarEventsByDate(filteredEconomicEvents),
-    [filteredEconomicEvents],
-  )
-
-  const modalDayEvents = useMemo(() => {
-    if (!eventsModalDate) return []
-    const raw = eventsByDate.get(eventsModalDate) ?? []
-    return sortCalendarEventsDisplay(raw)
-  }, [eventsModalDate, eventsByDate])
 
   const getDaysInMonth = (date: Date) => {
     return new Date(date.getFullYear(), date.getMonth() + 1, 0).getDate()
@@ -146,27 +71,17 @@ export function TradingCalendar({ account, dailyData, trades }: TradingCalendarP
   const firstDayOfMonth = getFirstDayOfMonth(currentDate)
   const monthName = currentDate.toLocaleDateString("en-US", { month: "long", year: "numeric" })
 
-  const resetSelections = () => {
-    setSelectedDate(null)
-    setEventsModalDate(null)
-  }
-
-  const handleCalendarModeChange = (value: string) => {
-    setCalendarMode(value as CalendarMode)
-    resetSelections()
-  }
-
   const prevMonth = () => {
     setCurrentDate(new Date(currentDate.getFullYear(), currentDate.getMonth() - 1, 1))
-    resetSelections()
+    setSelectedDate(null)
   }
 
   const nextMonth = () => {
     setCurrentDate(new Date(currentDate.getFullYear(), currentDate.getMonth() + 1, 1))
-    resetSelections()
+    setSelectedDate(null)
   }
 
-  const handlePnlDayClick = (day: number) => {
+  const handleDayClick = (day: number) => {
     const dateKey = formatDateKey(currentDate.getFullYear(), currentDate.getMonth(), day)
     const dayStats = getDayStats(dateKey)
     if (dayStats && dayStats.tradeCount > 0) {
@@ -174,28 +89,9 @@ export function TradingCalendar({ account, dailyData, trades }: TradingCalendarP
     }
   }
 
-  const handleEventsDayClick = (day: number) => {
-    const dateKey = formatDateKey(currentDate.getFullYear(), currentDate.getMonth(), day)
-    const list = eventsByDate.get(dateKey)
-    if (list && list.length > 0) {
-      setEventsModalDate(dateKey)
-    }
-  }
-
   const weekDays = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"]
   const selectedTrades = selectedDate ? getTradesForDate(selectedDate) : []
   const selectedDayStats = selectedDate ? getDayStats(selectedDate) : null
-
-  const modalWeekdayTitle = eventsModalDate
-    ? new Date(`${eventsModalDate}T12:00:00`).toLocaleDateString("en-US", { weekday: "long" })
-    : ""
-  const modalDateLabel = eventsModalDate
-    ? new Date(`${eventsModalDate}T12:00:00`).toLocaleDateString("en-US", {
-        month: "long",
-        day: "numeric",
-        year: "numeric",
-      })
-    : ""
 
   const cellShell = cn(
     "relative flex flex-col items-center justify-center gap-0.5 transition-all rounded-xl",
@@ -207,25 +103,8 @@ export function TradingCalendar({ account, dailyData, trades }: TradingCalendarP
   return (
     <Card className="flex flex-col rounded-[24px] glass-card p-3 sm:p-4 lg:p-5 lg:min-h-[min(920px,calc(100dvh-7.5rem))]">
       <div className="mb-2 flex flex-shrink-0 flex-col gap-2 sm:gap-2.5 lg:mb-3 lg:gap-2.5">
-        <div className="flex flex-wrap items-start justify-between gap-2 sm:gap-3">
-          <div className="flex min-h-[2rem] items-center gap-2">
-            <h2 className="text-base font-semibold sm:text-lg">Trading Calendar</h2>
-            {calendarMode === "events" && econLoading && (
-              <span className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
-                Loading…
-              </span>
-            )}
-          </div>
-          <Tabs value={calendarMode} onValueChange={handleCalendarModeChange} className="w-full sm:w-auto">
-            <TabsList className="grid h-9 w-full grid-cols-2 gap-0.5 sm:inline-flex sm:h-9 sm:w-auto sm:gap-0">
-              <TabsTrigger value="pnl" className="rounded-lg px-3 text-xs sm:text-sm">
-                PNL
-              </TabsTrigger>
-              <TabsTrigger value="events" className="rounded-lg px-3 text-xs sm:text-sm">
-                Events
-              </TabsTrigger>
-            </TabsList>
-          </Tabs>
+        <div className="flex items-center justify-between gap-2">
+          <h2 className="text-base font-semibold sm:text-lg">Trading Calendar</h2>
         </div>
         <div className="flex items-center justify-center gap-2 sm:justify-end sm:gap-3">
           <Button variant="ghost" size="icon" onClick={prevMonth} className="h-9 w-9 sm:h-9 sm:w-9">
@@ -239,14 +118,6 @@ export function TradingCalendar({ account, dailyData, trades }: TradingCalendarP
           </Button>
         </div>
       </div>
-
-      {calendarMode === "events" && (
-        <div className="mb-3">
-          <span className="rounded-full border border-red-400/20 bg-red-500/10 px-3 py-1 text-[11px] font-medium uppercase tracking-wide text-red-100/80">
-            Showing USD red-folder events only
-          </span>
-        </div>
-      )}
 
       {/* Weekday Headers */}
       <div className="mb-2 grid flex-shrink-0 grid-cols-7 gap-1 sm:mb-2.5 sm:gap-1.5 lg:gap-2">
@@ -270,157 +141,92 @@ export function TradingCalendar({ account, dailyData, trades }: TradingCalendarP
           const day = i + 1
           const dateKey = formatDateKey(currentDate.getFullYear(), currentDate.getMonth(), day)
           const dayStats = getDayStats(dateKey)
-          const isSelected = calendarMode === "pnl" && selectedDate === dateKey
+          const isSelected = selectedDate === dateKey
           const dow = new Date(currentDate.getFullYear(), currentDate.getMonth(), day).getDay()
           const isWeekend = dow === 0 || dow === 6
           const hasTrades = dayStats && dayStats.tradeCount > 0
           const qualifiesForPayout = isPA && dayStats && dayStats.pnl >= minQualifyingProfit
 
-          const dayEvents = eventsByDate.get(dateKey) ?? []
-          const hasEconEvents = dayEvents.length > 0
-          const sortedForDots = sortCalendarEventsDisplay(dayEvents)
-          const dotEvents = sortedForDots.slice(0, 3)
-          const moreCount = dayEvents.length - dotEvents.length
-          const maxImp = maxImpactForDay(dayEvents)
-          const hasRedFolder = dayEvents.some((e) => e.isRedFolder)
-
-          if (calendarMode === "pnl") {
-            return (
-              <button
-                key={day}
-                type="button"
-                onClick={() => handlePnlDayClick(day)}
-                disabled={!hasTrades}
-                className={cn(
-                  cellShell,
-                  "p-1 sm:p-1.5",
-                  hasTrades &&
-                    dayStats.pnl > 0 &&
-                    "bg-emerald-500/12 hover:bg-emerald-500/18 shadow-[0_0_20px_-14px_rgba(16,185,129,0.6)]",
-                  hasTrades &&
-                    dayStats.pnl > 0 &&
-                    qualifiesForPayout &&
-                    "border sm:border-2 border-amber-400/60 ring-1 ring-amber-400/30 lg:border lg:ring-1",
-                  hasTrades &&
-                    dayStats.pnl > 0 &&
-                    !qualifiesForPayout &&
-                    "border sm:border-2 border-emerald-500/30 lg:border lg:ring-1",
-                  hasTrades && dayStats.pnl < 0 && "border sm:border-2 border-red-500/30 bg-red-500/12 hover:bg-red-500/20 lg:border",
-                  hasTrades &&
-                    dayStats.pnl === 0 &&
-                    "border border-border/50 bg-muted/50 hover:bg-muted sm:border-2 lg:border",
-                  !hasTrades && !isWeekend && "cursor-default border border-white/5 bg-slate-900/30",
-                  !hasTrades && isWeekend && "cursor-default border border-white/5 bg-slate-900/20",
-                  isSelected && "ring-2 ring-primary ring-offset-1 ring-offset-background sm:ring-offset-2",
-                  hasTrades && "cursor-pointer",
-                )}
-              >
-                {qualifiesForPayout && (
-                  <div className="absolute right-0.5 top-0.5 sm:right-1 sm:top-1 lg:right-0.5 lg:top-0.5">
-                    <Star className="h-2 w-2 fill-amber-400 text-amber-400 sm:h-3 sm:w-3" />
-                  </div>
-                )}
-                <span
-                  className={cn(
-                    "text-[15px] font-semibold leading-none sm:text-base lg:text-[15px] xl:text-[16px]",
-                    hasTrades && dayStats.pnl > 0 && "text-emerald-400",
-                    hasTrades && dayStats.pnl < 0 && "text-red-400",
-                    hasTrades && dayStats.pnl === 0 && "text-muted-foreground",
-                    !hasTrades && "text-muted-foreground/40",
-                  )}
-                >
-                  {day}
-                </span>
-                {hasTrades && (
-                  <>
-                    <span
-                      className={cn(
-                        "mt-0 max-w-full truncate font-mono text-[10px] font-bold sm:mt-0.5 sm:text-[11px] lg:text-[12px]",
-                        dayStats.pnl > 0
-                          ? "text-emerald-400"
-                          : dayStats.pnl < 0
-                            ? "text-red-400"
-                            : "text-muted-foreground",
-                      )}
-                    >
-                      <span className="hidden sm:inline">{dayStats.pnl > 0 ? "+" : ""}$</span>
-                      <span className="sm:hidden">{dayStats.pnl > 0 ? "+" : ""}</span>
-                      {Math.abs(dayStats.pnl).toLocaleString()}
-                    </span>
-                    <div className="mt-0.5 hidden items-center gap-1 sm:flex lg:mt-1 lg:gap-1">
-                      <span className="text-[10px] tabular-nums text-muted-foreground lg:text-[10px] xl:text-[11px]">
-                        {dayStats.tradeCount} trade{dayStats.tradeCount > 1 ? "s" : ""}
-                      </span>
-                      <span className="text-[10px] text-muted-foreground/50 lg:text-[10px]">·</span>
-                      <span
-                        className={cn(
-                          "text-[10px] font-medium tabular-nums lg:text-[10px] xl:text-[11px]",
-                          dayStats.winPercent >= 60
-                            ? "text-emerald-400"
-                            : dayStats.winPercent >= 40
-                              ? "text-amber-400"
-                              : "text-red-400",
-                        )}
-                      >
-                        {dayStats.winPercent}%
-                      </span>
-                    </div>
-                  </>
-                )}
-              </button>
-            )
-          }
-
-          /* Events mode */
           return (
             <button
               key={day}
               type="button"
-              onClick={() => handleEventsDayClick(day)}
-              disabled={!hasEconEvents}
+              onClick={() => handleDayClick(day)}
+              disabled={!hasTrades}
               className={cn(
                 cellShell,
-                "gap-1 p-1 sm:gap-1 sm:p-1.5 lg:gap-1",
-                !hasEconEvents && !isWeekend && "cursor-default border border-white/5 bg-slate-900/30",
-                !hasEconEvents && isWeekend && "cursor-default border border-white/5 bg-slate-900/20",
-                hasEconEvents &&
-                  "cursor-pointer border bg-slate-900/45 hover:bg-slate-900/60 lg:border",
-                hasEconEvents &&
-                  maxImp === "High" &&
-                  "border-red-500/40 shadow-[0_0_14px_-6px_rgba(239,68,68,0.55)] ring-1 ring-red-500/25",
-                hasEconEvents &&
-                  maxImp === "Medium" &&
-                  "border-amber-500/40 shadow-[0_0_14px_-6px_rgba(245,158,11,0.45)] ring-1 ring-amber-500/25",
-                hasEconEvents &&
-                  maxImp === "Low" &&
-                  "border-blue-500/40 shadow-[0_0_14px_-6px_rgba(59,130,246,0.45)] ring-1 ring-blue-500/25",
-                hasEconEvents &&
-                  hasRedFolder &&
-                  "shadow-[0_0_20px_-8px_rgba(239,68,68,0.6)] ring-2 ring-red-400/45",
+                "p-1 sm:p-1.5",
+                hasTrades &&
+                  dayStats.pnl > 0 &&
+                  "bg-emerald-500/12 hover:bg-emerald-500/18 shadow-[0_0_20px_-14px_rgba(16,185,129,0.6)]",
+                hasTrades &&
+                  dayStats.pnl > 0 &&
+                  qualifiesForPayout &&
+                  "border sm:border-2 border-amber-400/60 ring-1 ring-amber-400/30 lg:border lg:ring-1",
+                hasTrades &&
+                  dayStats.pnl > 0 &&
+                  !qualifiesForPayout &&
+                  "border sm:border-2 border-emerald-500/30 lg:border lg:ring-1",
+                hasTrades && dayStats.pnl < 0 && "border sm:border-2 border-red-500/30 bg-red-500/12 hover:bg-red-500/20 lg:border",
+                hasTrades &&
+                  dayStats.pnl === 0 &&
+                  "border border-border/50 bg-muted/50 hover:bg-muted sm:border-2 lg:border",
+                !hasTrades && !isWeekend && "cursor-default border border-white/5 bg-slate-900/30",
+                !hasTrades && isWeekend && "cursor-default border border-white/5 bg-slate-900/20",
+                isSelected && "ring-2 ring-primary ring-offset-1 ring-offset-background sm:ring-offset-2",
+                hasTrades && "cursor-pointer",
               )}
             >
-              <span className="text-[15px] font-semibold leading-none text-slate-100 sm:text-base lg:text-[15px] xl:text-[16px]">
+              {qualifiesForPayout && (
+                <div className="absolute right-0.5 top-0.5 sm:right-1 sm:top-1 lg:right-0.5 lg:top-0.5">
+                  <Star className="h-2 w-2 fill-amber-400 text-amber-400 sm:h-3 sm:w-3" />
+                </div>
+              )}
+              <span
+                className={cn(
+                  "text-[15px] font-semibold leading-none sm:text-base lg:text-[15px] xl:text-[16px]",
+                  hasTrades && dayStats.pnl > 0 && "text-emerald-400",
+                  hasTrades && dayStats.pnl < 0 && "text-red-400",
+                  hasTrades && dayStats.pnl === 0 && "text-muted-foreground",
+                  !hasTrades && "text-muted-foreground/40",
+                )}
+              >
                 {day}
               </span>
-              {hasEconEvents && (
+              {hasTrades && (
                 <>
-                  <div className="flex items-center justify-center gap-1">
-                    {dotEvents.map((ev, idx) => (
-                      <span
-                        key={ev.id ?? `${ev.time}-${ev.name}-${idx}`}
-                        className={cn(
-                          "h-2 w-2 rounded-full sm:h-2 sm:w-2 lg:h-2.5 lg:w-2.5",
-                          dotClassForImpact(ev.impact),
-                        )}
-                        aria-hidden
-                      />
-                    ))}
-                  </div>
-                  {moreCount > 0 && (
-                    <span className="text-[8px] font-medium tabular-nums text-muted-foreground sm:text-[9px] lg:text-[10px]">
-                      +{moreCount} more
+                  <span
+                    className={cn(
+                      "mt-0 max-w-full truncate font-mono text-[10px] font-bold sm:mt-0.5 sm:text-[11px] lg:text-[12px]",
+                      dayStats.pnl > 0
+                        ? "text-emerald-400"
+                        : dayStats.pnl < 0
+                          ? "text-red-400"
+                          : "text-muted-foreground",
+                    )}
+                  >
+                    <span className="hidden sm:inline">{dayStats.pnl > 0 ? "+" : ""}$</span>
+                    <span className="sm:hidden">{dayStats.pnl > 0 ? "+" : ""}</span>
+                    {Math.abs(dayStats.pnl).toLocaleString()}
+                  </span>
+                  <div className="mt-0.5 hidden items-center gap-1 sm:flex lg:mt-1 lg:gap-1">
+                    <span className="text-[10px] tabular-nums text-muted-foreground lg:text-[10px] xl:text-[11px]">
+                      {dayStats.tradeCount} trade{dayStats.tradeCount > 1 ? "s" : ""}
                     </span>
-                  )}
+                    <span className="text-[10px] text-muted-foreground/50 lg:text-[10px]">·</span>
+                    <span
+                      className={cn(
+                        "text-[10px] font-medium tabular-nums lg:text-[10px] xl:text-[11px]",
+                        dayStats.winPercent >= 60
+                          ? "text-emerald-400"
+                          : dayStats.winPercent >= 40
+                            ? "text-amber-400"
+                            : "text-red-400",
+                      )}
+                    >
+                      {dayStats.winPercent}%
+                    </span>
+                  </div>
                 </>
               )}
             </button>
@@ -428,8 +234,8 @@ export function TradingCalendar({ account, dailyData, trades }: TradingCalendarP
         })}
       </div>
 
-      {/* Expanded Day Detail Panel — PNL mode only */}
-      {calendarMode === "pnl" && selectedDate && selectedTrades.length > 0 && selectedDayStats && (
+      {/* Expanded Day Detail Panel */}
+      {selectedDate && selectedTrades.length > 0 && selectedDayStats && (
         <div className="mt-4 border-t border-border/50 pt-4 sm:mt-6 sm:pt-6 lg:mt-3 lg:pt-3">
           <div className="mb-4 flex items-start justify-between sm:mb-5 lg:mb-3">
             <div className="min-w-0 flex-1">
@@ -549,145 +355,23 @@ export function TradingCalendar({ account, dailyData, trades }: TradingCalendarP
 
       {/* Legend */}
       <div className="mt-3 flex flex-shrink-0 flex-wrap items-center justify-center gap-3 border-t border-border/50 pt-2.5 sm:mt-4 sm:gap-5 sm:pt-3 lg:mt-auto lg:gap-6 lg:pt-3">
-        {calendarMode === "pnl" ? (
-          <>
-            <div className="flex items-center gap-1.5 text-xs text-muted-foreground sm:gap-2 sm:text-sm">
-              <div className="h-3 w-3 rounded border border-emerald-500/40 bg-emerald-500/20 sm:h-4 sm:w-4 sm:border-2" />
-              <span>Profit</span>
+        <div className="flex items-center gap-1.5 text-xs text-muted-foreground sm:gap-2 sm:text-sm">
+          <div className="h-3 w-3 rounded border border-emerald-500/40 bg-emerald-500/20 sm:h-4 sm:w-4 sm:border-2" />
+          <span>Profit</span>
+        </div>
+        <div className="flex items-center gap-1.5 text-xs text-muted-foreground sm:gap-2 sm:text-sm">
+          <div className="h-3 w-3 rounded border border-red-500/40 bg-red-500/20 sm:h-4 sm:w-4 sm:border-2" />
+          <span>Loss</span>
+        </div>
+        {isPA && (
+          <div className="flex items-center gap-1.5 text-xs text-muted-foreground sm:gap-2 sm:text-sm">
+            <div className="flex h-3 w-3 items-center justify-center rounded border border-amber-400/60 bg-emerald-500/20 sm:h-4 sm:w-4 sm:border-2">
+              <Star className="h-1.5 w-1.5 fill-amber-400 text-amber-400 sm:h-2 sm:w-2" />
             </div>
-            <div className="flex items-center gap-1.5 text-xs text-muted-foreground sm:gap-2 sm:text-sm">
-              <div className="h-3 w-3 rounded border border-red-500/40 bg-red-500/20 sm:h-4 sm:w-4 sm:border-2" />
-              <span>Loss</span>
-            </div>
-            {isPA && (
-              <div className="flex items-center gap-1.5 text-xs text-muted-foreground sm:gap-2 sm:text-sm">
-                <div className="flex h-3 w-3 items-center justify-center rounded border border-amber-400/60 bg-emerald-500/20 sm:h-4 sm:w-4 sm:border-2">
-                  <Star className="h-1.5 w-1.5 fill-amber-400 text-amber-400 sm:h-2 sm:w-2" />
-                </div>
-                <span>Qualifying Day</span>
-              </div>
-            )}
-          </>
-        ) : (
-          <>
-            <div className="flex items-center gap-1.5 text-xs text-muted-foreground sm:gap-2 sm:text-sm">
-              <span className="h-2 w-2 rounded-full bg-red-500 shadow-[0_0_6px_rgba(239,68,68,0.65)] sm:h-2.5 sm:w-2.5" />
-              <span>High Impact</span>
-            </div>
-            <div className="flex items-center gap-1.5 text-xs text-muted-foreground sm:gap-2 sm:text-sm">
-              <span className="h-2 w-2 rounded-full bg-amber-400 shadow-[0_0_6px_rgba(245,158,11,0.55)] sm:h-2.5 sm:w-2.5" />
-              <span>Medium Impact</span>
-            </div>
-            <div className="flex items-center gap-1.5 text-xs text-muted-foreground sm:gap-2 sm:text-sm">
-              <span className="h-2 w-2 rounded-full bg-blue-400 shadow-[0_0_6px_rgba(59,130,246,0.55)] sm:h-2.5 sm:w-2.5" />
-              <span>Low Impact</span>
-            </div>
-          </>
+            <span>Qualifying Day</span>
+          </div>
         )}
       </div>
-
-      <Dialog
-        open={eventsModalDate !== null}
-        onOpenChange={(open) => {
-          if (!open) {
-            setEventsModalDate(null)
-          }
-        }}
-      >
-        <DialogContent className="max-h-[min(85vh,640px)] max-w-lg overflow-y-auto border-white/10 bg-slate-950/90 sm:max-w-xl">
-          <DialogHeader className="space-y-1 text-left">
-            <DialogTitle className="text-xl font-semibold tracking-tight">{modalWeekdayTitle}</DialogTitle>
-            <DialogDescription className="text-base text-slate-300">{modalDateLabel}</DialogDescription>
-          </DialogHeader>
-
-          <div className="space-y-3">
-            {modalDayEvents.length === 0 ? (
-              <p className="rounded-2xl border border-white/10 bg-slate-900/40 px-4 py-6 text-center text-sm text-muted-foreground">
-                No USD red-folder events for this day.
-              </p>
-            ) : (
-              <ul className="space-y-2">
-                {modalDayEvents.map((ev, idx) => (
-                  <li
-                    key={ev.id ?? `${ev.time}-${ev.name}-${idx}`}
-                    className={cn(
-                      "rounded-2xl border bg-slate-900/50 p-3 shadow-[inset_0_1px_0_0_rgba(255,255,255,0.04)] backdrop-blur-sm sm:p-4",
-                      ev.isRedFolder && "border-red-500/45 ring-1 ring-red-500/30",
-                      !ev.isRedFolder &&
-                        ev.isUsdHigh &&
-                        "border-amber-400/40 ring-1 ring-amber-400/25",
-                      !ev.isRedFolder && !ev.isUsdHigh && "border-white/10",
-                    )}
-                  >
-                    <div className="flex flex-wrap items-start justify-between gap-2">
-                      <div className="min-w-0 space-y-1">
-                        <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
-                          <p className="font-mono text-xs text-cyan-200/90">{ev.time}</p>
-                          {formatEventCountdown(ev.datetime, tickNow) ? (
-                            <span className="text-[11px] font-mono text-emerald-400/95">
-                              {formatEventCountdown(ev.datetime, tickNow)}
-                            </span>
-                          ) : null}
-                        </div>
-                        <p className="text-sm font-semibold leading-snug text-slate-100 sm:text-base">{ev.name}</p>
-                        <div className="flex flex-wrap items-center gap-2">
-                          <Badge
-                            variant="outline"
-                            className="border-white/12 bg-slate-950/50 text-[10px] font-medium text-slate-300"
-                          >
-                            {ev.sessionLabel}
-                          </Badge>
-                          <span className="text-[10px] uppercase tracking-wide text-muted-foreground/90">
-                            {ev.category}
-                          </span>
-                        </div>
-                        <p className="text-[11px] text-muted-foreground">
-                          {ev.country}
-                          {ev.currency ? ` · ${ev.currency}` : ""}
-                        </p>
-                      </div>
-                      <ImpactBadge impact={ev.impact} />
-                    </div>
-                    <dl className="mt-3 grid grid-cols-1 gap-2 text-xs sm:grid-cols-3 sm:text-[11px]">
-                      <div className="rounded-lg border border-white/5 bg-slate-950/40 px-2.5 py-2">
-                        <dt className="text-muted-foreground">Forecast</dt>
-                        <dd className="mt-0.5 font-mono font-medium text-slate-200">
-                          {ev.forecast ?? "—"}
-                        </dd>
-                      </div>
-                      <div className="rounded-lg border border-white/5 bg-slate-950/40 px-2.5 py-2">
-                        <dt className="text-muted-foreground">Previous</dt>
-                        <dd className="mt-0.5 font-mono font-medium text-slate-200">
-                          {ev.previous ?? "—"}
-                        </dd>
-                      </div>
-                      <div className="rounded-lg border border-white/5 bg-slate-950/40 px-2.5 py-2">
-                        <dt className="text-muted-foreground">Actual</dt>
-                        <dd className="mt-0.5 font-mono font-medium text-slate-200">
-                          {ev.actual ?? "—"}
-                        </dd>
-                      </div>
-                    </dl>
-                  </li>
-                ))}
-              </ul>
-            )}
-          </div>
-
-          <DialogFooter className="gap-2 sm:justify-end">
-            <Button
-              type="button"
-              variant="secondary"
-              className="rounded-xl border border-white/10 bg-slate-900/70"
-              onClick={() => {
-                setEventsModalDate(null)
-              }}
-            >
-              Close
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
     </Card>
   )
 }
