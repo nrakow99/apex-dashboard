@@ -1,6 +1,9 @@
 import { NextResponse } from "next/server"
 import { resolveFetchRevalidateSeconds, resolveHttpCacheControl } from "@/lib/economic-events/cache-policy"
-import { getSelectedEconomicEventsProvider } from "@/lib/economic-events/provider"
+import {
+  getSelectedEconomicEventsProvider,
+  type EconomicEventsProviderDiagnostics,
+} from "@/lib/economic-events/provider"
 import type { EconomicEvent } from "@/lib/economic-events/types"
 
 function defaultFromTo(): { from: string; to: string } {
@@ -34,8 +37,20 @@ function safeFallbackReason(error: unknown): string {
   if (error.message === "fetch_threw") return "fetch_threw"
   if (error.message === "FOREX_FACTORY_API_URL is not configured") return error.message
   if (error.message === "Invalid URL") return "FOREX_FACTORY_API_URL is invalid"
+  if (error.message === "RapidAPI result array missing") return error.message
+  if (/ForexFactory-style provider failed: 429/.test(error.message)) return "rate_limited"
   if (/ForexFactory-style provider failed: \d+/.test(error.message)) return error.message
   return error.message ? `provider_error:${error.message.slice(0, 160)}` : "provider_error:unknown"
+}
+
+function isForexFactoryRateLimited(
+  forexDiagnostics: EconomicEventsProviderDiagnostics | undefined,
+  error: unknown,
+): boolean {
+  if (forexDiagnostics?.providerRateLimited === true) return true
+  if (forexDiagnostics?.statusCode === 429) return true
+  if (error instanceof Error && /ForexFactory-style provider failed: 429/.test(error.message)) return true
+  return false
 }
 
 export async function GET(req: Request) {
@@ -77,7 +92,9 @@ export async function GET(req: Request) {
       providerUsed,
       fallbackReason,
       rawForexFactoryCount: forexDiagnostics?.rawCount ?? null,
+      rawRapidApiCount: forexDiagnostics?.rawRapidApiCount ?? null,
       normalizedForexFactoryCount: forexDiagnostics?.normalizedCount ?? null,
+      firstNormalizedEvent: forexDiagnostics?.firstNormalizedEvent ?? null,
       forexFactoryStatusCode: forexDiagnostics?.statusCode ?? null,
       forexFactoryRequestHost: forexDiagnostics?.requestHost ?? null,
       forexFactoryRequestPath: forexDiagnostics?.requestPath ?? null,
@@ -146,6 +163,24 @@ export async function GET(req: Request) {
         ? providerSelection.provider.getDiagnostics?.()
         : undefined
 
+    if (providerSelection.name === "forex_factory" && isForexFactoryRateLimited(forexDiagnostics, primaryError)) {
+      return NextResponse.json(
+        {
+          events: [],
+          ...getDebugFields("forex_factory", "rate_limited"),
+          meta: {
+            from,
+            to,
+            provider: "forex_factory",
+            rateLimited: true,
+            stale: false,
+            cacheSeconds: revalidateSec,
+          },
+        },
+        { status: 200, headers },
+      )
+    }
+
     if (providerSelection.name === "forex_factory" && forexDiagnostics?.statusCode === 200) {
       return NextResponse.json(
         {
@@ -164,7 +199,11 @@ export async function GET(req: Request) {
       )
     }
 
-    if (providerSelection.fallbackProvider && providerSelection.fallbackName) {
+    if (
+      providerSelection.fallbackProvider &&
+      providerSelection.fallbackName &&
+      !(providerSelection.name === "forex_factory" && forexDiagnostics?.statusCode === 200)
+    ) {
       try {
         const events = await providerSelection.fallbackProvider.fetchEvents(from, to, revalidateSec)
         console.info("[economic-events] route", {

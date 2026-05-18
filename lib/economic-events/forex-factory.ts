@@ -3,8 +3,7 @@ import { formatInTimeZone, toDate } from "date-fns-tz"
 import { enrichEconomicEvent } from "./enrich"
 import type { EconomicEventsProvider, EconomicEventsProviderDiagnostics } from "./provider"
 import type { EconomicEvent, EconomicImpactLevel } from "./types"
-import { formatMetricDisplay, inferImpactLevel } from "./utils"
-import { isUsdEvent } from "./analytics"
+import { formatMetricDisplay } from "./utils"
 
 const NY = "America/New_York"
 const RAPIDAPI_DEFAULT_URL =
@@ -24,16 +23,10 @@ type ParsedEventInstant = {
   marketDatetime: string
 }
 
-type SkipReason =
-  | "missing_date"
-  | "invalid_date"
-  | "missing_title"
-  | "missing_currency"
-  | "unknown"
-
-type NormalizationResult =
-  | { event: EconomicEvent; reason?: never }
-  | { event?: never; reason: SkipReason }
+type RapidApiEnvelope = {
+  result?: unknown
+  status?: string
+}
 
 type CacheEntry = {
   events: EconomicEvent[]
@@ -163,44 +156,7 @@ function readString(row: ForexFactoryLikeRow, keys: string[]): string | null {
   return null
 }
 
-function readMetric(row: ForexFactoryLikeRow, keys: string[]): string | null {
-  for (const fieldName of keys) {
-    const value = formatMetricDisplay(row[fieldName] as string | number | null | undefined)
-    if (value) return value
-  }
-  return null
-}
-
-function readRequiredString(row: ForexFactoryLikeRow, keys: string[]): string | null {
-  for (const fieldName of keys) {
-    const value = row[fieldName]
-    if (typeof value === "string" && value.trim()) return value.trim()
-  }
-  return null
-}
-
-function readTimestamp(row: ForexFactoryLikeRow): Date | null {
-  const raw = row.timestamp ?? row.unix ?? row.epoch
-  if (typeof raw !== "number" || !Number.isFinite(raw)) return null
-  const timestampMs = raw > 1_000_000_000_000 ? raw : raw * 1000
-  const timestampDate = new Date(timestampMs)
-  return Number.isNaN(timestampDate.getTime()) ? null : timestampDate
-}
-
-function readTimezone(row: ForexFactoryLikeRow): string {
-  const raw = readString(row, ["timezone", "timeZone", "tz", "timezoneName", "timezone_name"])
-  if (!raw) return NY
-
-  const normalized = raw.trim()
-  const lower = normalized.toLowerCase()
-  if (normalized === "UTC" || normalized === "Etc/UTC") return "UTC"
-  if (normalized.includes("/") && /^[A-Za-z_]+\/[A-Za-z_/-]+$/.test(normalized)) return normalized
-  if (["et", "est", "edt", "eastern", "eastern time", "america/new_york"].includes(lower)) return NY
-  return NY
-}
-
-function readImpact(row: ForexFactoryLikeRow, title: string, country: string, currency: string | null): EconomicImpactLevel {
-  const importance = row.importance
+function mapImportance(importance: unknown): EconomicImpactLevel {
   const numericImportance =
     typeof importance === "number"
       ? importance
@@ -208,61 +164,10 @@ function readImpact(row: ForexFactoryLikeRow, title: string, country: string, cu
         ? Number(importance)
         : Number.NaN
 
-  if (Number.isFinite(numericImportance)) {
-    if (numericImportance >= 2) return "high"
-    if (numericImportance === 1) return "medium"
-    return "low"
-  }
-
-  const rawImpact = readString(row, ["impact", "importance", "priority", "folder", "severity"])
-  return inferImpactLevel(rawImpact ?? undefined, title, country, currency)
-}
-
-function normalizeDateString(raw: string | null, from: string): string | null {
-  if (!raw) return null
-  const trimmedDate = raw.trim().replace(/,/g, "")
-  if (/^\d{4}-\d{2}-\d{2}$/.test(trimmedDate)) return trimmedDate
-
-  const slash = trimmedDate.match(/^(\d{1,2})\/(\d{1,2})\/(\d{2,4})$/)
-  if (slash) {
-    const [, mm, dd, yyyy] = slash
-    const year = yyyy.length === 2 ? `20${yyyy}` : yyyy
-    return `${year}-${mm.padStart(2, "0")}-${dd.padStart(2, "0")}`
-  }
-
-  const dash = trimmedDate.match(/^(\d{1,2})-(\d{1,2})-(\d{2,4})$/)
-  if (dash) {
-    const [, mm, dd, yyyy] = dash
-    const year = yyyy.length === 2 ? `20${yyyy}` : yyyy
-    return `${year}-${mm.padStart(2, "0")}-${dd.padStart(2, "0")}`
-  }
-
-  const year = from.slice(0, 4)
-  const withYear = /\b\d{4}\b/.test(trimmedDate) ? trimmedDate : `${trimmedDate} ${year}`
-  const parsed = new Date(`${withYear} 12:00:00 UTC`)
-  if (Number.isNaN(parsed.getTime())) return null
-
-  return `${parsed.getUTCFullYear()}-${String(parsed.getUTCMonth() + 1).padStart(2, "0")}-${String(parsed.getUTCDate()).padStart(2, "0")}`
-}
-
-function normalizeTimeString(raw: string | null): string | null {
-  if (!raw) return null
-  const timeText = raw.trim().toLowerCase()
-  if (!timeText || /tentative|all\s*day|day\s*\d+|holiday/.test(timeText)) return null
-
-  const match = timeText.match(/^(\d{1,2})(?::(\d{2}))?\s*([ap]\.?m\.?)?$/i)
-  if (!match) return null
-
-  let hour = Number(match[1])
-  const minute = Number(match[2] ?? "0")
-  const meridiem = match[3]?.replace(/\./g, "")
-
-  if (!Number.isFinite(hour) || !Number.isFinite(minute) || minute > 59) return null
-  if (meridiem === "pm" && hour < 12) hour += 12
-  if (meridiem === "am" && hour === 12) hour = 0
-  if (hour > 23) return null
-
-  return `${String(hour).padStart(2, "0")}:${String(minute).padStart(2, "0")}:00`
+  if (!Number.isFinite(numericImportance)) return "low"
+  if (numericImportance >= 2) return "high"
+  if (numericImportance === 1) return "medium"
+  return "low"
 }
 
 function parseIsoInstant(raw: string): ParsedEventInstant | null {
@@ -276,46 +181,30 @@ function parseIsoInstant(raw: string): ParsedEventInstant | null {
   }
 }
 
-function parseEventInstant(row: ForexFactoryLikeRow, from: string): ParsedEventInstant | null {
-  const timestamp = readTimestamp(row)
-  if (timestamp) {
-    return {
-      instant: timestamp,
-      hasSpecificTime: true,
-      marketDatetime: formatInTimeZone(timestamp, NY, "yyyy-MM-dd HH:mm:ss"),
-    }
-  }
+function parseEventInstantFromDate(dateValue: unknown, from: string): ParsedEventInstant {
+  const datetime =
+    typeof dateValue === "string"
+      ? dateValue.trim()
+      : typeof dateValue === "number" && Number.isFinite(dateValue)
+        ? new Date(dateValue).toISOString()
+        : null
 
-  const timezone = readTimezone(row)
-
-  const providerDate = readString(row, ["date"])
-  if (providerDate && /^\d{4}-\d{2}-\d{2}T/.test(providerDate)) {
-    const parsed = parseIsoInstant(providerDate)
-    if (parsed) return parsed
-  }
-
-  const datetime = readString(row, ["datetime", "dateTime", "date_time", "iso", "utc", "date"])
   if (datetime) {
+    if (/^\d{4}-\d{2}-\d{2}T/.test(datetime) || /[zZ]$|[+-]\d{2}:?\d{2}$/.test(datetime)) {
+      const parsed = parseIsoInstant(datetime)
+      if (parsed) return parsed
+    }
+
     if (/^\d{4}-\d{2}-\d{2}$/.test(datetime)) {
       const dateOnlyInstant = toDate(`${datetime} 12:00:00`, { timeZone: NY })
-      return Number.isNaN(dateOnlyInstant.getTime())
-        ? null
-        : { instant: dateOnlyInstant, hasSpecificTime: false, marketDatetime: `${datetime} 12:00:00` }
+      return {
+        instant: dateOnlyInstant,
+        hasSpecificTime: false,
+        marketDatetime: `${datetime} 12:00:00`,
+      }
     }
 
-    if (/[zZ]$|[+-]\d{2}:?\d{2}$/.test(datetime)) {
-      const offsetInstant = new Date(datetime)
-      return Number.isNaN(offsetInstant.getTime())
-        ? null
-        : {
-            instant: offsetInstant,
-            hasSpecificTime: true,
-            marketDatetime: formatInTimeZone(offsetInstant, NY, "yyyy-MM-dd HH:mm:ss"),
-          }
-    }
-
-    const marketDatetime = datetime.replace("T", " ")
-    const zonedInstant = toDate(marketDatetime, { timeZone: timezone })
+    const zonedInstant = toDate(datetime.replace("T", " "), { timeZone: NY })
     if (!Number.isNaN(zonedInstant.getTime())) {
       return {
         instant: zonedInstant,
@@ -325,15 +214,12 @@ function parseEventInstant(row: ForexFactoryLikeRow, from: string): ParsedEventI
     }
   }
 
-  const date =
-    normalizeDateString(readString(row, ["date", "day", "calendarDate", "eventDate", "releaseDate", "release_date"]), from) ??
-    from
-  const time = normalizeTimeString(readString(row, ["time", "eventTime", "releaseTime", "release_time"]))
-  const hasSpecificTime = Boolean(time)
-  const marketDatetime = `${date} ${time ?? "12:00:00"}`
-  const fallbackInstant = toDate(marketDatetime, { timeZone: timezone })
-
-  return Number.isNaN(fallbackInstant.getTime()) ? null : { instant: fallbackInstant, hasSpecificTime, marketDatetime }
+  const fallbackInstant = toDate(`${from} 12:00:00`, { timeZone: NY })
+  return {
+    instant: fallbackInstant,
+    hasSpecificTime: false,
+    marketDatetime: `${from} 12:00:00`,
+  }
 }
 
 function nyDateString(dateValue: Date): string {
@@ -344,83 +230,48 @@ function nyTimeLabel(dateValue: Date): string {
   return formatInTimeZone(dateValue, NY, "HH:mm")
 }
 
-function rowsFromResponse(json: unknown): ForexFactoryLikeRow[] {
-  if (Array.isArray(json)) return json.filter(isRecord)
-
-  const root = asRecord(json)
-  if (!root) return []
-
-  // Provider-specific response mapping lives here. Adjust these keys first after
-  // inspecting the chosen ForexFactory-style API payload.
-  const candidates = [
-    root.events,
-    root.data,
-    root.items,
-    root.calendar,
-    root.economicCalendar,
-    root.economic_calendar,
-    root.results,
-  ]
-
-  for (const candidate of candidates) {
-    if (Array.isArray(candidate)) return candidate.filter(isRecord)
-    const nested = asRecord(candidate)
-    if (nested) {
-      for (const fieldName of ["events", "items", "calendar", "economicCalendar", "economic_calendar"]) {
-        const value = nested[fieldName]
-        if (Array.isArray(value)) return value.filter(isRecord)
-      }
-    }
+function rapidApiRowsFromResponse(json: unknown): ForexFactoryLikeRow[] {
+  const response = json as RapidApiEnvelope
+  if (!Array.isArray(response.result)) {
+    throw new Error("RapidAPI result array missing")
   }
-
-  return []
+  return response.result.filter(isRecord)
 }
 
-function normalizeRow(row: ForexFactoryLikeRow, index: number, from: string): NormalizationResult {
-  // Field aliases are intentionally centralized so the provider can be adapted
-  // quickly once the exact third-party response shape is known.
-  const title = readRequiredString(row, ["indicator", "title"])
-  if (!title) return { reason: "missing_title" }
+function readRapidApiString(value: unknown): string | null {
+  if (typeof value === "string" && value.trim()) return value.trim()
+  if (typeof value === "number" && Number.isFinite(value)) return String(value)
+  return null
+}
 
-  const rawDate = readString(row, ["date", "datetime", "dateTime", "date_time", "iso", "utc", "timestamp", "unix", "epoch"])
-  if (!rawDate) return { reason: "missing_date" }
-
-  const rawCurrency = readString(row, ["currency", "ccy", "symbol"])?.toUpperCase() ?? null
-  const country = readString(row, ["country", "countryCode", "country_code"]) ?? (rawCurrency === "USD" ? "US" : rawCurrency ?? "ZZ")
-  const currency = rawCurrency ?? (isUsdEvent({ currency: rawCurrency, country, title }) ? "USD" : null)
-  const parsed = parseEventInstant(row, from)
-  if (!parsed) return { reason: "invalid_date" }
-
-  const { instant, hasSpecificTime, marketDatetime } = parsed
+function normalizeRow(row: ForexFactoryLikeRow, index: number, from: string): EconomicEvent {
+  const title = readRapidApiString(row.indicator) ?? readRapidApiString(row.title) ?? ""
+  const country = readRapidApiString(row.country) ?? "US"
+  const currency = readRapidApiString(row.currency)?.toUpperCase() ?? null
+  const { instant, hasSpecificTime, marketDatetime } = parseEventInstantFromDate(row.date, from)
   const date = nyDateString(instant)
   const time = nyTimeLabel(instant)
-  const impact = readImpact(row, title, country, currency)
+  const impact = mapImportance(row.importance)
   const rawId = readString(row, ["id", "eventId", "event_id", "calendarId", "calendar_id"])
   const id = rawId
     ? `forex_factory-${rawId}`
     : `forex_factory-${stableId(`${date}|${time}|${title}|${country}|${currency ?? ""}|${index}`)}`
 
-  try {
-    return {
-      event: enrichEconomicEvent({
-        id,
-        date,
-        time: hasSpecificTime ? time : null,
-        datetime: instant.toISOString(),
-        marketDatetime,
-        country,
-        currency,
-        title,
-        impact,
-        forecast: readMetric(row, ["forecast", "consensus", "estimate", "expected"]),
-        previous: readMetric(row, ["previous", "prev", "prior"]),
-        actual: readMetric(row, ["actual", "result"]),
-        source: "forex_factory",
-      }),
-    }
-  } catch {
-    return { reason: "unknown" }
-  }
+  return enrichEconomicEvent({
+    id,
+    date,
+    time: hasSpecificTime ? time : null,
+    datetime: instant.toISOString(),
+    marketDatetime,
+    country,
+    currency,
+    title,
+    impact,
+    forecast: formatMetricDisplay(row.forecast as string | number | null | undefined),
+    previous: formatMetricDisplay(row.previous as string | number | null | undefined),
+    actual: formatMetricDisplay(row.actual as string | number | null | undefined),
+    source: "forex_factory",
+  })
 }
 
 function buildUrl(baseUrl: string, from: string, to: string): URL {
@@ -447,7 +298,9 @@ export function createForexFactoryEconomicEventsProvider(
     providerFilePath: PROVIDER_FILE_PATH,
     providerRuntimeRecovered: PROVIDER_RUNTIME_RECOVERED,
     rawCount: null,
+    rawRapidApiCount: null,
     normalizedCount: null,
+    firstNormalizedEvent: null,
     statusCode: null,
     requestHost: null,
     requestPath: null,
@@ -467,15 +320,6 @@ export function createForexFactoryEconomicEventsProvider(
     normalizedEventTitlesSample: null,
     highImpactTitlesSample: null,
     redFolderTitlesSample: null,
-    skippedMissingDate: null,
-    skippedInvalidDate: null,
-    skippedMissingTitle: null,
-    skippedMissingCurrency: null,
-    skippedUnknownReason: null,
-    skippedEventSamples: null,
-    normalizationLoopIterations: null,
-    normalizationLoopSuccessfulReturns: null,
-    normalizationLoopNullReturns: null,
     cacheHit: null,
     cacheAgeSeconds: null,
     providerRateLimited: null,
@@ -503,7 +347,9 @@ export function createForexFactoryEconomicEventsProvider(
         debugBuildId: DEBUG_BUILD_ID,
         providerFilePath: PROVIDER_FILE_PATH,
         rawCount: null,
+        rawRapidApiCount: null,
         normalizedCount: null,
+        firstNormalizedEvent: null,
         statusCode: null,
         requestHost: null,
         requestPath: null,
@@ -523,15 +369,6 @@ export function createForexFactoryEconomicEventsProvider(
         normalizedEventTitlesSample: null,
         highImpactTitlesSample: null,
         redFolderTitlesSample: null,
-        skippedMissingDate: 0,
-        skippedInvalidDate: 0,
-        skippedMissingTitle: 0,
-        skippedMissingCurrency: 0,
-        skippedUnknownReason: 0,
-        skippedEventSamples: [],
-        normalizationLoopIterations: 0,
-        normalizationLoopSuccessfulReturns: 0,
-        normalizationLoopNullReturns: 0,
         cacheHit: false,
         cacheAgeSeconds: null,
         providerRateLimited: false,
@@ -636,6 +473,7 @@ export function createForexFactoryEconomicEventsProvider(
       diagnostics.statusCode = res.status
 
       if (res.status === 429) {
+        diagnostics.statusCode = 429
         diagnostics.providerRateLimited = true
         if (cached) {
           diagnostics = {
@@ -648,6 +486,7 @@ export function createForexFactoryEconomicEventsProvider(
           }
           return cached.events
         }
+        return []
       }
 
       if (!res.ok) {
@@ -656,10 +495,13 @@ export function createForexFactoryEconomicEventsProvider(
       }
 
       const json = (await res.json()) as unknown
+      const response = json as RapidApiEnvelope
       diagnostics.rawType = rawTypeOf(json)
       diagnostics.topLevelKeys = topLevelKeysOf(json)
-      diagnostics.rawLength = rawLengthOf(json)
-      diagnostics.sampleItem = compactDebugValue(firstArrayItemFrom(json))
+      diagnostics.rawLength = Array.isArray(response.result) ? response.result.length : rawLengthOf(json)
+      diagnostics.sampleItem = compactDebugValue(
+        Array.isArray(response.result) ? response.result[0] ?? null : firstArrayItemFrom(json),
+      )
 
       console.info("[economic-events] forex_factory raw", {
         rawType: diagnostics.rawType,
@@ -669,48 +511,15 @@ export function createForexFactoryEconomicEventsProvider(
         requestQuery: diagnostics.requestQuery,
       })
 
-      const rows = rowsFromResponse(json)
-      diagnostics.rawCount = rows.length
-      const normalizedBeforeFiltering: EconomicEvent[] = []
-      const out: EconomicEvent[] = []
-      const skippedEventSamples: unknown[] = []
-      let rowIndex = 0
-      for (const row of rows) {
-        diagnostics.normalizationLoopIterations = (diagnostics.normalizationLoopIterations ?? 0) + 1
-        const result = normalizeRow(row, rowIndex, from)
-        if ("event" in result && result.event) {
-          diagnostics.normalizationLoopSuccessfulReturns =
-            (diagnostics.normalizationLoopSuccessfulReturns ?? 0) + 1
-          normalizedBeforeFiltering.push(result.event)
-          diagnostics.normalizedEventSample ??= compactDebugValue(result.event)
-          if (result.event.date >= from && result.event.date <= to) out.push(result.event)
-        } else {
-          diagnostics.normalizationLoopNullReturns =
-            (diagnostics.normalizationLoopNullReturns ?? 0) + 1
-          if (result.reason === "missing_date") {
-            diagnostics.skippedMissingDate = (diagnostics.skippedMissingDate ?? 0) + 1
-          } else if (result.reason === "invalid_date") {
-            diagnostics.skippedInvalidDate = (diagnostics.skippedInvalidDate ?? 0) + 1
-          } else if (result.reason === "missing_title") {
-            diagnostics.skippedMissingTitle = (diagnostics.skippedMissingTitle ?? 0) + 1
-          } else if (result.reason === "missing_currency") {
-            diagnostics.skippedMissingCurrency = (diagnostics.skippedMissingCurrency ?? 0) + 1
-          } else {
-            diagnostics.skippedUnknownReason = (diagnostics.skippedUnknownReason ?? 0) + 1
-          }
+      const rawEvents = rapidApiRowsFromResponse(json)
+      diagnostics.rawRapidApiCount = rawEvents.length
+      diagnostics.rawCount = rawEvents.length
 
-          if (skippedEventSamples.length < 10) {
-            skippedEventSamples.push(
-              compactDebugValue({
-                reason: result.reason,
-                row,
-              }),
-            )
-          }
-        }
-        rowIndex += 1
-      }
-      diagnostics.skippedEventSamples = skippedEventSamples
+      const normalizedBeforeFiltering: EconomicEvent[] = rawEvents.map((row, index) =>
+        normalizeRow(row, index, from),
+      )
+      const out = normalizedBeforeFiltering.filter((event) => event.date >= from && event.date <= to)
+
       diagnostics.normalizedCountBeforeFiltering = normalizedBeforeFiltering.length
       diagnostics.normalizedUsdCount = normalizedBeforeFiltering.filter((event) => event.currency === "USD").length
       diagnostics.normalizedHighImpactCount = normalizedBeforeFiltering.filter((event) => event.impact === "high").length
@@ -725,7 +534,8 @@ export function createForexFactoryEconomicEventsProvider(
         .slice(0, 20)
         .map((event) => event.title)
       diagnostics.normalizedCount = out.length
-      diagnostics.normalizedEventSample ??= compactDebugValue(normalizedBeforeFiltering[0] ?? null)
+      diagnostics.firstNormalizedEvent = compactDebugValue(normalizedBeforeFiltering[0] ?? null)
+      diagnostics.normalizedEventSample = diagnostics.firstNormalizedEvent
       diagnostics.cacheHit = false
       diagnostics.cacheAgeSeconds = 0
       diagnostics.providerRateLimited = false
@@ -736,25 +546,9 @@ export function createForexFactoryEconomicEventsProvider(
         diagnostics: { ...diagnostics },
       })
       console.info("[economic-events] forex_factory", {
-        rawEvents: rows.length,
-        normalizationLoopIterations: diagnostics.normalizationLoopIterations,
-        normalizationLoopSuccessfulReturns: diagnostics.normalizationLoopSuccessfulReturns,
-        normalizationLoopNullReturns: diagnostics.normalizationLoopNullReturns,
-        normalizedEventsBeforeFiltering: diagnostics.normalizedCountBeforeFiltering,
-        normalizedEvents: out.length,
-        normalizedUsdEvents: diagnostics.normalizedUsdCount,
-        normalizedHighImpactEvents: diagnostics.normalizedHighImpactCount,
-        normalizedRedFolderEvents: diagnostics.normalizedRedFolderCount,
-        normalizedEventTitlesSample: diagnostics.normalizedEventTitlesSample,
-        highImpactTitlesSample: diagnostics.highImpactTitlesSample,
-        redFolderTitlesSample: diagnostics.redFolderTitlesSample,
-        skippedMissingDate: diagnostics.skippedMissingDate,
-        skippedInvalidDate: diagnostics.skippedInvalidDate,
-        skippedMissingTitle: diagnostics.skippedMissingTitle,
-        skippedMissingCurrency: diagnostics.skippedMissingCurrency,
-        skippedUnknownReason: diagnostics.skippedUnknownReason,
-        skippedEventSamples: diagnostics.skippedEventSamples,
-        normalizedEventSample: diagnostics.normalizedEventSample,
+        rawRapidApiCount: diagnostics.rawRapidApiCount,
+        normalizedCount: diagnostics.normalizedCount,
+        firstNormalizedEvent: diagnostics.firstNormalizedEvent,
         usdRedFolderEvents: out.filter((event) => event.currency === "USD" && event.impact === "high" && event.isRedFolder).length,
       })
       return out

@@ -15,7 +15,9 @@ export type EconomicEventsProviderDiagnostics = {
   providerFilePath?: string | null
   providerRuntimeRecovered?: boolean | null
   rawCount?: number | null
+  rawRapidApiCount?: number | null
   normalizedCount?: number | null
+  firstNormalizedEvent?: unknown
   statusCode?: number | null
   requestHost?: string | null
   requestPath?: string | null
