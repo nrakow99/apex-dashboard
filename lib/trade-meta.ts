@@ -4,6 +4,8 @@
  * Supabase schema or any calculation logic.
  */
 
+import type { SessionId } from "./sessions"
+
 export type TradeGrade = "A+" | "A" | "B" | "C" | "FOMO" | "Revenge"
 
 export const DISCIPLINE_POSITIVE = [
@@ -32,7 +34,7 @@ export interface TradeMeta {
    * Use `resolveSession(meta)` from lib/sessions.ts to read, which falls
    * back to deriving the session from the old `time` string automatically.
    */
-  session?: import("./sessions").SessionId
+  session?: SessionId
   /** @deprecated Legacy HH:MM time string — kept for backward-compat only */
   time?: string
   grade?: TradeGrade

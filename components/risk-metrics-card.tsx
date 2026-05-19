@@ -1,10 +1,10 @@
 "use client"
 
-import { useMemo } from "react"
+import { useMemo, useState, useEffect } from "react"
 import { cn } from "@/lib/utils"
 import type { Trade } from "@/lib/types"
 import { loadAllTradeMeta } from "@/lib/trade-meta"
-import { getSession, type TradingSession } from "@/lib/sessions"
+import { resolveSession, SESSION_LABELS, type SessionId } from "@/lib/sessions"
 
 interface RiskMetricsCardProps {
   trades: Trade[]
@@ -28,26 +28,24 @@ function calcConsecutiveLosses(trades: Trade[]): number {
   return max
 }
 
-function calcBestSession(trades: Trade[]): { session: TradingSession | null; pnl: number } | null {
-  if (typeof window === "undefined") return null
-  const allMeta = loadAllTradeMeta()
-  const sessionTotals: Partial<Record<TradingSession, number>> = {}
-
-  for (const t of trades) {
-    const meta = allMeta[t.id]
-    const session = getSession(meta?.time)
-    if (session) {
-      sessionTotals[session] = (sessionTotals[session] ?? 0) + t.pnl
-    }
-  }
-
-  const entries = Object.entries(sessionTotals) as [TradingSession, number][]
-  if (entries.length === 0) return null
-  const [session, pnl] = entries.sort(([, a], [, b]) => b - a)[0]
-  return { session, pnl }
-}
-
 export function RiskMetricsCard({ trades }: RiskMetricsCardProps) {
+  // Best session requires localStorage — defer to client to avoid hydration mismatch.
+  const [bestSession, setBestSession] = useState<{ session: SessionId; pnl: number } | null>(null)
+
+  useEffect(() => {
+    if (trades.length === 0) { setBestSession(null); return }
+    const allMeta = loadAllTradeMeta()
+    const totals: Partial<Record<SessionId, number>> = {}
+    for (const t of trades) {
+      const session = resolveSession(allMeta[t.id] ?? {})
+      if (session) totals[session] = (totals[session] ?? 0) + t.pnl
+    }
+    const entries = Object.entries(totals) as [SessionId, number][]
+    if (entries.length === 0) { setBestSession(null); return }
+    const [session, pnl] = entries.sort(([, a], [, b]) => b - a)[0]
+    setBestSession({ session, pnl })
+  }, [trades])
+
   const metrics = useMemo<Metric[]>(() => {
     if (trades.length === 0) return []
 
@@ -64,9 +62,8 @@ export function RiskMetricsCard({ trades }: RiskMetricsCardProps) {
 
     const maxConsecLosses = calcConsecutiveLosses(trades)
 
-    const bestSession = calcBestSession(trades)
-
-    const fmt = (n: number) => `$${Math.abs(n).toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`
+    const fmt = (n: number) =>
+      `$${Math.abs(n).toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`
 
     return [
       {
@@ -77,7 +74,7 @@ export function RiskMetricsCard({ trades }: RiskMetricsCardProps) {
       },
       {
         label: "Avg Win",
-        value: fmt(avgWin),
+        value: wins.length > 0 ? fmt(avgWin) : "—",
         sub: wins.length > 0 ? `${wins.length} winners` : "—",
         color: "positive",
       },
@@ -95,18 +92,19 @@ export function RiskMetricsCard({ trades }: RiskMetricsCardProps) {
       },
       {
         label: "Best Session",
-        value: bestSession ? bestSession.session ?? "—" : "—",
-        sub: bestSession ? `+${fmt(bestSession.pnl)}` : "Log times",
+        // bestSession comes from state — always "—" on server to avoid hydration mismatch
+        value: bestSession ? (SESSION_LABELS[bestSession.session] ?? "—") : "—",
+        sub: bestSession ? `+${fmt(bestSession.pnl)}` : "Tag sessions",
         color: "neutral",
       },
       {
         label: "Max Consec. Loss",
-        value: maxConsecLosses > 0 ? `${maxConsecLosses}` : "0",
+        value: `${maxConsecLosses}`,
         sub: maxConsecLosses >= 3 ? "Review risk" : maxConsecLosses > 0 ? "Acceptable" : "Clean",
         color: maxConsecLosses >= 3 ? "negative" : maxConsecLosses > 0 ? "amber" : "positive",
       },
     ]
-  }, [trades])
+  }, [trades, bestSession])
 
   if (trades.length === 0) return null
 

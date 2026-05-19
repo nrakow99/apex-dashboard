@@ -14,7 +14,7 @@ import { cn } from "@/lib/utils"
 import { ChevronRight, MoreHorizontal, Pencil, Trash2 } from "lucide-react"
 import type { Trade } from "@/lib/types"
 import { loadAllTradeMeta, GRADE_STYLES, DISCIPLINE_POSITIVE, type TradeMeta } from "@/lib/trade-meta"
-import { getSession, SESSION_STYLES } from "@/lib/sessions"
+import { resolveSession, SESSION_LABELS, SESSION_BADGE_STYLES } from "@/lib/sessions"
 
 interface TradeHistoryTableProps {
   trades: Trade[]
@@ -43,13 +43,12 @@ function formatGroupDate(dateStr: string): string {
 
 // ── Session badge ────────────────────────────────────────────────────────────
 
-function SessionBadge({ time }: { time?: string }) {
-  const session = getSession(time)
+function SessionBadge({ meta }: { meta: TradeMeta }) {
+  const session = resolveSession(meta)
   if (!session) return null
-  const { label, className } = SESSION_STYLES[session]
   return (
-    <span className={cn("text-[10px] font-semibold uppercase tracking-wider px-1.5 py-0.5 rounded border", className)}>
-      {label}
+    <span className={cn("text-[10px] font-semibold uppercase tracking-wider px-1.5 py-0.5 rounded border", SESSION_BADGE_STYLES[session])}>
+      {SESSION_LABELS[session]}
     </span>
   )
 }
@@ -70,11 +69,10 @@ function GradePill({ grade }: { grade?: string }) {
 // ── Expanded detail panel ────────────────────────────────────────────────────
 
 function TradeDetailPanel({ trade, meta, colSpan }: { trade: Trade; meta: TradeMeta; colSpan: number }) {
+  const session = resolveSession(meta)
   const hasMeta =
-    meta.time || meta.grade || (meta.disciplineTags && meta.disciplineTags.length > 0) ||
+    session || meta.grade || (meta.disciplineTags && meta.disciplineTags.length > 0) ||
     meta.entryPrice || meta.exitPrice || meta.contracts || trade.notes
-
-  const session = getSession(meta.time)
 
   return (
     <TableRow className="border-none hover:bg-transparent">
@@ -88,7 +86,7 @@ function TradeDetailPanel({ trade, meta, colSpan }: { trade: Trade; meta: TradeM
                 {/* Badges row */}
                 {(session || meta.grade) && (
                   <div className="flex items-center gap-1.5 flex-wrap">
-                    {session && <SessionBadge time={meta.time} />}
+                    {session && <SessionBadge meta={meta} />}
                     {meta.grade && <GradePill grade={meta.grade} />}
                   </div>
                 )}
@@ -276,8 +274,8 @@ export function TradeHistoryTable({ trades, onEditTrade, onDeleteTrade }: TradeH
                         {formatGroupDate(group.date)}
                       </span>
                       {/* Session badge for single-trade rows */}
-                      {singleTrade && allMeta[singleTrade.id]?.time && (
-                        <SessionBadge time={allMeta[singleTrade.id].time} />
+                      {singleTrade && resolveSession(allMeta[singleTrade.id] ?? {}) && (
+                        <SessionBadge meta={allMeta[singleTrade.id] ?? {}} />
                       )}
                     </div>
                   </TableCell>
@@ -380,7 +378,7 @@ export function TradeHistoryTable({ trades, onEditTrade, onDeleteTrade }: TradeH
                       <TableCell className="py-2.5 px-2 sm:px-3">
                         <div className="flex flex-col gap-0.5">
                           <span className="text-[11px] text-muted-foreground/40">·</span>
-                          {tradeMeta.time && <SessionBadge time={tradeMeta.time} />}
+                          {resolveSession(tradeMeta) && <SessionBadge meta={tradeMeta} />}
                         </div>
                       </TableCell>
 
