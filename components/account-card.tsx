@@ -9,7 +9,7 @@ import type { Account, Trade, Payout } from "@/lib/types"
 import { calculateAccountStats, getConsistencyInfo, getPayoutEligibility } from "@/lib/storage"
 import { applyIntradayManualDrawdownToStats } from "@/lib/intraday-manual-drawdown"
 import { getAccountRules } from "@/lib/rules"
-import { ChevronRight } from "lucide-react"
+import { ChevronRight, TrendingUp } from "lucide-react"
 
 interface AccountCardProps {
   account: Account
@@ -18,10 +18,66 @@ interface AccountCardProps {
   onClick?: () => void
   /** Shown for passed evals that have not been activated yet */
   onActivatePa?: () => void
+  /** Dropdown menu rendered in top-right, fades in on hover */
+  menuSlot?: React.ReactNode
 }
 
 function fmtMoney(n: number) {
   return n.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+}
+
+type HealthColor = "red" | "amber" | "green" | "blue" | "neutral"
+interface HealthStatus { label: string; color: HealthColor }
+
+function getAccountHealth({
+  account,
+  isSafe,
+  drawdownRemaining,
+  maxDrawdown,
+  totalPnL,
+  evalPassed,
+  evalProfitProgress,
+  consistencyValid,
+  hasConsistency,
+  remainingToMinPayout,
+  lucidEligible,
+  hasPayouts,
+}: {
+  account: { type: string; status: string }
+  isSafe: boolean
+  drawdownRemaining: number
+  maxDrawdown: number
+  totalPnL: number
+  evalPassed: boolean
+  evalProfitProgress: number
+  consistencyValid: boolean | null
+  hasConsistency: boolean
+  remainingToMinPayout: number | null
+  lucidEligible: boolean
+  hasPayouts: boolean
+}): HealthStatus {
+  if (account.status === "Breached" || !isSafe) {
+    return { label: "Breached", color: "red" }
+  }
+  if (drawdownRemaining < maxDrawdown * 0.18) {
+    return { label: "At Risk", color: "red" }
+  }
+  if (hasConsistency && consistencyValid === false) {
+    return { label: "Consistency Risk", color: "amber" }
+  }
+  if (hasPayouts && (lucidEligible || (remainingToMinPayout !== null && remainingToMinPayout <= 350))) {
+    return { label: "Near Payout", color: "green" }
+  }
+  if (evalPassed) {
+    return { label: "Target Met", color: "green" }
+  }
+  if (account.type === "Eval" && evalProfitProgress >= 65) {
+    return { label: "Passing Pace", color: "blue" }
+  }
+  if (drawdownRemaining < maxDrawdown * 0.45) {
+    return { label: "Watchful", color: "amber" }
+  }
+  return { label: "Stable", color: "neutral" }
 }
 
 export function AccountCard({
@@ -30,6 +86,7 @@ export function AccountCard({
   payouts,
   onClick,
   onActivatePa,
+  menuSlot,
 }: AccountCardProps) {
   const rawStats = calculateAccountStats(account, trades, payouts)
   const stats = applyIntradayManualDrawdownToStats(account, rawStats)
@@ -98,6 +155,34 @@ export function AccountCard({
 
   const drawdownLabel = account.drawdownType === "EOD" ? "EOD Drawdown" : "Intraday Drawdown"
 
+  const health = getAccountHealth({
+    account,
+    isSafe: stats.isSafe,
+    drawdownRemaining: stats.drawdownRemaining,
+    maxDrawdown: account.maxDrawdown,
+    totalPnL: stats.totalPnL,
+    evalPassed,
+    evalProfitProgress,
+    consistencyValid: consistencyInfo ? consistencyInfo.isValid : null,
+    hasConsistency: rules.hasConsistency,
+    remainingToMinPayout: remainingToMinPayoutBalance,
+    lucidEligible: lucidEligibility?.isEligible ?? false,
+    hasPayouts: rules.hasPayouts,
+  })
+
+  // Eval pace insight — average daily PnL vs remaining target
+  const evalPace =
+    account.type === "Eval" &&
+    effectiveProfitTarget != null &&
+    effectiveProfitTarget > 0 &&
+    !evalPassed &&
+    stats.tradingDays > 0
+      ? {
+          dailyAvg: stats.totalPnL / stats.tradingDays,
+          remaining: Math.max(0, effectiveProfitTarget - stats.totalPnL),
+        }
+      : null
+
   const barClass = "h-1.5"
   const rowLabelClass = "text-[10px] text-muted-foreground uppercase tracking-wider"
   const rowValueClass = "font-mono text-[10px] font-medium tabular-nums"
@@ -105,64 +190,99 @@ export function AccountCard({
   return (
     <Card
       className={cn(
-        "p-4 sm:p-6 bg-card/50 backdrop-blur border-border/50 cursor-pointer transition-all hover:bg-card/80 hover:border-border group",
-        "glass-card glass-card-hover rounded-[24px] cursor-pointer group",
-        !stats.isSafe && "border-red-500/50"
+        "relative p-4 sm:p-6 glass-card glass-card-hover rounded-[24px] cursor-pointer group",
+        "transition-all active:scale-[0.992] active:shadow-none",
+        !stats.isSafe && "border-red-500/40",
+        stats.isSafe && account.type === "Eval" && "border-amber-500/[0.13]",
+        stats.isSafe && account.type === "PA" && "border-emerald-500/[0.11]",
       )}
       onClick={onClick}
     >
-      {/* Header */}
-      <div className="flex items-start justify-between mb-4">
-        <div className="min-w-0 flex-1">
-          <h3 className="font-semibold text-base sm:text-lg truncate text-slate-100">{account.name}</h3>
-          <div className="flex items-center gap-1.5 mt-2 flex-wrap">
-            <Badge
-              variant="outline"
-              className={cn(
-                "text-[10px] px-2 py-0.5 premium-pill",
-                account.firm === "Apex" && "border-orange-500/50 text-orange-400",
-                account.firm === "Lucid" && "border-cyan-500/50 text-cyan-300",
-                !account.firm && "border-orange-500/50 text-orange-400"
-              )}
-            >
-              {account.firm ?? "Apex"}
-            </Badge>
-            <Badge
-              variant="outline"
-              className={cn(
-                "text-[10px] px-2 py-0.5 premium-pill",
-                account.type === "Eval" && "border-amber-500/50 text-amber-400",
-                account.type === "PA" && "border-emerald-500/50 text-emerald-400",
-                account.type === "Live" && "border-blue-500/50 text-blue-400"
-              )}
-            >
-              {account.type}
-            </Badge>
-            <Badge
-              variant="outline"
-              className={cn(
-                "text-[10px] px-2 py-0.5 premium-pill",
-                account.drawdownType === "Intraday"
-                  ? "border-cyan-500/50 text-cyan-300"
-                  : "border-sky-500/50 text-sky-400"
-              )}
-            >
-              {account.drawdownType ?? "EOD"}
-            </Badge>
-            <Badge
-              variant="outline"
-              className={cn(
-                "text-[10px] px-2 py-0.5 premium-pill",
-                account.status === "Active" && "border-emerald-500/50 text-emerald-400",
-                account.status === "Passed" && "border-blue-500/50 text-blue-400",
-                account.status === "Breached" && "border-red-500/50 text-red-400"
-              )}
-            >
-              {account.status}
-            </Badge>
-          </div>
+      {/* ── Absolutely-positioned top-right controls ─────────────────────
+          Chevron, health badge, and the 3-dot action menu are all placed
+          here so they never participate in the flex layout and cannot
+          cause shifts or overlaps.
+      ────────────────────────────────────────────────────────────────── */}
+
+      {/* Chevron — always visible, top-right */}
+      <ChevronRight
+        className="absolute top-5 right-5 h-5 w-5 text-slate-600 group-hover:text-[#E5E4E2]/60 transition-colors pointer-events-none"
+        aria-hidden
+      />
+
+      {/* Health badge — fixed below chevron */}
+      <span
+        className={cn(
+          "absolute top-12 right-5 text-[10px] font-semibold px-1.5 py-0.5 rounded-md border tabular-nums tracking-wide pointer-events-none",
+          health.color === "red"     && "bg-red-500/10 border-red-500/30 text-red-400",
+          health.color === "amber"   && "bg-amber-500/10 border-amber-500/25 text-amber-400",
+          health.color === "green"   && "bg-emerald-500/10 border-emerald-500/25 text-emerald-400",
+          health.color === "blue"    && "bg-[#536878]/[0.14] border-[#536878]/30 text-[#94AAB8]",
+          health.color === "neutral" && "bg-white/[0.04] border-white/[0.08] text-[#E5E4E2]/45",
+        )}
+      >
+        {health.label}
+      </span>
+
+      {/* 3-dot action menu — to the left of the chevron, fades in on hover */}
+      {menuSlot && (
+        <div
+          className="absolute top-4 right-12 z-10 opacity-0 pointer-events-none group-hover:opacity-100 group-hover:pointer-events-auto transition-opacity"
+          onClick={(e) => e.stopPropagation()}
+        >
+          {menuSlot}
         </div>
-        <ChevronRight className="h-5 w-5 text-slate-500 group-hover:text-cyan-300 transition-colors shrink-0" />
+      )}
+
+      {/* Header — left side only; right side is handled by absolute controls above */}
+      <div className="mb-4 pr-[76px]">
+        <h3 className="font-semibold text-base sm:text-lg truncate text-[#E5E4E2]">{account.name}</h3>
+        <div className="flex items-center gap-1.5 mt-2 flex-wrap">
+          <Badge
+            variant="outline"
+            className={cn(
+              "text-[10px] px-2 py-0.5 premium-pill",
+              account.firm === "Apex" && "border-orange-500/50 text-orange-400",
+              account.firm === "Lucid" && "border-[#536878]/50 text-[#A0B4BF]",
+              !account.firm && "border-orange-500/50 text-orange-400"
+            )}
+          >
+            {account.firm ?? "Apex"}
+          </Badge>
+          <Badge
+            variant="outline"
+            className={cn(
+              "text-[10px] px-2 py-0.5 premium-pill",
+              account.type === "Eval" && "border-amber-500/50 text-amber-400",
+              account.type === "PA" && "border-emerald-500/50 text-emerald-400",
+              account.type === "Live" && "border-[#536878]/50 text-[#94AAB8]"
+            )}
+          >
+            {account.type}
+          </Badge>
+          <Badge
+            variant="outline"
+            className={cn(
+              "text-[10px] px-2 py-0.5 premium-pill",
+              account.drawdownType === "Intraday"
+                ? "border-[#536878]/50 text-[#94AAB8]"
+                : "border-[#536878]/40 text-[#8AA0AC]"
+            )}
+          >
+            {account.drawdownType ?? "EOD"}
+          </Badge>
+          <Badge
+            variant="outline"
+            className={cn(
+              "text-[10px] px-2 py-0.5 premium-pill",
+              account.status === "Active" && "border-emerald-500/50 text-emerald-400",
+              account.status === "Passed" && "border-[#536878]/50 text-[#94AAB8]",
+              account.status === "Breached" && "border-red-500/50 text-red-400"
+            )}
+          >
+            {account.status}
+          </Badge>
+        </div>
       </div>
 
       <div className="space-y-3 sm:space-y-3.5">
@@ -201,7 +321,10 @@ export function AccountCard({
                   : `${fmtMoney(Math.max(0, stats.totalPnL))} / ${fmtMoney(effectiveProfitTarget)}`}
               </span>
             </div>
-            <Progress value={evalPassed ? 100 : evalProfitProgress} className={cn(barClass)} />
+            <Progress
+              value={evalPassed ? 100 : evalProfitProgress}
+              className={cn(barClass, !evalPassed && "[&>div]:bg-amber-500")}
+            />
           </div>
         )}
 
@@ -274,6 +397,24 @@ export function AccountCard({
           </div>
         )}
 
+        {/* Eval pace insight */}
+        {evalPace && evalPace.dailyAvg > 0 && (
+          <div className="flex items-center gap-1.5 py-1.5 px-2 rounded-lg bg-[rgba(83,104,120,0.07)] border border-[rgba(83,104,120,0.14)]">
+            <TrendingUp className="h-3 w-3 text-[#94AAB8] shrink-0" />
+            <span className="text-[10px] text-[#E5E4E2]/50">
+              Avg{" "}
+              <span className="font-mono text-[#94AAB8] font-medium">
+                ${evalPace.dailyAvg.toLocaleString(undefined, { maximumFractionDigits: 0 })}/day
+              </span>
+              {" — "}est.{" "}
+              <span className="font-mono text-[#94AAB8] font-medium">
+                {Math.ceil(evalPace.remaining / evalPace.dailyAvg)}d
+              </span>{" "}
+              remaining
+            </span>
+          </div>
+        )}
+
         {/* Drawdown */}
         <div>
           <div className="flex justify-between items-baseline gap-2 mb-1">
@@ -323,7 +464,7 @@ export function AccountCard({
         {/* Lucid PA: scaling (only when program includes scaling tiers) */}
         {account.firm === "Lucid" && account.type === "PA" && rules.hasScaling && (
           <div className="flex items-center gap-2 pt-2 border-t border-white/10">
-            <div className="w-2 h-2 rounded-full bg-cyan-400" />
+            <div className="w-2 h-2 rounded-full bg-[#536878]" />
             <span className="text-xs text-muted-foreground">Scaling Plan Active</span>
           </div>
         )}
@@ -333,7 +474,7 @@ export function AccountCard({
             <Button
               type="button"
               size="sm"
-              className="text-xs bg-gradient-to-r from-emerald-600/90 to-cyan-600/90 hover:from-emerald-500 hover:to-cyan-500 shadow-md shadow-emerald-900/25"
+              className="text-xs bg-gradient-to-r from-emerald-600/90 to-[#536878]/90 hover:from-emerald-500 hover:to-[#536878] shadow-md shadow-emerald-900/20"
               onClick={(e) => {
                 e.stopPropagation()
                 onActivatePa()

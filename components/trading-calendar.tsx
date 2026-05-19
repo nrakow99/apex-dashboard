@@ -27,7 +27,10 @@ export function TradingCalendar({ account, dailyData, trades }: TradingCalendarP
   const [selectedDate, setSelectedDate] = useState<string | null>(null)
 
   const rules = getAccountRules(account)
-  const isPA = account.type === "PA"
+  // A qualifying day only makes sense when the account has payout rules and a
+  // defined profit-day threshold (PA accounts only — never Evals or Live).
+  const showQualifyingStars =
+    rules.hasPayouts && rules.minProfitDays > 0 && rules.minDailyProfit > 0
   const minQualifyingProfit = rules.minDailyProfit
 
   const getDaysInMonth = (date: Date) => {
@@ -95,14 +98,14 @@ export function TradingCalendar({ account, dailyData, trades }: TradingCalendarP
 
   const cellShell = cn(
     "relative flex flex-col items-center justify-center gap-0.5 transition-all rounded-xl",
-    "min-h-[54px] aspect-square sm:min-h-[64px] sm:rounded-2xl sm:aspect-square sm:min-w-0",
-    "lg:aspect-auto lg:w-full lg:justify-center lg:rounded-xl lg:p-2",
-    "lg:h-[clamp(92px,14dvh,122px)] lg:min-h-[92px] lg:max-h-[122px]",
+    "min-h-[50px] aspect-square sm:min-h-[58px] sm:rounded-2xl sm:aspect-square sm:min-w-0",
+    "lg:aspect-auto lg:w-full lg:justify-center lg:rounded-xl lg:p-1.5",
+    "lg:h-[clamp(78px,11.5dvh,104px)] lg:min-h-[78px] lg:max-h-[104px]",
   )
 
   return (
-    <Card className="flex flex-col rounded-[24px] glass-card p-3 sm:p-4 lg:p-5 lg:min-h-[min(920px,calc(100dvh-7.5rem))]">
-      <div className="mb-2 flex flex-shrink-0 flex-col gap-2 sm:gap-2.5 lg:mb-3 lg:gap-2.5">
+    <Card className="flex flex-col rounded-[24px] glass-card p-3 sm:p-4 lg:p-4 lg:min-h-[min(840px,calc(100dvh-6.5rem))]">
+      <div className="mb-1.5 flex flex-shrink-0 flex-col gap-1.5 sm:gap-2 lg:mb-2 lg:gap-2">
         <div className="flex items-center justify-between gap-2">
           <h2 className="text-base font-semibold sm:text-lg">Trading Calendar</h2>
         </div>
@@ -120,11 +123,11 @@ export function TradingCalendar({ account, dailyData, trades }: TradingCalendarP
       </div>
 
       {/* Weekday Headers */}
-      <div className="mb-2 grid flex-shrink-0 grid-cols-7 gap-1 sm:mb-2.5 sm:gap-1.5 lg:gap-2">
+      <div className="mb-1 grid flex-shrink-0 grid-cols-7 gap-1 sm:mb-1.5 sm:gap-1.5 lg:gap-1.5">
         {weekDays.map((day) => (
           <div
             key={day}
-            className="py-1.5 text-center text-[10px] font-medium text-muted-foreground sm:py-2 sm:text-xs lg:text-[11px]"
+            className="py-1 text-center text-[10px] font-medium text-muted-foreground sm:py-1.5 sm:text-xs lg:text-[11px]"
           >
             <span className="sm:hidden">{day.slice(0, 1)}</span>
             <span className="hidden sm:inline">{day}</span>
@@ -133,7 +136,7 @@ export function TradingCalendar({ account, dailyData, trades }: TradingCalendarP
       </div>
 
       {/* Calendar Grid */}
-      <div className="grid min-h-0 flex-1 grid-cols-7 gap-1.5 sm:gap-2 lg:gap-2 lg:content-start">
+      <div className="grid min-h-0 flex-1 grid-cols-7 gap-1 sm:gap-1.5 lg:gap-1.5 lg:content-start">
         {Array.from({ length: firstDayOfMonth }).map((_, i) => (
           <div key={`empty-${i}`} className={cn(cellShell, "pointer-events-none invisible border-0 bg-transparent shadow-none")} aria-hidden />
         ))}
@@ -145,7 +148,11 @@ export function TradingCalendar({ account, dailyData, trades }: TradingCalendarP
           const dow = new Date(currentDate.getFullYear(), currentDate.getMonth(), day).getDay()
           const isWeekend = dow === 0 || dow === 6
           const hasTrades = dayStats && dayStats.tradeCount > 0
-          const qualifiesForPayout = isPA && dayStats && dayStats.pnl >= minQualifyingProfit
+          const qualifiesForPayout =
+            showQualifyingStars &&
+            dayStats != null &&
+            dayStats.pnl > 0 &&
+            dayStats.pnl >= minQualifyingProfit
 
           return (
             <button
@@ -156,25 +163,30 @@ export function TradingCalendar({ account, dailyData, trades }: TradingCalendarP
               className={cn(
                 cellShell,
                 "p-1 sm:p-1.5",
-                hasTrades &&
-                  dayStats.pnl > 0 &&
-                  "bg-emerald-500/12 hover:bg-emerald-500/18 shadow-[0_0_20px_-14px_rgba(16,185,129,0.6)]",
-                hasTrades &&
-                  dayStats.pnl > 0 &&
-                  qualifiesForPayout &&
-                  "border sm:border-2 border-amber-400/60 ring-1 ring-amber-400/30 lg:border lg:ring-1",
+                // profit day base
                 hasTrades &&
                   dayStats.pnl > 0 &&
                   !qualifiesForPayout &&
-                  "border sm:border-2 border-emerald-500/30 lg:border lg:ring-1",
-                hasTrades && dayStats.pnl < 0 && "border sm:border-2 border-red-500/30 bg-red-500/12 hover:bg-red-500/20 lg:border",
+                  "bg-emerald-500/[0.09] hover:bg-emerald-500/[0.14] border border-emerald-500/25 shadow-[0_0_14px_-12px_rgba(16,185,129,0.25)]",
+                // qualifying (gold) day
+                hasTrades &&
+                  dayStats.pnl > 0 &&
+                  qualifiesForPayout &&
+                  "bg-amber-500/[0.08] hover:bg-amber-500/[0.13] border border-amber-400/50 shadow-[0_0_16px_-12px_rgba(251,191,36,0.30)]",
+                // loss day
+                hasTrades &&
+                  dayStats.pnl < 0 &&
+                  "border border-red-500/25 bg-red-500/[0.09] hover:bg-red-500/[0.14]",
+                // flat day
                 hasTrades &&
                   dayStats.pnl === 0 &&
-                  "border border-border/50 bg-muted/50 hover:bg-muted sm:border-2 lg:border",
-                !hasTrades && !isWeekend && "cursor-default border border-white/5 bg-slate-900/30",
-                !hasTrades && isWeekend && "cursor-default border border-white/5 bg-slate-900/20",
+                  "border border-white/[0.07] bg-white/[0.025] hover:bg-white/[0.04]",
+                // empty weekday
+                !hasTrades && !isWeekend && "cursor-default border border-white/[0.04] bg-[rgba(10,10,10,0.20)]",
+                // empty weekend
+                !hasTrades && isWeekend && "cursor-default border border-white/[0.025] bg-[rgba(10,10,10,0.12)] opacity-60",
                 isSelected && "ring-2 ring-primary ring-offset-1 ring-offset-background sm:ring-offset-2",
-                hasTrades && "cursor-pointer",
+                hasTrades && "cursor-pointer active:scale-[0.96] transition-transform",
               )}
             >
               {qualifiesForPayout && (
@@ -209,7 +221,7 @@ export function TradingCalendar({ account, dailyData, trades }: TradingCalendarP
                     <span className="sm:hidden">{dayStats.pnl > 0 ? "+" : ""}</span>
                     {Math.abs(dayStats.pnl).toLocaleString()}
                   </span>
-                  <div className="mt-0.5 hidden items-center gap-1 sm:flex lg:mt-1 lg:gap-1">
+                  <div className="mt-0.5 hidden items-center gap-1 sm:flex lg:mt-0.5 lg:gap-0.5">
                     <span className="text-[10px] tabular-nums text-muted-foreground lg:text-[10px] xl:text-[11px]">
                       {dayStats.tradeCount} trade{dayStats.tradeCount > 1 ? "s" : ""}
                     </span>
@@ -284,7 +296,7 @@ export function TradingCalendar({ account, dailyData, trades }: TradingCalendarP
                     {selectedDayStats.winPercent}%
                   </span>
                 </div>
-                {isPA && selectedDayStats.pnl >= minQualifyingProfit && (
+                {showQualifyingStars && selectedDayStats.pnl > 0 && selectedDayStats.pnl >= minQualifyingProfit && (
                   <>
                     <span className="hidden text-muted-foreground/30 sm:inline">|</span>
                     <span className="flex items-center gap-1 text-xs font-semibold text-amber-400 sm:text-sm">
@@ -353,25 +365,6 @@ export function TradingCalendar({ account, dailyData, trades }: TradingCalendarP
         </div>
       )}
 
-      {/* Legend */}
-      <div className="mt-3 flex flex-shrink-0 flex-wrap items-center justify-center gap-3 border-t border-border/50 pt-2.5 sm:mt-4 sm:gap-5 sm:pt-3 lg:mt-auto lg:gap-6 lg:pt-3">
-        <div className="flex items-center gap-1.5 text-xs text-muted-foreground sm:gap-2 sm:text-sm">
-          <div className="h-3 w-3 rounded border border-emerald-500/40 bg-emerald-500/20 sm:h-4 sm:w-4 sm:border-2" />
-          <span>Profit</span>
-        </div>
-        <div className="flex items-center gap-1.5 text-xs text-muted-foreground sm:gap-2 sm:text-sm">
-          <div className="h-3 w-3 rounded border border-red-500/40 bg-red-500/20 sm:h-4 sm:w-4 sm:border-2" />
-          <span>Loss</span>
-        </div>
-        {isPA && (
-          <div className="flex items-center gap-1.5 text-xs text-muted-foreground sm:gap-2 sm:text-sm">
-            <div className="flex h-3 w-3 items-center justify-center rounded border border-amber-400/60 bg-emerald-500/20 sm:h-4 sm:w-4 sm:border-2">
-              <Star className="h-1.5 w-1.5 fill-amber-400 text-amber-400 sm:h-2 sm:w-2" />
-            </div>
-            <span>Qualifying Day</span>
-          </div>
-        )}
-      </div>
     </Card>
   )
 }

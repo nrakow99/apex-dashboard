@@ -220,12 +220,12 @@ function ApexPayoutPanel({ account, eligibility, payouts, onAddPayout }: PayoutS
       {/* Eligibility banner */}
       <div className={cn(
         "p-2.5 rounded-xl mb-2.5 flex items-start gap-2.5",
-        isMaxedOut ? "bg-blue-500/10 border border-blue-500/30" :
+        isMaxedOut ? "bg-[#536878]/10 border border-[#536878]/25" :
         eligibility.isEligible ? "bg-emerald-500/10 border border-emerald-500/30" :
         "bg-amber-500/10 border border-amber-500/30"
       )}>
         {isMaxedOut
-          ? <CheckCircle2 className="h-5 w-5 text-blue-500 mt-0.5 shrink-0" />
+          ? <CheckCircle2 className="h-5 w-5 text-[#94AAB8] mt-0.5 shrink-0" />
           : eligibility.isEligible
             ? <CheckCircle2 className="h-5 w-5 text-emerald-500 mt-0.5 shrink-0" />
             : <XCircle className="h-5 w-5 text-amber-500 mt-0.5 shrink-0" />
@@ -233,7 +233,7 @@ function ApexPayoutPanel({ account, eligibility, payouts, onAddPayout }: PayoutS
         <div>
           <div className={cn(
             "font-semibold text-sm",
-            isMaxedOut ? "text-blue-500" : eligibility.isEligible ? "text-emerald-500" : "text-amber-500"
+            isMaxedOut ? "text-[#94AAB8]" : eligibility.isEligible ? "text-emerald-500" : "text-amber-500"
           )}>
             {isMaxedOut
               ? `All Payouts Complete (${eligibility.maxPayouts}/${eligibility.maxPayouts})`
@@ -399,7 +399,7 @@ function LucidPayoutPanel({ account, eligibility, payouts, onAddPayout }: Payout
       <div className="flex items-center justify-between mb-2.5">
         <div>
           <h2 className="text-lg font-semibold">Payout Status</h2>
-          <p className="text-xs text-cyan-300 mt-0.5">
+          <p className="text-xs text-slate-400 mt-0.5">
             LucidFlex — {Math.round(rules.payoutSplit * 100)}% / {Math.round((1 - rules.payoutSplit) * 100)}% split · min $
             {rules.minPayoutAmount} · max {Math.round(rules.payoutMaxPercent * 100)}% of cycle profit (cap $
             {rules.payoutAbsoluteCap.toLocaleString()})
@@ -412,7 +412,7 @@ function LucidPayoutPanel({ account, eligibility, payouts, onAddPayout }: Payout
               variant={eligibility.isEligible && !isMaxedOut ? "default" : "outline"}
               className={cn(
                 "gap-2",
-                eligibility.isEligible && !isMaxedOut && "bg-cyan-600 hover:bg-cyan-700",
+                eligibility.isEligible && !isMaxedOut && "bg-[#536878] hover:bg-[#4a5c6a]",
                 (!eligibility.isEligible || isMaxedOut) && "opacity-60"
               )}
             >
@@ -444,10 +444,10 @@ function LucidPayoutPanel({ account, eligibility, payouts, onAddPayout }: Payout
                 </div>
               </div>
               {previewAmount > 0 && (
-                <div className="p-3 rounded-lg bg-cyan-500/10 border border-cyan-500/30 text-sm space-y-1">
+                <div className="p-3 rounded-lg bg-[#536878]/10 border border-[#536878]/25 text-sm space-y-1">
                   <div className="flex justify-between">
                     <span className="text-muted-foreground">You receive ({Math.round(rules.payoutSplit * 100)}%)</span>
-                    <span className="font-mono font-bold text-cyan-300">${previewTrader.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
+                    <span className="font-mono font-bold text-slate-200">${previewTrader.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
                   </div>
                   <div className="flex justify-between">
                     <span className="text-muted-foreground">Lucid split ({Math.round((1 - rules.payoutSplit) * 100)}%)</span>
@@ -464,7 +464,7 @@ function LucidPayoutPanel({ account, eligibility, payouts, onAddPayout }: Payout
               </div>
               <div className="flex justify-end gap-3 pt-2">
                 <Button type="button" variant="ghost" onClick={() => setOpen(false)}>Cancel</Button>
-                <Button type="submit" className="bg-cyan-600 hover:bg-cyan-700">Log Payout</Button>
+                <Button type="submit" className="bg-[#536878] hover:bg-[#4a5c6a]">Log Payout</Button>
               </div>
             </form>
           </DialogContent>
@@ -474,12 +474,12 @@ function LucidPayoutPanel({ account, eligibility, payouts, onAddPayout }: Payout
       {/* Eligibility banner */}
       <div className={cn(
         "p-2.5 rounded-xl mb-2.5 flex items-start gap-2.5",
-        isMaxedOut ? "bg-blue-500/10 border border-blue-500/30" :
+        isMaxedOut ? "bg-[#536878]/10 border border-[#536878]/25" :
         eligibility.isEligible ? "bg-emerald-500/10 border border-emerald-500/30" :
         "bg-amber-500/10 border border-amber-500/30"
       )}>
         {isMaxedOut
-          ? <CheckCircle2 className="h-5 w-5 text-blue-500 mt-0.5 shrink-0" />
+          ? <CheckCircle2 className="h-5 w-5 text-[#94AAB8] mt-0.5 shrink-0" />
           : eligibility.isEligible
             ? <CheckCircle2 className="h-5 w-5 text-emerald-500 mt-0.5 shrink-0" />
             : <XCircle className="h-5 w-5 text-amber-500 mt-0.5 shrink-0" />
@@ -487,7 +487,7 @@ function LucidPayoutPanel({ account, eligibility, payouts, onAddPayout }: Payout
         <div>
           <div className={cn(
             "font-semibold text-sm",
-            isMaxedOut ? "text-blue-500" : eligibility.isEligible ? "text-emerald-500" : "text-amber-500"
+            isMaxedOut ? "text-[#94AAB8]" : eligibility.isEligible ? "text-emerald-500" : "text-amber-500"
           )}>
             {isMaxedOut
               ? `All Payouts Complete (${eligibility.maxPayouts}/${eligibility.maxPayouts})`
@@ -522,9 +522,9 @@ function LucidPayoutPanel({ account, eligibility, payouts, onAddPayout }: Payout
       </div>
 
       {/* Available to withdraw */}
-      <div className="p-2.5 rounded-xl bg-cyan-500/10 border border-cyan-500/30 mb-2.5">
-        <div className="text-xs text-cyan-300/80 mb-0.5">Max Payout Available</div>
-        <div className="text-xl font-bold font-mono text-cyan-300">
+      <div className="p-2.5 rounded-xl bg-[#536878]/10 border border-[#536878]/25 mb-2.5">
+        <div className="text-xs text-slate-400 mb-0.5">Max Payout Available</div>
+        <div className="text-xl font-bold font-mono text-slate-200">
           ${eligibility.maxWithdrawable >= eligibility.minPayoutAmount
             ? eligibility.maxWithdrawable.toLocaleString()
             : "0"}
@@ -533,10 +533,10 @@ function LucidPayoutPanel({ account, eligibility, payouts, onAddPayout }: Payout
           min(Cycle Profit × {Math.round((eligibility.payoutMaxPercent ?? 0.5) * 100)}%, ${(eligibility.payoutAbsoluteCap ?? 0).toLocaleString()}) cap
         </div>
         {eligibility.maxWithdrawable >= eligibility.minPayoutAmount && (
-          <div className="mt-2 pt-2 border-t border-cyan-500/20 space-y-0.5 text-xs">
+          <div className="mt-2 pt-2 border-t border-[#536878]/20 space-y-0.5 text-xs">
             <div className="flex justify-between">
               <span className="text-muted-foreground">You receive (90%)</span>
-              <span className="font-mono text-cyan-300">${traderReceives.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
+              <span className="font-mono text-slate-300">${traderReceives.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
             </div>
             <div className="flex justify-between">
               <span className="text-muted-foreground">Lucid split (10%)</span>
@@ -563,7 +563,7 @@ function LucidPayoutPanel({ account, eligibility, payouts, onAddPayout }: Payout
       <div className="grid grid-cols-2 gap-1.5">
         <div className="p-2 rounded-lg bg-muted/30 border border-border/50">
           <div className="text-xs text-muted-foreground mb-0.5">Total Withdrawn</div>
-          <div className="text-base font-bold font-mono text-cyan-300">${totalPayouts.toLocaleString()}</div>
+          <div className="text-base font-bold font-mono text-slate-200">${totalPayouts.toLocaleString()}</div>
         </div>
         <div className="p-2 rounded-lg bg-muted/30 border border-border/50">
           <div className="text-xs text-muted-foreground mb-0.5">Cycle Profit</div>
@@ -596,7 +596,7 @@ function PayoutHistory({ payouts, showSplit }: { payouts: Payout[]; showSplit?: 
                     {payout.notes && ` • ${payout.notes}`}
                   </div>
                   {showSplit && payout.traderReceived && (
-                    <div className="text-xs text-cyan-300">You received ${payout.traderReceived.toLocaleString(undefined, { minimumFractionDigits: 2 })}</div>
+                    <div className="text-xs text-slate-400">You received ${payout.traderReceived.toLocaleString(undefined, { minimumFractionDigits: 2 })}</div>
                   )}
                 </div>
               </div>
@@ -604,8 +604,9 @@ function PayoutHistory({ payouts, showSplit }: { payouts: Payout[]; showSplit?: 
           ))}
         </div>
       ) : (
-        <div className="text-sm text-muted-foreground text-center py-4 rounded-lg bg-muted/20 border border-border/30">
-          No payouts logged yet
+        <div className="py-6 px-4 text-center space-y-1 rounded-xl bg-[rgba(83,104,120,0.04)] border border-[rgba(83,104,120,0.12)]">
+          <p className="text-sm text-[#E5E4E2]/48">No payouts logged yet.</p>
+          <p className="text-xs text-[#E5E4E2]/28">Withdrawals will appear here once recorded.</p>
         </div>
       )}
     </div>

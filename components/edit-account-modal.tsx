@@ -36,7 +36,7 @@ function SegmentedControl<T extends string>({
   disabled?: boolean
 }) {
   return (
-    <div className="flex gap-0 p-1 bg-slate-900/70 border border-white/10 rounded-xl">
+    <div className="flex gap-0 p-1 bg-[#0F1115]/80 border border-white/[0.08] rounded-xl">
       {options.map((opt) => (
         <button
           key={opt.value}
@@ -46,8 +46,8 @@ function SegmentedControl<T extends string>({
           className={cn(
             "flex-1 py-1.5 px-2 rounded-lg text-sm font-medium transition-all",
             value === opt.value
-              ? "bg-gradient-to-r from-cyan-500/25 to-emerald-500/25 text-slate-100 shadow-[inset_0_0_0_1px_rgba(103,232,249,0.35)]"
-              : "text-slate-400 hover:text-slate-100",
+              ? "bg-[#1E2229] text-[#E5E4E2] shadow-[inset_0_0_0_1px_rgba(83,104,120,0.40),inset_0_1px_0_rgba(255,255,255,0.06)]"
+              : "text-slate-500 hover:text-[#E5E4E2]",
             disabled && "opacity-50 cursor-not-allowed"
           )}
         >

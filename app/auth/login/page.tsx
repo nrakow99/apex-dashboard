@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Card } from "@/components/ui/card"
-import { Loader2, TrendingUp } from "lucide-react"
+import { Loader2 } from "lucide-react"
 
 export default function LoginPage() {
   const [email, setEmail] = useState("")
@@ -87,11 +87,15 @@ export default function LoginPage() {
     <div className="min-h-screen premium-shell flex items-center justify-center p-4">
       <Card className="w-full max-w-md p-8 rounded-[28px] glass-card">
         <div className="flex flex-col items-center mb-8">
-          <div className="flex items-center gap-2 mb-2">
-            <div className="rounded-2xl border border-cyan-400/30 bg-cyan-500/10 p-2 shadow-[0_0_35px_-18px_rgba(34,211,238,0.95)]">
-              <TrendingUp className="h-7 w-7 text-emerald-400" />
-            </div>
-            <h1 className="text-2xl font-semibold tracking-tight">Apex Tracker</h1>
+          <div className="flex items-center gap-3 mb-2">
+            <svg width="36" height="36" viewBox="0 0 36 36" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+              <rect width="36" height="36" rx="10" fill="#0F1115"/>
+              <rect x="0.5" y="0.5" width="35" height="35" rx="9.5" stroke="rgba(83,104,120,0.40)" strokeWidth="1"/>
+              <rect x="10" y="11" width="16" height="2.5" rx="1.25" fill="#94AAB8" opacity="0.7"/>
+              <rect x="10" y="16" width="11" height="2.5" rx="1.25" fill="#34d399" opacity="0.85"/>
+              <rect x="10" y="21" width="13" height="2.5" rx="1.25" fill="#536878" opacity="0.55"/>
+            </svg>
+            <h1 className="text-2xl font-semibold tracking-tight text-[#E5E4E2]">PropDash</h1>
           </div>
           <p className="text-sm text-muted-foreground">
             {mode === "login" && "Sign in to your account"}
@@ -123,7 +127,7 @@ export default function LoginPage() {
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 required
-                className="bg-slate-950/50"
+                className="autofill-dark"
               />
             </div>
 
@@ -138,7 +142,7 @@ export default function LoginPage() {
                   onChange={(e) => setPassword(e.target.value)}
                   required
                   minLength={6}
-                  className="bg-slate-950/50"
+                  className="autofill-dark"
                 />
               </div>
             )}
@@ -158,15 +162,15 @@ export default function LoginPage() {
               <button
                 type="button"
                 onClick={() => { setMode("magic"); setError(null); setMessage(null) }}
-                className="text-primary hover:underline"
+                className="text-[#94AAB8] hover:text-[#E5E4E2] transition-colors"
               >
                 Use magic link instead
               </button>
-              <span className="mx-2">·</span>
+              <span className="mx-2 text-slate-600">·</span>
               <button
                 type="button"
                 onClick={() => { setMode("signup"); setError(null); setMessage(null) }}
-                className="text-primary hover:underline"
+                className="text-[#94AAB8] hover:text-[#E5E4E2] transition-colors"
               >
                 Create account
               </button>
@@ -176,7 +180,7 @@ export default function LoginPage() {
             <button
               type="button"
               onClick={() => { setMode("login"); setError(null); setMessage(null) }}
-              className="text-primary hover:underline"
+              className="text-[#94AAB8] hover:text-[#E5E4E2] transition-colors"
             >
               Already have an account? Sign in
             </button>
@@ -185,7 +189,7 @@ export default function LoginPage() {
             <button
               type="button"
               onClick={() => { setMode("login"); setError(null); setMessage(null) }}
-              className="text-primary hover:underline"
+              className="text-[#94AAB8] hover:text-[#E5E4E2] transition-colors"
             >
               Use password instead
             </button>

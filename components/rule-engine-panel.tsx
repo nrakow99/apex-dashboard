@@ -147,7 +147,7 @@ export function RuleEnginePanel({
           <span className={cn(
             "text-xs font-medium px-2.5 py-1 rounded-full border",
             account.firm === "Lucid"
-              ? "bg-cyan-500/10 text-cyan-300 border-cyan-500/30"
+              ? "bg-[#536878]/[0.12] text-[#A0B4BF] border-[#536878]/30"
               : "bg-orange-500/10 text-orange-400 border-orange-500/30"
           )}>
             {firmLabel}
@@ -156,7 +156,7 @@ export function RuleEnginePanel({
             "text-xs font-medium px-2.5 py-1 rounded-full border",
             account.type === "Eval" && "bg-amber-500/10 text-amber-500 border-amber-500/30",
             account.type === "PA"   && "bg-emerald-500/10 text-emerald-500 border-emerald-500/30",
-            account.type === "Live" && "bg-blue-500/10 text-blue-500 border-blue-500/30",
+            account.type === "Live" && "bg-[#536878]/10 text-[#94AAB8] border-[#536878]/25",
           )}>
             {account.type}
           </span>
@@ -260,7 +260,7 @@ export function RuleEnginePanel({
             <div className="space-y-2 text-sm">
               <div className="flex justify-between gap-3">
                 <span className="text-muted-foreground">Current Tier</span>
-                <span className="font-mono font-semibold text-slate-100">Level {apexPaScaling.level}</span>
+                <span className="font-mono font-semibold text-[#E5E4E2]">Level {apexPaScaling.level}</span>
               </div>
               <div className="flex justify-between gap-3">
                 <span className="text-muted-foreground">Max Contracts</span>
@@ -306,7 +306,7 @@ export function RuleEnginePanel({
                   </div>
                   <Progress
                     value={apexPaScaling.progressToNextTierPercent}
-                    className="h-1.5 [&>div]:bg-gradient-to-r from-cyan-500/90 to-emerald-500/90"
+                    className="h-1.5 [&>div]:bg-gradient-to-r from-[#536878]/90 to-emerald-500/90"
                   />
                 </div>
               )}

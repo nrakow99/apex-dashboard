@@ -68,6 +68,8 @@ import {
 } from "@/lib/pa-activation"
 import { createClient } from "@/lib/supabase/client"
 import type { Trade, Payout, Account, AccountType, DrawdownType, Firm, DailyPnL } from "@/lib/types"
+import { saveTradeMeta, type TradeMeta } from "@/lib/trade-meta"
+import { RiskMetricsCard } from "@/components/risk-metrics-card"
 
 type ViewMode = "accounts" | "detail"
 
@@ -383,19 +385,19 @@ export default function Dashboard() {
     }
   }
 
-  const handleAddTrade = async (tradeData: {
-    date: string
-    accountId: string
-    symbol: string
-    pnl: number
-    notes?: string
-  }) => {
+  const handleAddTrade = async (
+    tradeData: { date: string; accountId: string; symbol: string; pnl: number; notes?: string },
+    meta: TradeMeta = {},
+  ) => {
     setIsSaving(true)
     try {
       const result = await createTrade(tradeData)
 
       if (result.error) throw result.error
       if (result.data) {
+        // Persist extended metadata (time, grade, discipline, etc.) client-side
+        const hasMetaData = Object.values(meta).some((v) => v !== undefined && v !== "" && (!Array.isArray(v) || v.length > 0))
+        if (hasMetaData) saveTradeMeta(result.data.id, meta)
         setAllTrades([...allTrades, result.data])
         toast({ title: "Trade added", description: `${result.data.symbol} trade recorded.` })
       }
@@ -439,13 +441,11 @@ export default function Dashboard() {
   }
 
   // UPDATE handlers
-  const handleUpdateTrade = async (tradeId: string, updates: {
-    date: string
-    accountId: string
-    symbol: string
-    pnl: number
-    notes?: string
-  }) => {
+  const handleUpdateTrade = async (
+    tradeId: string,
+    updates: { date: string; accountId: string; symbol: string; pnl: number; notes?: string },
+    meta: TradeMeta = {},
+  ) => {
     setIsSaving(true)
     try {
       const result = await updateTrade(tradeId, {
@@ -458,6 +458,8 @@ export default function Dashboard() {
 
       if (result.error) throw result.error
       if (result.data) {
+        // Always save/overwrite meta on edit (preserves partial updates)
+        saveTradeMeta(tradeId, meta)
         setAllTrades(allTrades.map(t => t.id === tradeId ? result.data! : t))
         setEditingTrade(null)
         toast({ title: "Trade updated", description: "Your changes have been saved." })
@@ -617,7 +619,7 @@ export default function Dashboard() {
     return (
       <div className="min-h-screen premium-shell flex items-center justify-center">
         <div className="glass-card rounded-3xl px-8 py-7 flex flex-col items-center gap-3">
-          <div className="rounded-full border border-cyan-300/20 bg-cyan-500/10 p-3 shadow-[0_0_28px_-16px_rgba(34,211,238,0.7)]">
+            <div className="rounded-full border border-[#536878]/25 bg-[#536878]/[0.08] p-3 shadow-[0_0_28px_-16px_rgba(83,104,120,0.45)]">
             <Loader2 className="h-7 w-7 animate-spin text-emerald-400" />
           </div>
           <p className="text-sm text-slate-300">Loading your accounts...</p>
@@ -839,13 +841,13 @@ export default function Dashboard() {
 
             {accountsOverview && (
               <div className="mb-4 grid grid-cols-2 gap-2.5 sm:mb-5 sm:gap-3 lg:grid-cols-4">
-                <div className="rounded-2xl border border-white/10 bg-slate-950/40 px-3 py-2.5 shadow-[inset_0_1px_0_0_rgba(255,255,255,0.04)] backdrop-blur-sm sm:px-4 sm:py-3">
+                <div className="rounded-2xl border border-white/[0.07] bg-[#111318]/75 px-3 py-2.5 shadow-[inset_0_1px_0_0_rgba(255,255,255,0.04)] backdrop-blur-sm sm:px-4 sm:py-3">
                   <p className="text-[10px] font-medium uppercase tracking-[0.14em] text-slate-500">Total balance</p>
-                  <p className="mt-0.5 font-mono text-base font-semibold tracking-tight text-slate-100 sm:text-lg">
+                  <p className="mt-0.5 font-mono text-base font-semibold tracking-tight text-[#E5E4E2] sm:text-lg">
                     {formatCurrency(accountsOverview.totalBalance)}
                   </p>
                 </div>
-                <div className="rounded-2xl border border-white/10 bg-slate-950/40 px-3 py-2.5 shadow-[inset_0_1px_0_0_rgba(255,255,255,0.04)] backdrop-blur-sm sm:px-4 sm:py-3">
+                <div className="rounded-2xl border border-white/[0.07] bg-[#111318]/75 px-3 py-2.5 shadow-[inset_0_1px_0_0_rgba(255,255,255,0.04)] backdrop-blur-sm sm:px-4 sm:py-3">
                   <p className="text-[10px] font-medium uppercase tracking-[0.14em] text-slate-500">Total net PnL</p>
                   <p
                     className={cn(
@@ -856,19 +858,19 @@ export default function Dashboard() {
                     {formatPnL(accountsOverview.totalNetPnL)}
                   </p>
                 </div>
-                <div className="rounded-2xl border border-white/10 bg-slate-950/40 px-3 py-2.5 shadow-[inset_0_1px_0_0_rgba(255,255,255,0.04)] backdrop-blur-sm sm:px-4 sm:py-3">
+                <div className="rounded-2xl border border-white/[0.07] bg-[#111318]/75 px-3 py-2.5 shadow-[inset_0_1px_0_0_rgba(255,255,255,0.04)] backdrop-blur-sm sm:px-4 sm:py-3">
                   <p className="text-[10px] font-medium uppercase tracking-[0.14em] text-slate-500">Accounts</p>
-                  <p className="mt-0.5 font-mono text-base font-semibold tracking-tight text-slate-100 sm:text-lg">
+                  <p className="mt-0.5 font-mono text-base font-semibold tracking-tight text-[#E5E4E2] sm:text-lg">
                     {accountsOverview.accountCount}
                   </p>
                 </div>
-                <div className="col-span-2 rounded-2xl border border-white/10 bg-slate-950/40 px-3 py-2.5 shadow-[inset_0_1px_0_0_rgba(255,255,255,0.04)] backdrop-blur-sm sm:col-span-1 sm:px-4 sm:py-3">
+                <div className="col-span-2 rounded-2xl border border-white/[0.07] bg-[#111318]/75 px-3 py-2.5 shadow-[inset_0_1px_0_0_rgba(255,255,255,0.04)] backdrop-blur-sm sm:col-span-1 sm:px-4 sm:py-3">
                   <p className="text-[10px] font-medium uppercase tracking-[0.14em] text-slate-500">Milestones</p>
                   <p className="mt-0.5 text-xs leading-snug text-slate-300 sm:text-sm">
                     <span className="font-mono text-emerald-400/95">{accountsOverview.evalPassed}</span>
                     <span className="text-muted-foreground"> eval passed</span>
                     <span className="mx-1.5 text-muted-foreground/40">·</span>
-                    <span className="font-mono text-cyan-400/95">{accountsOverview.payoutEligible}</span>
+                    <span className="font-mono text-[#E5E4E2]">{accountsOverview.payoutEligible}</span>
                     <span className="text-muted-foreground"> PA payout-ready</span>
                   </p>
                 </div>
@@ -886,36 +888,38 @@ export default function Dashboard() {
                     account.type === "Eval" &&
                     isEvalEligibleForPaActivation(account, actStats, tradesForAccount, payoutsForAccount)
                   return (
-                  <div key={account.id} className="relative group">
-                    <AccountCard
-                      account={account}
-                      trades={allTrades}
-                      payouts={allPayouts}
-                      onClick={() => handleSelectAccount(account)}
-                      onActivatePa={
-                        eligibleForPa
-                          ? () => {
-                              setActivatePaEval(account)
-                              setActivatePaOpen(true)
-                            }
-                          : undefined
-                      }
-                    />
-                    {/* Account Actions Menu */}
-                    <div className="absolute top-4 right-12 sm:top-6 sm:right-14 opacity-0 group-hover:opacity-100 transition-opacity">
+                  <AccountCard
+                    key={account.id}
+                    account={account}
+                    trades={allTrades}
+                    payouts={allPayouts}
+                    onClick={() => handleSelectAccount(account)}
+                    onActivatePa={
+                      eligibleForPa
+                        ? () => {
+                            setActivatePaEval(account)
+                            setActivatePaOpen(true)
+                          }
+                        : undefined
+                    }
+                    menuSlot={
                       <DropdownMenu>
                         <DropdownMenuTrigger asChild>
-                      <Button variant="ghost" size="icon" className="h-8 w-8 border border-white/10 bg-slate-900/70" onClick={(e) => e.stopPropagation()}>
-                            <MoreHorizontal className="h-4 w-4" />
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-7 w-7 rounded-lg border border-white/[0.10] bg-[rgba(10,12,16,0.80)] backdrop-blur-sm text-slate-500 hover:text-[#E5E4E2] hover:border-[#536878]/30"
+                          >
+                            <MoreHorizontal className="h-3.5 w-3.5" />
                           </Button>
                         </DropdownMenuTrigger>
                         <DropdownMenuContent align="end" className="w-40">
-                          <DropdownMenuItem onClick={(e) => { e.stopPropagation(); setEditingAccount(account) }}>
+                          <DropdownMenuItem onClick={() => setEditingAccount(account)}>
                             <Pencil className="h-4 w-4 mr-2" />
                             Edit Account
                           </DropdownMenuItem>
-                          <DropdownMenuItem 
-                            onClick={(e) => { e.stopPropagation(); setDeletingAccount(account) }}
+                          <DropdownMenuItem
+                            onClick={() => setDeletingAccount(account)}
                             className="text-red-500 focus:text-red-500"
                           >
                             <Trash2 className="h-4 w-4 mr-2" />
@@ -923,8 +927,8 @@ export default function Dashboard() {
                           </DropdownMenuItem>
                         </DropdownMenuContent>
                       </DropdownMenu>
-                    </div>
-                  </div>
+                    }
+                  />
                   )
                 })}
               </div>
@@ -960,7 +964,7 @@ export default function Dashboard() {
                   {selectedAccount.type === "Eval" && selectedEvalEligible && (
                       <Button
                         size="sm"
-                        className="bg-gradient-to-r from-emerald-600/90 to-cyan-600/90 hover:from-emerald-500 hover:to-cyan-500 shadow-md shadow-emerald-900/25"
+                        className="bg-gradient-to-r from-emerald-600/90 to-[#536878]/90 hover:from-emerald-500 hover:to-[#536878] shadow-sm shadow-emerald-900/20"
                         onClick={() => {
                           setActivatePaEval(selectedAccount)
                           setActivatePaOpen(true)
@@ -977,7 +981,11 @@ export default function Dashboard() {
                   {/* Account Actions Menu */}
                   <DropdownMenu>
                     <DropdownMenuTrigger asChild>
-                      <Button variant="ghost" size="icon" className="border border-white/10 bg-slate-900/60">
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-8 w-8 border border-white/[0.10] bg-[rgba(10,12,16,0.70)] text-slate-500 hover:text-[#E5E4E2] hover:border-[#536878]/30"
+                      >
                         <MoreHorizontal className="h-4 w-4" />
                       </Button>
                     </DropdownMenuTrigger>
@@ -1037,7 +1045,7 @@ export default function Dashboard() {
                         type="button"
                         variant="ghost"
                         size="icon"
-                        className="h-7 w-7 text-slate-400 hover:text-cyan-300"
+                        className="h-7 w-7 text-slate-500 hover:text-[#E5E4E2]/70"
                         title="Edit intraday floor"
                         onClick={() => {
                           setManualIntradayModalMode("floor")
@@ -1085,7 +1093,7 @@ export default function Dashboard() {
                         type="button"
                         variant="ghost"
                         size="icon"
-                        className="h-7 w-7 text-slate-400 hover:text-cyan-300"
+                        className="h-7 w-7 text-slate-500 hover:text-[#E5E4E2]/70"
                         title="Edit drawdown remaining"
                         onClick={() => {
                           setManualIntradayModalMode("remaining")
@@ -1102,6 +1110,13 @@ export default function Dashboard() {
               {shouldShowAccountRangeCard(selectedAccount) && (
                 <div className="mb-4 sm:mb-5">
                   <AccountRangeCard account={selectedAccount} stats={displayAccountStats!} />
+                </div>
+              )}
+
+              {/* ROW 1.5: Risk Metrics */}
+              {accountTrades.length > 0 && (
+                <div className="mb-3 sm:mb-4">
+                  <RiskMetricsCard trades={accountTrades} />
                 </div>
               )}
 

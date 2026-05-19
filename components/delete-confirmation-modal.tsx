@@ -50,7 +50,7 @@ export function DeleteConfirmationModal({
         </AlertDialogHeader>
         
         {itemDetails && (
-          <div className="my-4 p-4 bg-slate-900/55 rounded-xl border border-white/10">
+          <div className="my-4 p-4 bg-[#0F1115]/70 rounded-xl border border-white/[0.07]">
             {itemDetails}
           </div>
         )}

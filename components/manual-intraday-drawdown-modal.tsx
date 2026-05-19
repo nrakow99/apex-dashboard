@@ -119,7 +119,7 @@ export function ManualIntradayDrawdownModal({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-[400px] border-white/10 bg-slate-950/95 backdrop-blur-xl">
+      <DialogContent className="sm:max-w-[400px]">
         <DialogHeader>
           <DialogTitle>Update intraday drawdown</DialogTitle>
           <DialogDescription className="text-slate-400">
@@ -130,7 +130,7 @@ export function ManualIntradayDrawdownModal({
           <div className="space-y-2">
             <Label>Update using</Label>
             <Select value={mode} onValueChange={(v) => setMode(v as ManualDrawdownMode)}>
-              <SelectTrigger className="bg-slate-900/70 border-white/15">
+              <SelectTrigger className="bg-[#0F1115]/80 border-white/[0.10]">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
@@ -148,7 +148,7 @@ export function ManualIntradayDrawdownModal({
               type="number"
               step="0.01"
               min={0}
-              className="font-mono bg-slate-900/70 border-white/15"
+              className="font-mono bg-[#0F1115]/80 border-white/[0.10]"
               value={rawInput}
               onChange={(e) => {
                 setRawInput(e.target.value)
@@ -167,7 +167,7 @@ export function ManualIntradayDrawdownModal({
             <Button
               type="button"
               variant="outline"
-              className="border-white/15 text-slate-300"
+              className="border-white/[0.10] text-slate-400"
               disabled={isSaving || !hasManualOverride}
               onClick={() => void handleClear()}
             >

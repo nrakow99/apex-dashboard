@@ -240,7 +240,7 @@ export function PerformanceChart({ data, account, stats }: PerformanceChartProps
               {`Balance over time · ${getPerformanceChartBalanceSubtitle(account)}`}
             </p>
           </div>
-          <div className="flex gap-1 p-1 bg-slate-900/65 border border-white/10 rounded-xl">
+          <div className="flex gap-1 p-1 bg-[#0F1115]/80 border border-white/[0.07] rounded-xl">
             <Button
               size="sm"
               variant={view === "balance" ? "secondary" : "ghost"}
@@ -276,7 +276,7 @@ export function PerformanceChart({ data, account, stats }: PerformanceChartProps
                   <stop offset="100%" stopColor="#6b7280" stopOpacity={0} />
                 </linearGradient>
               </defs>
-              <CartesianGrid strokeDasharray="3 3" stroke="#374151" strokeOpacity={0.3} vertical={false} />
+              <CartesianGrid strokeDasharray="3 3" stroke="#252b34" strokeOpacity={0.55} vertical={false} />
               <XAxis
                 dataKey="date"
                 axisLine={false}
@@ -310,7 +310,7 @@ export function PerformanceChart({ data, account, stats }: PerformanceChartProps
           </ResponsiveContainer>
           {/* Centered message overlay */}
           <div className="absolute inset-0 flex items-center justify-center">
-            <div className="bg-slate-950/85 backdrop-blur-xl border border-white/10 rounded-2xl px-6 py-4 text-center max-w-sm">
+            <div className="bg-[#111318]/92 backdrop-blur-xl border border-white/[0.07] rounded-2xl px-6 py-4 text-center max-w-sm">
               <TrendingUp className="h-8 w-8 text-muted-foreground mx-auto mb-2" />
               <p className="text-sm text-muted-foreground">
                 No trades yet. Add your first trade to track performance.
@@ -346,7 +346,7 @@ export function PerformanceChart({ data, account, stats }: PerformanceChartProps
               : "Daily profit and loss"}
           </p>
         </div>
-        <div className="flex gap-1 p-1 bg-slate-900/65 border border-white/10 rounded-xl">
+        <div className="flex gap-1 p-1 bg-[#0F1115]/80 border border-white/[0.07] rounded-xl">
           <Button
             size="sm"
             variant={view === "balance" ? "secondary" : "ghost"}
@@ -373,24 +373,24 @@ export function PerformanceChart({ data, account, stats }: PerformanceChartProps
             <AreaChart data={chartData} margin={{ top: 6, right: 12, left: 2, bottom: 0 }}>
               <defs>
                 <linearGradient id="balanceGradient" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="0%" stopColor="#34d399" stopOpacity={0.28} />
-                  <stop offset="45%" stopColor="#10b981" stopOpacity={0.14} />
+                  <stop offset="0%" stopColor="#34d399" stopOpacity={0.18} />
+                  <stop offset="45%" stopColor="#10b981" stopOpacity={0.08} />
                   <stop offset="100%" stopColor="#10b981" stopOpacity={0} />
                 </linearGradient>
                 <linearGradient id="drawdownGradient" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="0%" stopColor="#ef4444" stopOpacity={0.1} />
+                  <stop offset="0%" stopColor="#ef4444" stopOpacity={0.07} />
                   <stop offset="100%" stopColor="#ef4444" stopOpacity={0} />
                 </linearGradient>
                 {/* Glow filter for active point */}
                 <filter id="glow" x="-50%" y="-50%" width="200%" height="200%">
-                  <feGaussianBlur stdDeviation="4" result="coloredBlur" />
+                  <feGaussianBlur stdDeviation="2.5" result="coloredBlur" />
                   <feMerge>
                     <feMergeNode in="coloredBlur" />
                     <feMergeNode in="SourceGraphic" />
                   </feMerge>
                 </filter>
               </defs>
-              <CartesianGrid strokeDasharray="3 3" stroke="#374151" strokeOpacity={0.22} vertical={false} />
+              <CartesianGrid strokeDasharray="3 3" stroke="#252b34" strokeOpacity={0.55} vertical={false} />
               <XAxis
                 dataKey="date"
                 axisLine={false}
@@ -459,7 +459,7 @@ export function PerformanceChart({ data, account, stats }: PerformanceChartProps
                 type="monotone"
                 dataKey="balance"
                 stroke="#34d399"
-                strokeWidth={3}
+                strokeWidth={2.5}
                 fill="url(#balanceGradient)"
                 dot={(props) => {
                   const { cx, cy, payload } = props
@@ -488,22 +488,22 @@ export function PerformanceChart({ data, account, stats }: PerformanceChartProps
             <AreaChart data={chartData.filter((d) => !d.isStartingPoint)} margin={{ top: 6, right: 12, left: 2, bottom: 0 }}>
               <defs>
                 <linearGradient id="pnlGradientPos" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="0%" stopColor="#34d399" stopOpacity={0.26} />
+                  <stop offset="0%" stopColor="#34d399" stopOpacity={0.16} />
                   <stop offset="100%" stopColor="#10b981" stopOpacity={0} />
                 </linearGradient>
                 <linearGradient id="pnlGradientNeg" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="0%" stopColor="#ef4444" stopOpacity={0.22} />
+                  <stop offset="0%" stopColor="#ef4444" stopOpacity={0.14} />
                   <stop offset="100%" stopColor="#ef4444" stopOpacity={0} />
                 </linearGradient>
                 <filter id="glow" x="-50%" y="-50%" width="200%" height="200%">
-                  <feGaussianBlur stdDeviation="4" result="coloredBlur" />
+                  <feGaussianBlur stdDeviation="2.5" result="coloredBlur" />
                   <feMerge>
                     <feMergeNode in="coloredBlur" />
                     <feMergeNode in="SourceGraphic" />
                   </feMerge>
                 </filter>
               </defs>
-              <CartesianGrid strokeDasharray="3 3" stroke="#374151" strokeOpacity={0.22} vertical={false} />
+              <CartesianGrid strokeDasharray="3 3" stroke="#252b34" strokeOpacity={0.55} vertical={false} />
               <XAxis
                 dataKey="date"
                 axisLine={false}
@@ -534,7 +534,7 @@ export function PerformanceChart({ data, account, stats }: PerformanceChartProps
                 type="monotone"
                 dataKey="dailyPnl"
                 stroke="#34d399"
-                strokeWidth={3}
+                strokeWidth={2.5}
                 fill="url(#pnlGradientPos)"
                 dot={(props) => {
                   const { cx, cy, payload } = props

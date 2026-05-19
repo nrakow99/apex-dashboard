@@ -16,7 +16,7 @@ const jetbrainsMono = JetBrains_Mono({
 })
 
 export const metadata = {
-  title: "Apex Tracker - Prop Trading Dashboard",
+  title: "PropDash - Prop Trading Dashboard",
   description: "Track your prop trading performance across Eval, PA, and Live accounts",
 }
 

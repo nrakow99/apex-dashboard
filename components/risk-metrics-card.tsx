@@ -1,0 +1,141 @@
+"use client"
+
+import { useMemo } from "react"
+import { cn } from "@/lib/utils"
+import type { Trade } from "@/lib/types"
+import { loadAllTradeMeta } from "@/lib/trade-meta"
+import { getSession, type TradingSession } from "@/lib/sessions"
+
+interface RiskMetricsCardProps {
+  trades: Trade[]
+}
+
+interface Metric {
+  label: string
+  value: string
+  sub?: string
+  color?: "positive" | "negative" | "neutral" | "amber"
+}
+
+function calcConsecutiveLosses(trades: Trade[]): number {
+  const sorted = [...trades].sort((a, b) => a.date.localeCompare(b.date))
+  let max = 0
+  let cur = 0
+  for (const t of sorted) {
+    if (t.pnl < 0) { cur++; max = Math.max(max, cur) }
+    else cur = 0
+  }
+  return max
+}
+
+function calcBestSession(trades: Trade[]): { session: TradingSession | null; pnl: number } | null {
+  if (typeof window === "undefined") return null
+  const allMeta = loadAllTradeMeta()
+  const sessionTotals: Partial<Record<TradingSession, number>> = {}
+
+  for (const t of trades) {
+    const meta = allMeta[t.id]
+    const session = getSession(meta?.time)
+    if (session) {
+      sessionTotals[session] = (sessionTotals[session] ?? 0) + t.pnl
+    }
+  }
+
+  const entries = Object.entries(sessionTotals) as [TradingSession, number][]
+  if (entries.length === 0) return null
+  const [session, pnl] = entries.sort(([, a], [, b]) => b - a)[0]
+  return { session, pnl }
+}
+
+export function RiskMetricsCard({ trades }: RiskMetricsCardProps) {
+  const metrics = useMemo<Metric[]>(() => {
+    if (trades.length === 0) return []
+
+    const wins = trades.filter((t) => t.pnl > 0)
+    const losses = trades.filter((t) => t.pnl < 0)
+    const winRate = trades.length > 0 ? (wins.length / trades.length) * 100 : 0
+
+    const avgWin = wins.length > 0 ? wins.reduce((s, t) => s + t.pnl, 0) / wins.length : 0
+    const avgLoss = losses.length > 0 ? Math.abs(losses.reduce((s, t) => s + t.pnl, 0) / losses.length) : 0
+
+    const grossProfit = wins.reduce((s, t) => s + t.pnl, 0)
+    const grossLoss = Math.abs(losses.reduce((s, t) => s + t.pnl, 0))
+    const profitFactor = grossLoss > 0 ? grossProfit / grossLoss : grossProfit > 0 ? Infinity : 0
+
+    const maxConsecLosses = calcConsecutiveLosses(trades)
+
+    const bestSession = calcBestSession(trades)
+
+    const fmt = (n: number) => `$${Math.abs(n).toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`
+
+    return [
+      {
+        label: "Win Rate",
+        value: `${winRate.toFixed(0)}%`,
+        sub: `${wins.length}W / ${losses.length}L`,
+        color: winRate >= 55 ? "positive" : winRate >= 40 ? "amber" : "negative",
+      },
+      {
+        label: "Avg Win",
+        value: fmt(avgWin),
+        sub: wins.length > 0 ? `${wins.length} winners` : "—",
+        color: "positive",
+      },
+      {
+        label: "Avg Loss",
+        value: avgLoss > 0 ? fmt(avgLoss) : "—",
+        sub: losses.length > 0 ? `${losses.length} losers` : "No losses",
+        color: losses.length > 0 ? "negative" : "neutral",
+      },
+      {
+        label: "Profit Factor",
+        value: isFinite(profitFactor) ? profitFactor.toFixed(2) : "∞",
+        sub: profitFactor >= 1.5 ? "Strong" : profitFactor >= 1 ? "Positive" : "Needs work",
+        color: profitFactor >= 1.5 ? "positive" : profitFactor >= 1 ? "amber" : "negative",
+      },
+      {
+        label: "Best Session",
+        value: bestSession ? bestSession.session ?? "—" : "—",
+        sub: bestSession ? `+${fmt(bestSession.pnl)}` : "Log times",
+        color: "neutral",
+      },
+      {
+        label: "Max Consec. Loss",
+        value: maxConsecLosses > 0 ? `${maxConsecLosses}` : "0",
+        sub: maxConsecLosses >= 3 ? "Review risk" : maxConsecLosses > 0 ? "Acceptable" : "Clean",
+        color: maxConsecLosses >= 3 ? "negative" : maxConsecLosses > 0 ? "amber" : "positive",
+      },
+    ]
+  }, [trades])
+
+  if (trades.length === 0) return null
+
+  return (
+    <div className="grid grid-cols-3 sm:grid-cols-6 gap-2 sm:gap-2.5">
+      {metrics.map((m) => (
+        <div
+          key={m.label}
+          className="glass-card rounded-[14px] px-3 py-2.5 flex flex-col gap-1 hover:bg-[rgba(83,104,120,0.06)] transition-colors"
+        >
+          <span className="text-[10px] font-medium uppercase tracking-wider text-[#E5E4E2]/35">
+            {m.label}
+          </span>
+          <span
+            className={cn(
+              "text-base font-bold tabular-nums leading-none",
+              m.color === "positive" && "text-emerald-500",
+              m.color === "negative" && "text-red-500",
+              m.color === "amber" && "text-amber-400",
+              m.color === "neutral" && "text-[#E5E4E2]/75",
+            )}
+          >
+            {m.value}
+          </span>
+          {m.sub && (
+            <span className="text-[10px] text-[#E5E4E2]/30 leading-tight">{m.sub}</span>
+          )}
+        </div>
+      ))}
+    </div>
+  )
+}

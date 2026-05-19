@@ -66,7 +66,7 @@ export function ActivatePaModal({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-[440px] border-white/10 bg-slate-950/95 backdrop-blur-xl shadow-[0_0_0_1px_rgba(255,255,255,0.06)]">
+      <DialogContent className="sm:max-w-[440px]">
         <DialogHeader>
           <DialogTitle className="text-xl tracking-tight">
             Activate Performance Account
@@ -74,7 +74,7 @@ export function ActivatePaModal({
         </DialogHeader>
 
         <form onSubmit={handleSubmit} className="space-y-4 mt-2">
-          <div className="rounded-xl border border-white/10 bg-slate-900/50 p-3 text-sm space-y-2">
+          <div className="rounded-xl border border-white/[0.07] bg-[#0F1115]/60 p-3 text-sm space-y-2">
             <div className="flex justify-between gap-3">
               <span className="text-muted-foreground">Firm</span>
               <span className="font-medium text-slate-100">{evalAccount.firm}</span>
@@ -101,7 +101,7 @@ export function ActivatePaModal({
             <div className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
               PA rule summary
             </div>
-            <ul className="rounded-xl border border-white/10 bg-slate-900/40 px-3 py-2.5 text-xs text-slate-300 space-y-1.5 list-disc list-inside">
+            <ul className="rounded-xl border border-white/[0.07] bg-[#0F1115]/50 px-3 py-2.5 text-xs text-slate-400 space-y-1.5 list-disc list-inside">
               {summaryLines.map((line) => (
                 <li key={line}>{line}</li>
               ))}
@@ -147,7 +147,7 @@ export function ActivatePaModal({
             <Button
               type="submit"
               disabled={isSubmitting}
-              className="bg-gradient-to-r from-emerald-600 to-cyan-600 hover:from-emerald-500 hover:to-cyan-500 text-white shadow-lg shadow-emerald-900/30"
+              className="bg-gradient-to-r from-emerald-600 to-[#3d5a6a] hover:from-emerald-500 hover:to-[#4a6b7e] text-white shadow-md shadow-emerald-900/20"
             >
               {isSubmitting ? (
                 <>
