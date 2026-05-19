@@ -156,10 +156,10 @@ function ApexPayoutPanel({ account, eligibility, payouts, onAddPayout }: PayoutS
   })()
 
   return (
-    <Card className="p-3.5 sm:p-4 rounded-[24px] glass-card h-fit">
+    <Card className="p-3 sm:p-4 rounded-[24px] glass-card h-fit">
       {/* Header */}
-      <div className="flex items-center justify-between mb-2.5">
-        <h2 className="text-lg font-semibold">Payout Status</h2>
+      <div className="flex items-center justify-between mb-2 sm:mb-2.5">
+        <h2 className="text-base sm:text-lg font-semibold">Payout Status</h2>
         <Dialog open={open} onOpenChange={(v) => { setOpen(v); if (!v) setError(null) }}>
           <DialogTrigger asChild>
             <Button
@@ -394,11 +394,11 @@ function LucidPayoutPanel({ account, eligibility, payouts, onAddPayout }: Payout
   const previewFirm   = previewAmount * (1 - rules.payoutSplit)
 
   return (
-    <Card className="p-3.5 sm:p-4 rounded-[24px] glass-card h-fit">
+    <Card className="p-3 sm:p-4 rounded-[24px] glass-card h-fit">
       {/* Header */}
-      <div className="flex items-center justify-between mb-2.5">
+      <div className="flex items-center justify-between mb-2 sm:mb-2.5">
         <div>
-          <h2 className="text-lg font-semibold">Payout Status</h2>
+          <h2 className="text-base sm:text-lg font-semibold">Payout Status</h2>
           <p className="text-xs text-slate-400 mt-0.5">
             LucidFlex — {Math.round(rules.payoutSplit * 100)}% / {Math.round((1 - rules.payoutSplit) * 100)}% split · min $
             {rules.minPayoutAmount} · max {Math.round(rules.payoutMaxPercent * 100)}% of cycle profit (cap $

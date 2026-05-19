@@ -109,18 +109,18 @@ export function RiskMetricsCard({ trades }: RiskMetricsCardProps) {
   if (trades.length === 0) return null
 
   return (
-    <div className="grid grid-cols-3 sm:grid-cols-6 gap-2 sm:gap-2.5">
+    <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-1.5 sm:gap-2.5">
       {metrics.map((m) => (
         <div
           key={m.label}
-          className="glass-card rounded-[14px] px-3 py-2.5 flex flex-col gap-1 hover:bg-[rgba(83,104,120,0.06)] transition-colors"
+          className="glass-card rounded-[14px] px-2.5 py-2 sm:px-3 sm:py-2.5 flex flex-col gap-0.5 sm:gap-1 hover:bg-[rgba(83,104,120,0.06)] transition-colors"
         >
-          <span className="text-[10px] font-medium uppercase tracking-wider text-[#E5E4E2]/35">
+          <span className="text-[9px] sm:text-[10px] font-medium uppercase tracking-wider text-[#E5E4E2]/35 leading-tight">
             {m.label}
           </span>
           <span
             className={cn(
-              "text-base font-bold tabular-nums leading-none",
+              "text-sm sm:text-base font-bold tabular-nums leading-none",
               m.color === "positive" && "text-emerald-500",
               m.color === "negative" && "text-red-500",
               m.color === "amber" && "text-amber-400",
@@ -130,7 +130,7 @@ export function RiskMetricsCard({ trades }: RiskMetricsCardProps) {
             {m.value}
           </span>
           {m.sub && (
-            <span className="text-[10px] text-[#E5E4E2]/30 leading-tight">{m.sub}</span>
+            <span className="text-[9px] sm:text-[10px] text-[#E5E4E2]/30 leading-tight">{m.sub}</span>
           )}
         </div>
       ))}

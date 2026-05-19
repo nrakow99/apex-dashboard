@@ -98,14 +98,14 @@ export function TradingCalendar({ account, dailyData, trades }: TradingCalendarP
 
   const cellShell = cn(
     "relative flex flex-col items-center justify-center gap-0.5 transition-all rounded-xl",
-    "min-h-[50px] aspect-square sm:min-h-[58px] sm:rounded-2xl sm:aspect-square sm:min-w-0",
+    "min-h-[42px] aspect-square sm:min-h-[58px] sm:rounded-2xl sm:aspect-square sm:min-w-0",
     "lg:aspect-auto lg:w-full lg:justify-center lg:rounded-xl lg:p-1.5",
     "lg:h-[clamp(78px,11.5dvh,104px)] lg:min-h-[78px] lg:max-h-[104px]",
   )
 
   return (
-    <Card className="flex flex-col rounded-[24px] glass-card p-3 sm:p-4 lg:p-4 lg:min-h-[min(840px,calc(100dvh-6.5rem))]">
-      <div className="mb-1.5 flex flex-shrink-0 flex-col gap-1.5 sm:gap-2 lg:mb-2 lg:gap-2">
+    <Card className="flex flex-col rounded-[24px] glass-card p-2.5 sm:p-4 lg:p-4 lg:min-h-[min(840px,calc(100dvh-6.5rem))]">
+      <div className="mb-1 flex flex-shrink-0 flex-col gap-1 sm:gap-2 lg:mb-2 lg:gap-2">
         <div className="flex items-center justify-between gap-2">
           <h2 className="text-base font-semibold sm:text-lg">Trading Calendar</h2>
         </div>
@@ -123,7 +123,7 @@ export function TradingCalendar({ account, dailyData, trades }: TradingCalendarP
       </div>
 
       {/* Weekday Headers */}
-      <div className="mb-1 grid flex-shrink-0 grid-cols-7 gap-1 sm:mb-1.5 sm:gap-1.5 lg:gap-1.5">
+      <div className="mb-0.5 grid flex-shrink-0 grid-cols-7 gap-0.5 sm:mb-1.5 sm:gap-1.5 lg:gap-1.5">
         {weekDays.map((day) => (
           <div
             key={day}
@@ -136,7 +136,7 @@ export function TradingCalendar({ account, dailyData, trades }: TradingCalendarP
       </div>
 
       {/* Calendar Grid */}
-      <div className="grid min-h-0 flex-1 grid-cols-7 gap-1 sm:gap-1.5 lg:gap-1.5 lg:content-start">
+      <div className="grid min-h-0 flex-1 grid-cols-7 gap-0.5 sm:gap-1.5 lg:gap-1.5 lg:content-start">
         {Array.from({ length: firstDayOfMonth }).map((_, i) => (
           <div key={`empty-${i}`} className={cn(cellShell, "pointer-events-none invisible border-0 bg-transparent shadow-none")} aria-hidden />
         ))}
@@ -196,7 +196,7 @@ export function TradingCalendar({ account, dailyData, trades }: TradingCalendarP
               )}
               <span
                 className={cn(
-                  "text-[15px] font-semibold leading-none sm:text-base lg:text-[15px] xl:text-[16px]",
+                  "text-[13px] font-semibold leading-none sm:text-base lg:text-[15px] xl:text-[16px]",
                   hasTrades && dayStats.pnl > 0 && "text-emerald-400",
                   hasTrades && dayStats.pnl < 0 && "text-red-400",
                   hasTrades && dayStats.pnl === 0 && "text-muted-foreground",
@@ -209,7 +209,7 @@ export function TradingCalendar({ account, dailyData, trades }: TradingCalendarP
                 <>
                   <span
                     className={cn(
-                      "mt-0 max-w-full truncate font-mono text-[10px] font-bold sm:mt-0.5 sm:text-[11px] lg:text-[12px]",
+                      "mt-0 max-w-full truncate font-mono text-[9px] font-bold sm:mt-0.5 sm:text-[11px] lg:text-[12px]",
                       dayStats.pnl > 0
                         ? "text-emerald-400"
                         : dayStats.pnl < 0
@@ -248,8 +248,8 @@ export function TradingCalendar({ account, dailyData, trades }: TradingCalendarP
 
       {/* Expanded Day Detail Panel */}
       {selectedDate && selectedTrades.length > 0 && selectedDayStats && (
-        <div className="mt-4 border-t border-border/50 pt-4 sm:mt-6 sm:pt-6 lg:mt-3 lg:pt-3">
-          <div className="mb-4 flex items-start justify-between sm:mb-5 lg:mb-3">
+        <div className="mt-3 border-t border-border/50 pt-3 sm:mt-6 sm:pt-6 lg:mt-3 lg:pt-3">
+          <div className="mb-3 flex items-start justify-between sm:mb-5 lg:mb-3">
             <div className="min-w-0 flex-1">
               <h3 className="text-base font-semibold sm:text-lg">
                 {new Date(selectedDate).toLocaleDateString("en-US", {

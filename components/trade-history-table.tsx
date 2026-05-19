@@ -258,7 +258,7 @@ export function TradeHistoryTable({ trades, onEditTrade, onDeleteTrade }: TradeH
                   onClick={() => isMulti ? toggleDate(group.date) : singleTrade ? toggleTrade(singleTrade.id) : undefined}
                 >
                   {/* Expand chevron */}
-                  <TableCell className="py-3 px-3 sm:px-4 w-9">
+                  <TableCell className="py-2 sm:py-3 px-2 sm:px-4 w-9">
                     <ChevronRight
                       className={cn(
                         "h-3.5 w-3.5 text-muted-foreground/40 transition-transform duration-200",
@@ -268,7 +268,7 @@ export function TradeHistoryTable({ trades, onEditTrade, onDeleteTrade }: TradeH
                   </TableCell>
 
                   {/* Date */}
-                  <TableCell className="py-3 sm:py-3.5 px-2 sm:px-3">
+                  <TableCell className="py-2 sm:py-3.5 px-2 sm:px-3">
                     <div className="flex flex-col gap-0.5">
                       <span className="text-xs sm:text-sm font-medium text-[#E5E4E2]/80">
                         {formatGroupDate(group.date)}
@@ -297,7 +297,7 @@ export function TradeHistoryTable({ trades, onEditTrade, onDeleteTrade }: TradeH
                   </TableCell>
 
                   {/* Daily PnL */}
-                  <TableCell className="text-right py-3 sm:py-3.5 px-2 sm:px-3">
+                  <TableCell className="text-right py-2 sm:py-3.5 px-2 sm:px-3">
                     <span className={cn(
                       "font-mono font-bold text-sm sm:text-[15px] tabular-nums",
                       isProfit ? "text-emerald-500" : isLoss ? "text-red-500" : "text-muted-foreground",

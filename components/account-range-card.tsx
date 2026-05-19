@@ -196,7 +196,7 @@ export function AccountRangeCard({ account, stats }: AccountRangeCardProps) {
   )
 
   return (
-    <Card className="glass-card overflow-hidden rounded-[20px] border-white/10 bg-slate-950/35 px-3 py-3.5 shadow-[inset_0_1px_0_0_rgba(255,255,255,0.04)] backdrop-blur-xl sm:rounded-[24px] sm:px-4 sm:py-4">
+    <Card className="glass-card overflow-hidden rounded-[20px] border-white/10 bg-slate-950/35 px-2.5 py-3 shadow-[inset_0_1px_0_0_rgba(255,255,255,0.04)] backdrop-blur-xl sm:rounded-[24px] sm:px-4 sm:py-4">
       <div className="mb-1.5 flex items-center justify-between gap-2">
         <h2 className="text-[10px] font-semibold uppercase tracking-[0.16em] text-slate-400">
           Account range
@@ -251,34 +251,37 @@ export function AccountRangeCard({ account, stats }: AccountRangeCardProps) {
         </div>
       </div>
 
-      {/* Three columns */}
-      <div className="grid grid-cols-1 gap-2 border-t border-white/10 pt-2.5 sm:grid-cols-3 sm:gap-3 sm:pt-3 lg:gap-6">
-        <div className="space-y-0.5 text-center sm:text-left sm:pr-1">
-          <p className="text-[9px] font-medium uppercase tracking-[0.14em] text-slate-500 sm:text-[10px]">{leftFloorTitle}</p>
-          {leftFloorDisplay}
+      {/* Three columns — always 3-col even on mobile (compact) */}
+      <div className="grid grid-cols-3 gap-1.5 border-t border-white/10 pt-2 sm:gap-3 sm:pt-3 lg:gap-6">
+        <div className="space-y-0.5 text-left sm:pr-1">
+          <p className="text-[8px] sm:text-[10px] font-medium uppercase tracking-[0.10em] sm:tracking-[0.14em] text-slate-500">{leftFloorTitle}</p>
+          <div className="[&_.font-mono]:text-sm sm:[&_.font-mono]:text-base lg:[&_.font-mono]:text-lg [&_span]:text-[9px] sm:[&_span]:text-xs">
+            {leftFloorDisplay}
+          </div>
         </div>
         <div className="space-y-0.5 text-center">
-          <p className="text-[9px] font-medium uppercase tracking-[0.14em] text-slate-500 sm:text-[10px]">Current balance</p>
-          <p className="font-mono text-lg font-semibold tracking-tight text-slate-50 sm:text-xl">
+          <p className="text-[8px] sm:text-[10px] font-medium uppercase tracking-[0.10em] sm:tracking-[0.14em] text-slate-500">Balance</p>
+          <p className="font-mono text-sm sm:text-xl font-semibold tracking-tight text-slate-50">
             {formatCurrency(stats.currentBalance)}
           </p>
-          <p className="text-[10px] text-slate-500">balance</p>
         </div>
-        <div className="space-y-0.5 text-center sm:text-right sm:pl-1">
-          <p className="text-[9px] font-medium uppercase tracking-[0.14em] text-slate-500 sm:text-[10px]">{rightTitle}</p>
-          {rightValue}
+        <div className="space-y-0.5 text-right sm:pl-1">
+          <p className="text-[8px] sm:text-[10px] font-medium uppercase tracking-[0.10em] sm:tracking-[0.14em] text-slate-500">{rightTitle}</p>
+          <div className="[&_.font-mono]:text-sm sm:[&_.font-mono]:text-base lg:[&_.font-mono]:text-lg [&_span]:text-[9px] sm:[&_span]:text-xs">
+            {rightValue}
+          </div>
         </div>
       </div>
 
       {/* Bottom metrics */}
-      <div className="mt-2.5 flex flex-col gap-2 border-t border-white/10 pt-2.5 sm:mt-3 sm:flex-row sm:items-end sm:justify-between sm:gap-6 sm:pt-3">
+      <div className="mt-2 flex flex-col gap-1.5 border-t border-white/10 pt-2 sm:mt-3 sm:flex-row sm:items-end sm:justify-between sm:gap-6 sm:pt-3">
         <div className="min-w-0 flex-1">
-          <p className="text-[9px] font-medium uppercase tracking-[0.14em] text-slate-500 sm:text-[10px]">{bottomLeftLabel}</p>
-          <div className="mt-1 text-sm sm:text-base">{bottomLeftValue}</div>
+          <p className="text-[8px] sm:text-[10px] font-medium uppercase tracking-[0.10em] sm:tracking-[0.14em] text-slate-500">{bottomLeftLabel}</p>
+          <div className="mt-0.5 sm:mt-1 text-xs sm:text-base">{bottomLeftValue}</div>
         </div>
         <div className="min-w-0 flex-1 text-right">
-          <p className="text-[9px] font-medium uppercase tracking-[0.14em] text-slate-500 sm:text-[10px]">{bottomRightLabel}</p>
-          <div className="mt-1 text-sm sm:text-base">{bottomRightValue}</div>
+          <p className="text-[8px] sm:text-[10px] font-medium uppercase tracking-[0.10em] sm:tracking-[0.14em] text-slate-500">{bottomRightLabel}</p>
+          <div className="mt-0.5 sm:mt-1 text-xs sm:text-base">{bottomRightValue}</div>
         </div>
       </div>
 

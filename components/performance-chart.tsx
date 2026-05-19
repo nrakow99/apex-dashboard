@@ -231,7 +231,7 @@ export function PerformanceChart({ data, account, stats }: PerformanceChartProps
   // Empty state - uses same flex layout as main chart for consistency
   if (data.length === 0) {
     return (
-      <Card className="h-[272px] sm:h-[308px] lg:h-[332px] flex flex-col p-2.5 sm:p-3 rounded-[24px] glass-card">
+      <Card className="h-[240px] sm:h-[308px] lg:h-[332px] flex flex-col p-2.5 sm:p-3 rounded-[24px] glass-card">
         {/* Header */}
         <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
           <div>
@@ -335,7 +335,7 @@ export function PerformanceChart({ data, account, stats }: PerformanceChartProps
   }
 
   return (
-      <Card className="h-[272px] sm:h-[308px] lg:h-[332px] flex flex-col p-2.5 sm:p-3 rounded-[24px] glass-card">
+      <Card className="h-[240px] sm:h-[308px] lg:h-[332px] flex flex-col p-2.5 sm:p-3 rounded-[24px] glass-card">
       {/* Header */}
       <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
         <div>
@@ -563,35 +563,35 @@ export function PerformanceChart({ data, account, stats }: PerformanceChartProps
       </div>
       {/* Legend */}
       {view === "balance" ? (
-        <div className="flex flex-wrap items-center gap-x-4 gap-y-1 pt-2 text-xs text-muted-foreground">
-          <div className="flex items-center gap-2">
-            <div className="w-5 h-0.5 bg-emerald-500 rounded" />
-            <span>Account Balance</span>
+        <div className="flex flex-wrap items-center gap-x-2 sm:gap-x-4 gap-y-1 pt-1.5 sm:pt-2 text-[10px] sm:text-xs text-muted-foreground">
+          <div className="flex items-center gap-1.5">
+            <div className="w-4 sm:w-5 h-0.5 bg-emerald-500 rounded" />
+            <span>Balance</span>
           </div>
-          <div className="flex items-center gap-2">
-            <div className="w-5 h-0.5 border-t-2 border-dashed border-red-500" />
+          <div className="flex items-center gap-1.5">
+            <div className="w-4 sm:w-5 h-0.5 border-t-2 border-dashed border-red-500" />
             <span>{getChartFloorLineLabel(account)}</span>
           </div>
-          <div className="flex items-center gap-2">
-            <div className="w-5 h-0.5 border-t border-dashed border-muted-foreground/50" />
-            <span>Starting Balance</span>
+          <div className="hidden sm:flex items-center gap-1.5">
+            <div className="w-4 sm:w-5 h-0.5 border-t border-dashed border-muted-foreground/50" />
+            <span>Start</span>
           </div>
           {account.type === "PA" && (
-            <div className="flex items-center gap-2">
-              <div className="w-5 h-0.5 border-t-2 border-dashed border-yellow-500" />
+            <div className="flex items-center gap-1.5">
+              <div className="w-4 sm:w-5 h-0.5 border-t-2 border-dashed border-yellow-500" />
               <span>Payout Threshold</span>
             </div>
           )}
         </div>
       ) : (
-        <div className="flex flex-wrap items-center gap-x-4 gap-y-1 pt-2 text-xs text-muted-foreground">
-          <div className="flex items-center gap-2">
-            <div className="w-3 h-3 rounded-full bg-emerald-500" />
-            <span>Profit Day</span>
+        <div className="flex flex-wrap items-center gap-x-2 sm:gap-x-4 gap-y-1 pt-1.5 sm:pt-2 text-[10px] sm:text-xs text-muted-foreground">
+          <div className="flex items-center gap-1.5">
+            <div className="w-2.5 h-2.5 sm:w-3 sm:h-3 rounded-full bg-emerald-500" />
+            <span>Profit</span>
           </div>
-          <div className="flex items-center gap-2">
-            <div className="w-3 h-3 rounded-full bg-red-500" />
-            <span>Loss Day</span>
+          <div className="flex items-center gap-1.5">
+            <div className="w-2.5 h-2.5 sm:w-3 sm:h-3 rounded-full bg-red-500" />
+            <span>Loss</span>
           </div>
         </div>
       )}

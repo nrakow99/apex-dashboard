@@ -959,8 +959,10 @@ export default function Dashboard() {
                     </p>
                   </div>
                 </div>
-                <div className="flex items-center gap-2 sm:gap-4 ml-12 sm:ml-0 flex-wrap justify-end">
-                  <LiveClock />
+                <div className="flex items-center gap-2 sm:gap-4 flex-wrap justify-end mt-1 sm:mt-0">
+                  <div className="hidden sm:block">
+                    <LiveClock />
+                  </div>
                   {selectedAccount.type === "Eval" && selectedEvalEligible && (
                       <Button
                         size="sm"

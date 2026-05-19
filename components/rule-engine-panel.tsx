@@ -63,13 +63,13 @@ function RuleCard({
 }) {
   return (
     <div className={cn(
-      "p-4 rounded-2xl border transition-all",
+      "p-3 sm:p-4 rounded-xl sm:rounded-2xl border transition-all",
       status === "danger"  ? "bg-red-500/10 border-red-500/30" :
       status === "warning" ? "bg-amber-500/10 border-amber-500/30" :
       "bg-slate-900/45 border-white/10",
       className
     )}>
-      <div className="flex items-center justify-between mb-3">
+      <div className="flex items-center justify-between mb-2 sm:mb-3">
         <span className="text-sm font-semibold">{title}</span>
         {status && <StatusIcon status={status} />}
       </div>
@@ -140,9 +140,9 @@ export function RuleEnginePanel({
   const firmLabel = account.firm === "Lucid" ? "Lucid" : account.firm ?? "Apex"
 
   return (
-    <Card className="p-5 rounded-[26px] glass-card">
-      <div className="flex items-center justify-between mb-5">
-        <h2 className="text-lg font-semibold">Rule Status</h2>
+    <Card className="p-3 sm:p-5 rounded-[22px] sm:rounded-[26px] glass-card">
+      <div className="flex items-center justify-between mb-3 sm:mb-5">
+        <h2 className="text-base sm:text-lg font-semibold">Rule Status</h2>
         <div className="flex items-center gap-2">
           <span className={cn(
             "text-xs font-medium px-2.5 py-1 rounded-full border",
@@ -163,7 +163,7 @@ export function RuleEnginePanel({
         </div>
       </div>
 
-      <div className={cn("grid gap-3 sm:gap-4", ruleGridClass)}>
+      <div className={cn("grid gap-2 sm:gap-4", ruleGridClass)}>
 
         {/* ── Active Floor ─────────────────────────────────────────────────── */}
         <RuleCard title={getRuleEngineFloorCardTitle(account)} status={drawdownStatus}>
