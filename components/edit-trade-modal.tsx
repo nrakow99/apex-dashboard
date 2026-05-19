@@ -33,10 +33,13 @@ import {
   DISCIPLINE_POSITIVE,
   DISCIPLINE_NEGATIVE,
   GRADE_STYLES,
+  DIRECTION_OPTIONS,
+  DIRECTION_SELECTOR_STYLES,
   getTradeMeta,
   type TradeGrade,
   type DisciplineTag,
   type TradeMeta,
+  type TradeDirection,
 } from "@/lib/trade-meta"
 import {
   SESSION_OPTIONS,
@@ -44,6 +47,7 @@ import {
   resolveSession,
   type SessionId,
 } from "@/lib/sessions"
+import { TRADING_SYMBOLS } from "@/lib/trading-symbols"
 
 /** Parse a YYYY-MM-DD string as local midnight (avoids UTC day-shift). */
 function parseDateStr(dateStr: string): Date {
@@ -141,28 +145,53 @@ export function EditTradeModal({ trade, accounts, open, onOpenChange, onSave, is
             </Popover>
           </div>
 
-          {/* Session */}
-          <div className="space-y-1.5">
-            <Label className="text-[11px] text-muted-foreground uppercase tracking-wider">Session</Label>
-            <div className="flex gap-2">
-              {SESSION_OPTIONS.map(({ id, label }) => {
-                const s = SESSION_SELECTOR_STYLES[id]
-                const active = meta.session === id
-                return (
-                  <button
-                    key={id}
-                    type="button"
-                    disabled={isSaving}
-                    onClick={() => setMeta({ ...meta, session: id })}
-                    className={cn(
-                      "flex-1 text-[11px] font-semibold py-1.5 rounded-lg border transition-all",
-                      active ? s.active : s.inactive,
-                    )}
-                  >
-                    {label}
-                  </button>
-                )
-              })}
+          {/* Session + Direction */}
+          <div className="grid grid-cols-[1fr_auto] gap-3 items-end">
+            <div className="space-y-1.5">
+              <Label className="text-[11px] text-muted-foreground uppercase tracking-wider">Session</Label>
+              <div className="flex gap-1.5">
+                {SESSION_OPTIONS.map(({ id, label }) => {
+                  const s = SESSION_SELECTOR_STYLES[id]
+                  const active = meta.session === id
+                  return (
+                    <button
+                      key={id}
+                      type="button"
+                      disabled={isSaving}
+                      onClick={() => setMeta({ ...meta, session: id })}
+                      className={cn(
+                        "flex-1 text-[11px] font-semibold py-1.5 rounded-lg border transition-all",
+                        active ? s.active : s.inactive,
+                      )}
+                    >
+                      {label}
+                    </button>
+                  )
+                })}
+              </div>
+            </div>
+            <div className="space-y-1.5">
+              <Label className="text-[11px] text-muted-foreground uppercase tracking-wider">Direction</Label>
+              <div className="flex gap-1.5">
+                {DIRECTION_OPTIONS.map(({ id, label }) => {
+                  const s = DIRECTION_SELECTOR_STYLES[id]
+                  const active = meta.direction === id
+                  return (
+                    <button
+                      key={id}
+                      type="button"
+                      disabled={isSaving}
+                      onClick={() => setMeta({ ...meta, direction: id as TradeDirection })}
+                      className={cn(
+                        "px-3 text-[11px] font-semibold py-1.5 rounded-lg border transition-all",
+                        active ? s.active : s.inactive,
+                      )}
+                    >
+                      {label}
+                    </button>
+                  )
+                })}
+              </div>
             </div>
           </div>
 
@@ -184,12 +213,9 @@ export function EditTradeModal({ trade, accounts, open, onOpenChange, onSave, is
               <Select value={formData.symbol} onValueChange={(v) => setFormData({ ...formData, symbol: v })} disabled={isSaving}>
                 <SelectTrigger className="bg-background font-mono"><SelectValue /></SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="NQM6">NQM6</SelectItem>
-                  <SelectItem value="ESM6">ESM6</SelectItem>
-                  <SelectItem value="NQ">NQ</SelectItem>
-                  <SelectItem value="ES">ES</SelectItem>
-                  <SelectItem value="MNQ">MNQ</SelectItem>
-                  <SelectItem value="MES">MES</SelectItem>
+                  {TRADING_SYMBOLS.map((sym) => (
+                    <SelectItem key={sym} value={sym}>{sym}</SelectItem>
+                  ))}
                 </SelectContent>
               </Select>
             </div>

@@ -28,6 +28,8 @@ export type DisciplineTag =
   | (typeof DISCIPLINE_POSITIVE)[number]
   | (typeof DISCIPLINE_NEGATIVE)[number]
 
+export type TradeDirection = "long" | "short"
+
 export interface TradeMeta {
   /**
    * Stable session identifier — preferred over the legacy `time` field.
@@ -37,6 +39,7 @@ export interface TradeMeta {
   session?: SessionId
   /** @deprecated Legacy HH:MM time string — kept for backward-compat only */
   time?: string
+  direction?: TradeDirection
   grade?: TradeGrade
   disciplineTags?: DisciplineTag[]
   entryPrice?: number
@@ -72,6 +75,39 @@ export function deleteTradeMeta(tradeId: string): void {
   const all = loadAllTradeMeta()
   delete all[tradeId]
   localStorage.setItem(META_KEY, JSON.stringify(all))
+}
+
+// ── Grade display helpers ────────────────────────────────────────────────────
+
+// ── Direction display helpers ────────────────────────────────────────────────
+
+export const DIRECTION_OPTIONS: { id: TradeDirection; label: string }[] = [
+  { id: "long",  label: "Long"  },
+  { id: "short", label: "Short" },
+]
+
+export const DIRECTION_SELECTOR_STYLES: Record<
+  TradeDirection,
+  { inactive: string; active: string }
+> = {
+  long:  {
+    inactive: "border-white/[0.08] text-[#E5E4E2]/28 hover:text-[#E5E4E2]/50 hover:border-[rgba(83,104,120,0.24)]",
+    active:   "bg-[rgba(83,104,120,0.18)] border-[rgba(83,104,120,0.38)] text-[#94AAB8]",
+  },
+  short: {
+    inactive: "border-white/[0.08] text-[#E5E4E2]/28 hover:text-[#E5E4E2]/50 hover:border-white/[0.14]",
+    active:   "bg-[rgba(229,228,226,0.07)] border-white/[0.18] text-[#E5E4E2]/80",
+  },
+}
+
+export const DIRECTION_BADGE_STYLES: Record<TradeDirection, string> = {
+  long:  "bg-[rgba(83,104,120,0.14)] text-[#94AAB8] border-[rgba(83,104,120,0.26)]",
+  short: "bg-[rgba(229,228,226,0.06)] text-[#E5E4E2]/55 border-white/[0.12]",
+}
+
+export const DIRECTION_LABELS: Record<TradeDirection, string> = {
+  long:  "Long",
+  short: "Short",
 }
 
 // ── Grade display helpers ────────────────────────────────────────────────────

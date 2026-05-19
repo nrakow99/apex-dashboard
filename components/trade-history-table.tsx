@@ -13,7 +13,7 @@ import {
 import { cn } from "@/lib/utils"
 import { ChevronRight, MoreHorizontal, Pencil, Trash2 } from "lucide-react"
 import type { Trade } from "@/lib/types"
-import { loadAllTradeMeta, GRADE_STYLES, DISCIPLINE_POSITIVE, type TradeMeta } from "@/lib/trade-meta"
+import { loadAllTradeMeta, GRADE_STYLES, DISCIPLINE_POSITIVE, DIRECTION_BADGE_STYLES, DIRECTION_LABELS, type TradeMeta } from "@/lib/trade-meta"
 import { resolveSession, SESSION_LABELS, SESSION_BADGE_STYLES } from "@/lib/sessions"
 
 interface TradeHistoryTableProps {
@@ -66,12 +66,27 @@ function GradePill({ grade }: { grade?: string }) {
   )
 }
 
+// ── Direction badge ──────────────────────────────────────────────────────────
+
+function DirectionBadge({ direction }: { direction?: string }) {
+  if (!direction) return null
+  const style = DIRECTION_BADGE_STYLES[direction as keyof typeof DIRECTION_BADGE_STYLES]
+  const label = DIRECTION_LABELS[direction as keyof typeof DIRECTION_LABELS]
+  if (!style || !label) return null
+  return (
+    <span className={cn("text-[10px] font-semibold uppercase tracking-wider px-1.5 py-0.5 rounded border", style)}>
+      {label}
+    </span>
+  )
+}
+
 // ── Expanded detail panel ────────────────────────────────────────────────────
 
 function TradeDetailPanel({ trade, meta, colSpan }: { trade: Trade; meta: TradeMeta; colSpan: number }) {
   const session = resolveSession(meta)
   const hasMeta =
-    session || meta.grade || (meta.disciplineTags && meta.disciplineTags.length > 0) ||
+    session || meta.grade || meta.direction ||
+    (meta.disciplineTags && meta.disciplineTags.length > 0) ||
     meta.entryPrice || meta.exitPrice || meta.contracts || trade.notes
 
   return (
@@ -84,9 +99,10 @@ function TradeDetailPanel({ trade, meta, colSpan }: { trade: Trade; meta: TradeM
             ) : (
               <div className="space-y-2">
                 {/* Badges row */}
-                {(session || meta.grade) && (
+                {(session || meta.direction || meta.grade) && (
                   <div className="flex items-center gap-1.5 flex-wrap">
                     {session && <SessionBadge meta={meta} />}
+                    {meta.direction && <DirectionBadge direction={meta.direction} />}
                     {meta.grade && <GradePill grade={meta.grade} />}
                   </div>
                 )}
@@ -273,9 +289,16 @@ export function TradeHistoryTable({ trades, onEditTrade, onDeleteTrade }: TradeH
                       <span className="text-xs sm:text-sm font-medium text-[#E5E4E2]/80">
                         {formatGroupDate(group.date)}
                       </span>
-                      {/* Session badge for single-trade rows */}
-                      {singleTrade && resolveSession(allMeta[singleTrade.id] ?? {}) && (
-                        <SessionBadge meta={allMeta[singleTrade.id] ?? {}} />
+                      {/* Session + Direction badges for single-trade rows */}
+                      {singleTrade && (
+                        <div className="flex items-center gap-1 flex-wrap">
+                          {resolveSession(allMeta[singleTrade.id] ?? {}) && (
+                            <SessionBadge meta={allMeta[singleTrade.id] ?? {}} />
+                          )}
+                          {allMeta[singleTrade.id]?.direction && (
+                            <DirectionBadge direction={allMeta[singleTrade.id].direction} />
+                          )}
+                        </div>
                       )}
                     </div>
                   </TableCell>
