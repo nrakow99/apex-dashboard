@@ -41,7 +41,8 @@ export function getTimeUntilClose(): string {
 }
 
 export function getTodayDateStr(): string {
-  return new Date().toISOString().split("T")[0]
+  const d = new Date()
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`
 }
 
 // ─── Daily PnL calculation ────────────────────────────────────────────────────
@@ -369,7 +370,8 @@ export function getPayoutEligibility(
 // ─── Initial seed data ────────────────────────────────────────────────────────
 
 function getTodayDate(): string {
-  return new Date().toISOString().split("T")[0]
+  const d = new Date()
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`
 }
 
 const INITIAL_ACCOUNTS: Account[] = [

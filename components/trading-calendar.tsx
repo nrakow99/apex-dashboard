@@ -1,6 +1,7 @@
 "use client"
 
 import { useMemo, useState } from "react"
+import { parseLocalDate } from "@/lib/date-utils"
 import { Card } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { ChevronLeft, ChevronRight, X, TrendingUp, TrendingDown, Minus, Star } from "lucide-react"
@@ -252,7 +253,7 @@ export function TradingCalendar({ account, dailyData, trades }: TradingCalendarP
           <div className="mb-3 flex items-start justify-between sm:mb-5 lg:mb-3">
             <div className="min-w-0 flex-1">
               <h3 className="text-base font-semibold sm:text-lg">
-                {new Date(selectedDate).toLocaleDateString("en-US", {
+                {parseLocalDate(selectedDate).toLocaleDateString("en-US", {
                   weekday: "short",
                   month: "short",
                   day: "numeric",

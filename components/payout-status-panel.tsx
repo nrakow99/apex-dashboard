@@ -26,6 +26,7 @@ import { cn } from "@/lib/utils"
 import type { Account, Payout } from "@/lib/types"
 import { useToast } from "@/hooks/use-toast"
 import { getAccountRules } from "@/lib/rules"
+import { localTodayKey, parseLocalDate } from "@/lib/date-utils"
 
 // ─── Shared prop types ────────────────────────────────────────────────────────
 
@@ -117,7 +118,7 @@ export function PayoutStatusPanel({ account, eligibility, payouts, onAddPayout }
 function ApexPayoutPanel({ account, eligibility, payouts, onAddPayout }: PayoutStatusPanelProps) {
   const rules = getAccountRules(account)
   const [open, setOpen] = useState(false)
-  const [formData, setFormData] = useState({ date: new Date().toISOString().split("T")[0], amount: "", notes: "" })
+  const [formData, setFormData] = useState({ date: localTodayKey(), amount: "", notes: "" })
   const [error, setError] = useState<string | null>(null)
   const { toast } = useToast()
 
@@ -146,7 +147,7 @@ function ApexPayoutPanel({ account, eligibility, payouts, onAddPayout }: PayoutS
     onAddPayout({ date: formData.date, amount, notes: formData.notes || undefined })
     toast({ title: "Payout logged", description: `$${amount.toLocaleString()} withdrawal recorded.` })
     setOpen(false)
-    setFormData({ date: new Date().toISOString().split("T")[0], amount: "", notes: "" })
+    setFormData({ date: localTodayKey(), amount: "", notes: "" })
   }
 
   const safetyNet = eligibility.safetyNet ?? rules.safetyNet
@@ -357,7 +358,7 @@ function ApexPayoutPanel({ account, eligibility, payouts, onAddPayout }: PayoutS
 function LucidPayoutPanel({ account, eligibility, payouts, onAddPayout }: PayoutStatusPanelProps) {
   const rules = getAccountRules(account)
   const [open, setOpen] = useState(false)
-  const [formData, setFormData] = useState({ date: new Date().toISOString().split("T")[0], amount: "", notes: "" })
+  const [formData, setFormData] = useState({ date: localTodayKey(), amount: "", notes: "" })
   const [error, setError] = useState<string | null>(null)
   const { toast } = useToast()
 
@@ -386,7 +387,7 @@ function LucidPayoutPanel({ account, eligibility, payouts, onAddPayout }: Payout
     onAddPayout({ date: formData.date, amount, notes: formData.notes || undefined })
     toast({ title: "Payout logged", description: `$${amount.toLocaleString()} gross — you receive $${(amount * rules.payoutSplit).toLocaleString(undefined, { maximumFractionDigits: 0 })}.` })
     setOpen(false)
-    setFormData({ date: new Date().toISOString().split("T")[0], amount: "", notes: "" })
+    setFormData({ date: localTodayKey(), amount: "", notes: "" })
   }
 
   const previewAmount = parseFloat(formData.amount) || 0
@@ -591,7 +592,7 @@ function PayoutHistory({ payouts, showSplit }: { payouts: Payout[]; showSplit?: 
                 <div>
                   <div className="text-sm font-semibold font-mono">${payout.amount.toLocaleString()}</div>
                   <div className="text-xs text-muted-foreground">
-                    {new Date(payout.date).toLocaleDateString("en-US", { month: "short", day: "numeric" })}
+                    {parseLocalDate(payout.date).toLocaleDateString("en-US", { month: "short", day: "numeric" })}
                     {" • "}Payout #{payout.payoutNumber}
                     {payout.notes && ` • ${payout.notes}`}
                   </div>

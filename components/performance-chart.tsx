@@ -23,6 +23,7 @@ import {
 } from "@/lib/floor-display-labels"
 import { hasIntradayManualDrawdown } from "@/lib/intraday-manual-drawdown"
 import { isTradingDayComplete, getTodayDateStr } from "@/lib/storage"
+import { parseLocalDate, toLocalDateKey } from "@/lib/date-utils"
 
 interface AccountStats {
   currentBalance: number
@@ -72,12 +73,12 @@ export function PerformanceChart({ data, account, stats }: PerformanceChartProps
     const isIntraday = account.drawdownType === "Intraday"
 
     const firstTradeDate = data.length > 0 ? data[0].date : todayStr
-    const startDate = new Date(firstTradeDate)
+    const startDate = parseLocalDate(firstTradeDate)
     startDate.setDate(startDate.getDate() - 1)
-    const startDateStr = startDate.toISOString().split("T")[0]
+    const startDateStr = toLocalDateKey(startDate)
 
     result.push({
-      date: new Date(startDateStr).toLocaleDateString("en-US", { month: "short", day: "numeric" }),
+      date: parseLocalDate(startDateStr).toLocaleDateString("en-US", { month: "short", day: "numeric" }),
       fullDate: startDateStr,
       balance: account.startingBalance,
       dailyPnl: 0,
@@ -105,7 +106,7 @@ export function PerformanceChart({ data, account, stats }: PerformanceChartProps
       const activeFloorAtPoint = highestBalance - account.maxDrawdown
 
       result.push({
-        date: new Date(d.date).toLocaleDateString("en-US", { month: "short", day: "numeric" }),
+        date: parseLocalDate(d.date).toLocaleDateString("en-US", { month: "short", day: "numeric" }),
         fullDate: d.date,
         balance: d.balance,
         dailyPnl: d.pnl,
@@ -165,7 +166,7 @@ export function PerformanceChart({ data, account, stats }: PerformanceChartProps
     if (!active || !payload || !payload.length) return null
 
     const point = payload[0].payload
-    const formattedDate = new Date(point.fullDate).toLocaleDateString("en-US", {
+    const formattedDate = parseLocalDate(point.fullDate).toLocaleDateString("en-US", {
       month: "short",
       day: "numeric",
       year: "numeric",
