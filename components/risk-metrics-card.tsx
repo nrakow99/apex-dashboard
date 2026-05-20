@@ -18,6 +18,7 @@ interface Metric {
   emptyPrompt?: boolean
 }
 
+/** Kept for future use; not shown in the main 8-card grid. */
 function calcConsecutiveLosses(trades: Trade[]): number {
   const sorted = [...trades].sort((a, b) => a.date.localeCompare(b.date))
   let max = 0
@@ -30,11 +31,11 @@ function calcConsecutiveLosses(trades: Trade[]): number {
 }
 
 export function RiskMetricsCard({ trades }: RiskMetricsCardProps) {
-  // Session/setup data requires localStorage — defer to avoid hydration mismatch.
   const [bestSession, setBestSession] = useState<{ session: SessionId; pnl: number; winRate: number } | null>(null)
   const [bestSetup, setBestSetup] = useState<{ tag: string; pnl: number; winRate: number; count: number } | null>(null)
   const [lsEdge, setLsEdge] = useState<{ longWr: number; shortWr: number; longPnl: number; shortPnl: number; longCount: number; shortCount: number } | null>(null)
   const [disciplineScore, setDisciplineScore] = useState<{ score: number; taggedCount: number } | null>(null)
+  const [hasAnySessionData, setHasAnySessionData] = useState(false)
   const [hasAnySetupData, setHasAnySetupData] = useState(false)
   const [hasAnyDirectionData, setHasAnyDirectionData] = useState(false)
 
@@ -43,12 +44,15 @@ export function RiskMetricsCard({ trades }: RiskMetricsCardProps) {
       setBestSession(null)
       setBestSetup(null)
       setLsEdge(null)
+      setDisciplineScore(null)
+      setHasAnySessionData(false)
+      setHasAnySetupData(false)
+      setHasAnyDirectionData(false)
       return
     }
 
     const allMeta = loadAllTradeMeta()
 
-    // ── Best Session ─────────────────────────────────────────────────────────
     const sessionTrades: Partial<Record<SessionId, Trade[]>> = {}
     for (const t of trades) {
       const session = resolveSession(allMeta[t.id] ?? {})
@@ -58,6 +62,7 @@ export function RiskMetricsCard({ trades }: RiskMetricsCardProps) {
       }
     }
     const sessionEntries = Object.entries(sessionTrades) as [SessionId, Trade[]][]
+    setHasAnySessionData(sessionEntries.length > 0)
     if (sessionEntries.length > 0) {
       const best = sessionEntries
         .map(([session, ts]) => ({
@@ -71,7 +76,6 @@ export function RiskMetricsCard({ trades }: RiskMetricsCardProps) {
       setBestSession(null)
     }
 
-    // ── Best Setup ───────────────────────────────────────────────────────────
     const setupTrades: Record<string, Trade[]> = {}
     for (const t of trades) {
       const tags = allMeta[t.id]?.setupTags ?? []
@@ -97,7 +101,6 @@ export function RiskMetricsCard({ trades }: RiskMetricsCardProps) {
       setBestSetup(null)
     }
 
-    // ── Long vs Short Edge ───────────────────────────────────────────────────
     const longTrades = trades.filter((t) => allMeta[t.id]?.direction === "long")
     const shortTrades = trades.filter((t) => allMeta[t.id]?.direction === "short")
     const hasDirectionData = longTrades.length > 0 || shortTrades.length > 0
@@ -115,8 +118,6 @@ export function RiskMetricsCard({ trades }: RiskMetricsCardProps) {
       setLsEdge(null)
     }
 
-    // ── Discipline Score ─────────────────────────────────────────────────
-    // Score = (pos - neg) mapped onto 0-100. Only shown when ≥3 tagged trades.
     const taggedTrades = trades.filter((t) => (allMeta[t.id]?.disciplineTags?.length ?? 0) > 0)
     if (taggedTrades.length >= 3) {
       let pos = 0
@@ -150,12 +151,61 @@ export function RiskMetricsCard({ trades }: RiskMetricsCardProps) {
     const grossLoss = Math.abs(losses.reduce((s, t) => s + t.pnl, 0))
     const profitFactor = grossLoss > 0 ? grossProfit / grossLoss : grossProfit > 0 ? Infinity : 0
 
-    const maxConsecLosses = calcConsecutiveLosses(trades)
-
     const fmt = (n: number) =>
       `$${Math.abs(n).toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`
 
-    const base: Metric[] = [
+    const empty = (prompt: string): Pick<Metric, "value" | "sub" | "color" | "emptyPrompt"> => ({
+      value: prompt,
+      sub: undefined,
+      color: "neutral",
+      emptyPrompt: true,
+    })
+
+    const bestSessionMetric: Metric = hasAnySessionData && bestSession
+      ? {
+          label: "Best Session",
+          value: SESSION_LABELS[bestSession.session] ?? bestSession.session,
+          sub: `${fmt(bestSession.pnl)} · ${bestSession.winRate}% WR`,
+          color: "neutral",
+        }
+      : { label: "Best Session", ...empty("Tag sessions") }
+
+    const bestSetupMetric: Metric = hasAnySetupData && bestSetup
+      ? {
+          label: "Best Setup",
+          value: bestSetup.tag,
+          sub: `${fmt(bestSetup.pnl)} · ${bestSetup.winRate}% WR`,
+          color: "neutral",
+        }
+      : { label: "Best Setup", ...empty("Tag setups") }
+
+    const lsEdgeMetric: Metric = hasAnyDirectionData && lsEdge
+      ? (() => {
+          const longBetter = lsEdge.longCount > 0 && (lsEdge.shortCount === 0 || lsEdge.longPnl >= lsEdge.shortPnl)
+          return {
+            label: "L/S Edge",
+            value: lsEdge.longCount > 0 && lsEdge.shortCount > 0
+              ? `${lsEdge.longWr}% / ${lsEdge.shortWr}%`
+              : lsEdge.longCount > 0 ? `L: ${lsEdge.longWr}%` : `S: ${lsEdge.shortWr}%`,
+            sub: longBetter ? "Long edge" : "Short edge",
+            color: "neutral" as const,
+          }
+        })()
+      : { label: "L/S Edge", ...empty("Add direction") }
+
+    const disciplineMetric: Metric = disciplineScore
+      ? (() => {
+          const { score } = disciplineScore
+          return {
+            label: "Discipline",
+            value: `${score}`,
+            sub: score >= 75 ? "Excellent" : score >= 55 ? "Good" : score >= 40 ? "Improving" : "Needs work",
+            color: score >= 75 ? "positive" as const : score >= 55 ? "amber" as const : "negative" as const,
+          }
+        })()
+      : { label: "Discipline", ...empty("Tag trades") }
+
+    return [
       {
         label: "Win Rate",
         value: `${winRate.toFixed(0)}%`,
@@ -165,7 +215,7 @@ export function RiskMetricsCard({ trades }: RiskMetricsCardProps) {
       {
         label: "Avg Win",
         value: wins.length > 0 ? fmt(avgWin) : "—",
-        sub: wins.length > 0 ? `${wins.length} winners` : "—",
+        sub: wins.length > 0 ? `${wins.length} winners` : "No wins yet",
         color: "positive",
       },
       {
@@ -180,112 +230,56 @@ export function RiskMetricsCard({ trades }: RiskMetricsCardProps) {
         sub: profitFactor >= 1.5 ? "Strong" : profitFactor >= 1 ? "Positive" : "Needs work",
         color: profitFactor >= 1.5 ? "positive" : profitFactor >= 1 ? "amber" : "negative",
       },
-      {
-        label: "Best Session",
-        value: bestSession ? (SESSION_LABELS[bestSession.session] ?? "—") : "—",
-        sub: bestSession ? `${fmt(bestSession.pnl)} · ${bestSession.winRate}% WR` : "Tag sessions",
-        color: "neutral",
-      },
-      {
-        label: "Max Consec. Loss",
-        value: `${maxConsecLosses}`,
-        sub: maxConsecLosses >= 3 ? "Review risk" : maxConsecLosses > 0 ? "Acceptable" : "Clean",
-        color: maxConsecLosses >= 3 ? "negative" : maxConsecLosses > 0 ? "amber" : "positive",
-      },
+      bestSessionMetric,
+      bestSetupMetric,
+      lsEdgeMetric,
+      disciplineMetric,
     ]
-
-    // Best Setup — only when data exists
-    if (hasAnySetupData && bestSetup) {
-      base.push({
-        label: "Best Setup",
-        value: bestSetup.tag,
-        sub: `${fmt(bestSetup.pnl)} · ${bestSetup.winRate}% WR`,
-        color: "neutral",
-      })
-    } else if (!hasAnySetupData && trades.length >= 3) {
-      base.push({
-        label: "Best Setup",
-        value: "—",
-        sub: "Tag setups to unlock",
-        color: "neutral",
-        emptyPrompt: true,
-      })
-    }
-
-    // L/S Edge — only when direction data exists
-    if (hasAnyDirectionData && lsEdge) {
-      const longBetter = lsEdge.longCount > 0 && (lsEdge.shortCount === 0 || lsEdge.longPnl >= lsEdge.shortPnl)
-      base.push({
-        label: "L/S Edge",
-        value: lsEdge.longCount > 0 && lsEdge.shortCount > 0
-          ? `${lsEdge.longWr}% / ${lsEdge.shortWr}%`
-          : lsEdge.longCount > 0 ? `L: ${lsEdge.longWr}%` : `S: ${lsEdge.shortWr}%`,
-        sub: longBetter ? "Long edge" : "Short edge",
-        color: "neutral",
-      })
-    }
-
-    // Discipline Score — only when ≥3 trades are tagged
-    if (disciplineScore) {
-      const { score } = disciplineScore
-      base.push({
-        label: "Discipline",
-        value: `${score}`,
-        sub: score >= 75 ? "Excellent" : score >= 55 ? "Good" : score >= 40 ? "Improving" : "Needs work",
-        color: score >= 75 ? "positive" : score >= 55 ? "amber" : "negative",
-      })
-    } else if (trades.length >= 3) {
-      base.push({
-        label: "Discipline",
-        value: "—",
-        sub: "Tag trades to unlock",
-        color: "neutral",
-        emptyPrompt: true,
-      })
-    }
-
-    return base
-  }, [trades, bestSession, bestSetup, lsEdge, disciplineScore, hasAnySetupData, hasAnyDirectionData])
+  }, [trades, bestSession, bestSetup, lsEdge, disciplineScore, hasAnySessionData, hasAnySetupData, hasAnyDirectionData])
 
   if (trades.length === 0) return null
 
   return (
-    <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-1.5 sm:gap-2.5">
+    <div className="grid grid-cols-2 md:grid-cols-4 gap-2 sm:gap-3 auto-rows-fr">
       {metrics.map((m) => (
-        <div
-          key={m.label}
+        <MetricCard key={m.label} metric={m} />
+      ))}
+    </div>
+  )
+}
+
+function MetricCard({ metric: m }: { metric: Metric }) {
+  return (
+    <div
+      className={cn(
+        "glass-card rounded-[14px] px-3 py-3 sm:px-4 sm:py-3.5 flex flex-col justify-between gap-2 min-h-[88px] sm:min-h-[96px] h-full transition-colors",
+        m.emptyPrompt ? "opacity-65" : "hover:bg-[rgba(83,104,120,0.06)]",
+      )}
+    >
+      <span className="text-[10px] sm:text-[11px] font-medium uppercase tracking-wider text-[#E5E4E2]/40 leading-tight">
+        {m.label}
+      </span>
+      <div className="flex flex-col gap-0.5 mt-auto">
+        <span
           className={cn(
-            "glass-card rounded-[14px] px-2.5 py-2 sm:px-3 sm:py-2.5 flex flex-col gap-0.5 sm:gap-1 transition-colors",
+            "font-bold tabular-nums leading-tight",
             m.emptyPrompt
-              ? "opacity-60"
-              : "hover:bg-[rgba(83,104,120,0.06)]",
+              ? "text-[11px] sm:text-xs font-medium italic text-[#E5E4E2]/35"
+              : "text-base sm:text-lg",
+            !m.emptyPrompt && m.color === "positive" && "text-emerald-500",
+            !m.emptyPrompt && m.color === "negative" && "text-red-500",
+            !m.emptyPrompt && m.color === "amber" && "text-amber-400",
+            !m.emptyPrompt && m.color === "neutral" && "text-[#E5E4E2]/80",
           )}
         >
-          <span className="text-[9px] sm:text-[10px] font-medium uppercase tracking-wider text-[#E5E4E2]/35 leading-tight">
-            {m.label}
+          {m.value}
+        </span>
+        {m.sub && (
+          <span className="text-[10px] sm:text-[11px] leading-tight text-[#E5E4E2]/30 truncate">
+            {m.sub}
           </span>
-          <span
-            className={cn(
-              "text-sm sm:text-base font-bold tabular-nums leading-none",
-              m.emptyPrompt && "text-[#E5E4E2]/25 text-xs! font-normal!",
-              !m.emptyPrompt && m.color === "positive" && "text-emerald-500",
-              !m.emptyPrompt && m.color === "negative" && "text-red-500",
-              !m.emptyPrompt && m.color === "amber" && "text-amber-400",
-              !m.emptyPrompt && m.color === "neutral" && "text-[#E5E4E2]/75",
-            )}
-          >
-            {m.value}
-          </span>
-          {m.sub && (
-            <span className={cn(
-              "text-[9px] sm:text-[10px] leading-tight",
-              m.emptyPrompt ? "text-[#E5E4E2]/22 italic" : "text-[#E5E4E2]/30"
-            )}>
-              {m.sub}
-            </span>
-          )}
-        </div>
-      ))}
+        )}
+      </div>
     </div>
   )
 }
