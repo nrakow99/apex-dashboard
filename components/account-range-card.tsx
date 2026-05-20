@@ -74,7 +74,7 @@ export function AccountRangeCard({ account, stats }: AccountRangeCardProps) {
         span: sp,
         rightTitle: "Peak lock milestone",
         rightValue: (
-          <span className="font-mono text-base font-semibold tracking-tight text-emerald-300/95 sm:text-lg">
+          <span className="font-mono text-base font-semibold tracking-tight text-emerald-300/95 sm:text-lg lg:text-base">
             {formatCurrency(lucidFlex.lockPeakThreshold)}{" "}
             <span className="text-[10px] font-medium text-slate-400 sm:text-xs">peak</span>
           </span>
@@ -100,7 +100,7 @@ export function AccountRangeCard({ account, stats }: AccountRangeCardProps) {
         span: sp,
         rightTitle: "Peak (high water)",
         rightValue: (
-          <span className="font-mono text-base font-semibold tracking-tight text-emerald-300/95 sm:text-lg">
+          <span className="font-mono text-base font-semibold tracking-tight text-emerald-300/95 sm:text-lg lg:text-base">
             {formatCurrency(peakForFloor)}{" "}
             <span className="text-[10px] font-medium text-slate-400 sm:text-xs">best</span>
           </span>
@@ -128,12 +128,12 @@ export function AccountRangeCard({ account, stats }: AccountRangeCardProps) {
         hasProfitGoal || isEval ? "Profit target" : rules.minBalanceToRequest > 0 ? "Min payout balance" : "Target",
       rightValue:
         hasProfitGoal || isEval ? (
-          <span className="font-mono text-base font-semibold tracking-tight text-emerald-300/95 sm:text-lg">
+          <span className="font-mono text-base font-semibold tracking-tight text-emerald-300/95 sm:text-lg lg:text-base">
             {formatCurrency(passBalance)}{" "}
             <span className="text-[10px] font-medium text-slate-400 sm:text-xs">target</span>
           </span>
         ) : (
-          <span className="font-mono text-base font-semibold tracking-tight text-emerald-300/95 sm:text-lg">
+          <span className="font-mono text-base font-semibold tracking-tight text-emerald-300/95 sm:text-lg lg:text-base">
             {formatCurrency(payoutThreshold)}{" "}
             <span className="text-[10px] font-medium text-slate-400 sm:text-xs">threshold</span>
           </span>
@@ -177,7 +177,7 @@ export function AccountRangeCard({ account, stats }: AccountRangeCardProps) {
   const leftFloorTitle = getAccountRangeFloorTitle(account)
 
   const leftFloorDisplay = (
-    <span className="font-mono text-base font-semibold tracking-tight text-slate-100 sm:text-lg">
+    <span className="font-mono text-base font-semibold tracking-tight text-slate-100 sm:text-lg lg:text-base">
       {formatCurrency(floorVal)}
       {account.firm === "Lucid" && isEval && (
         <span className="text-[10px] font-medium text-slate-400 sm:text-xs"> MLL</span>
@@ -196,15 +196,15 @@ export function AccountRangeCard({ account, stats }: AccountRangeCardProps) {
   )
 
   return (
-    <Card className="glass-card overflow-hidden rounded-[20px] border-white/10 bg-slate-950/35 px-2.5 py-2 shadow-[inset_0_1px_0_0_rgba(255,255,255,0.04)] backdrop-blur-xl sm:rounded-[24px] sm:px-4 sm:py-4">
-      <div className="mb-1 flex items-center justify-between gap-2">
+    <Card className="glass-card overflow-hidden rounded-[20px] border-white/10 bg-slate-950/35 px-2.5 py-2 shadow-[inset_0_1px_0_0_rgba(255,255,255,0.04)] backdrop-blur-xl sm:rounded-[24px] sm:px-4 sm:py-4 lg:px-3.5 lg:py-2.5">
+      <div className="mb-1 lg:mb-0.5 flex items-center justify-between gap-2">
         <h2 className="text-[10px] font-semibold uppercase tracking-[0.16em] text-slate-400">
           Account range
         </h2>
       </div>
 
       {/* Range bar: floor (left) → target (right) */}
-      <div className="relative mb-2">
+      <div className="relative mb-2 lg:mb-1.5">
         <div
           className={cn(
             "relative h-2.5 overflow-visible rounded-full ring-1 ring-white/10 sm:h-3",
@@ -252,47 +252,47 @@ export function AccountRangeCard({ account, stats }: AccountRangeCardProps) {
       </div>
 
       {/* Three columns — always 3-col even on mobile (compact) */}
-      <div className="grid grid-cols-3 gap-1.5 border-t border-white/10 pt-1.5 sm:gap-3 sm:pt-3 lg:gap-6">
+      <div className="grid grid-cols-3 gap-1.5 border-t border-white/10 pt-1.5 sm:gap-3 sm:pt-3 lg:gap-4 lg:pt-2">
         <div className="space-y-0.5 text-left sm:pr-1">
           <p className="text-[8px] sm:text-[10px] font-medium uppercase tracking-[0.10em] sm:tracking-[0.14em] text-slate-500">{leftFloorTitle}</p>
-          <div className="[&_.font-mono]:text-sm sm:[&_.font-mono]:text-base lg:[&_.font-mono]:text-lg [&_span]:text-[9px] sm:[&_span]:text-xs">
+          <div className="[&_.font-mono]:text-sm sm:[&_.font-mono]:text-base lg:[&_.font-mono]:text-base [&_span]:text-[9px] sm:[&_span]:text-xs">
             {leftFloorDisplay}
           </div>
         </div>
         <div className="space-y-0.5 text-center">
           <p className="text-[8px] sm:text-[10px] font-medium uppercase tracking-[0.10em] sm:tracking-[0.14em] text-slate-500">Balance</p>
-          <p className="font-mono text-sm sm:text-xl font-semibold tracking-tight text-slate-50">
+          <p className="font-mono text-sm sm:text-xl lg:text-lg font-semibold tracking-tight text-slate-50">
             {formatCurrency(stats.currentBalance)}
           </p>
         </div>
         <div className="space-y-0.5 text-right sm:pl-1">
           <p className="text-[8px] sm:text-[10px] font-medium uppercase tracking-[0.10em] sm:tracking-[0.14em] text-slate-500">{rightTitle}</p>
-          <div className="[&_.font-mono]:text-sm sm:[&_.font-mono]:text-base lg:[&_.font-mono]:text-lg [&_span]:text-[9px] sm:[&_span]:text-xs">
+          <div className="[&_.font-mono]:text-sm sm:[&_.font-mono]:text-base lg:[&_.font-mono]:text-base [&_span]:text-[9px] sm:[&_span]:text-xs">
             {rightValue}
           </div>
         </div>
       </div>
 
       {/* Bottom metrics */}
-      <div className="mt-1.5 flex flex-col gap-1 border-t border-white/10 pt-1.5 sm:mt-3 sm:flex-row sm:items-end sm:justify-between sm:gap-6 sm:pt-3">
+      <div className="mt-1.5 flex flex-col gap-1 border-t border-white/10 pt-1.5 sm:mt-3 sm:flex-row sm:items-end sm:justify-between sm:gap-6 sm:pt-3 lg:mt-2 lg:pt-2 lg:gap-4">
         <div className="min-w-0 flex-1">
           <p className="text-[8px] sm:text-[10px] font-medium uppercase tracking-[0.10em] sm:tracking-[0.14em] text-slate-500">{bottomLeftLabel}</p>
-          <div className="mt-0.5 sm:mt-1 text-xs sm:text-base">{bottomLeftValue}</div>
+          <div className="mt-0.5 sm:mt-1 lg:mt-0 text-xs sm:text-base lg:text-sm">{bottomLeftValue}</div>
         </div>
         <div className="min-w-0 flex-1 text-right">
           <p className="text-[8px] sm:text-[10px] font-medium uppercase tracking-[0.10em] sm:tracking-[0.14em] text-slate-500">{bottomRightLabel}</p>
-          <div className="mt-0.5 sm:mt-1 text-xs sm:text-base">{bottomRightValue}</div>
+          <div className="mt-0.5 sm:mt-1 lg:mt-0 text-xs sm:text-base lg:text-sm">{bottomRightValue}</div>
         </div>
       </div>
 
       {payoutOnlyBar && (
-        <p className="mt-2 text-[10px] leading-snug text-slate-500">
+        <p className="mt-2 lg:mt-1.5 text-[10px] leading-snug text-slate-500">
           Visual span is active floor through minimum balance to request a payout.
         </p>
       )}
 
       {isLucidFlexPa && (
-        <p className="mt-2 text-[10px] leading-snug text-slate-500">
+        <p className="mt-2 lg:mt-1.5 text-[10px] leading-snug text-slate-500">
           LucidFlex: payouts use cycle profit rules only — no minimum balance gate. Floor locks at{" "}
           {formatCurrency(lucidFlex!.lockedFloor)} after peak reaches {formatCurrency(lucidFlex!.lockPeakThreshold)}.
         </p>

@@ -23,16 +23,16 @@ interface MetricsCardProps {
 
 export function MetricsCard({ title, value, change, status, subValue, titleAction }: MetricsCardProps) {
   return (
-    <Card className="p-2 sm:p-3.5 rounded-[18px] sm:rounded-[20px] glass-card glass-card-hover h-full">
-      <div className="space-y-0.5 sm:space-y-1">
+    <Card className="p-2 sm:p-3.5 lg:p-2.5 rounded-[18px] sm:rounded-[20px] glass-card glass-card-hover h-full">
+      <div className="space-y-0.5 sm:space-y-1 lg:space-y-0.5">
         <div className="flex items-start justify-between gap-1.5">
-          <p className="text-[9px] sm:text-[11px] font-medium text-slate-500 uppercase tracking-[0.10em] sm:tracking-[0.14em] min-w-0 flex-1 leading-tight line-clamp-2">
+          <p className="text-[9px] sm:text-[11px] lg:text-[10px] font-medium text-slate-500 uppercase tracking-[0.10em] sm:tracking-[0.14em] min-w-0 flex-1 leading-tight line-clamp-2">
             {title}
           </p>
           {titleAction ? <span className="shrink-0">{titleAction}</span> : null}
         </div>
         <p className={cn(
-          "text-[15px] sm:text-[20px] font-semibold font-mono tracking-tight leading-tight truncate",
+          "text-[15px] sm:text-[20px] lg:text-[18px] font-semibold font-mono tracking-tight leading-tight truncate",
           value.startsWith("+") && "text-emerald-500",
           value.startsWith("-") && "text-red-500"
         )}>

@@ -232,7 +232,7 @@ export function PerformanceChart({ data, account, stats }: PerformanceChartProps
   // Empty state - uses same flex layout as main chart for consistency
   if (data.length === 0) {
     return (
-      <Card className="h-[210px] sm:h-[308px] lg:h-[332px] flex flex-col p-2 sm:p-3 rounded-[20px] sm:rounded-[24px] glass-card">
+      <Card className="h-[210px] sm:h-[308px] lg:h-[332px] flex flex-col p-2 sm:p-3 lg:p-2 rounded-[20px] sm:rounded-[24px] glass-card">
         {/* Header */}
         <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
           <div>
@@ -262,7 +262,7 @@ export function PerformanceChart({ data, account, stats }: PerformanceChartProps
         </div>
         
         {/* Chart area - flex-1 to fill remaining space */}
-        <div className="flex-1 min-h-0 w-full relative mt-2">
+        <div className="flex-1 min-h-0 w-full relative mt-2 lg:mt-1">
           <ResponsiveContainer width="100%" height="100%">
             <AreaChart
               data={[
@@ -336,7 +336,7 @@ export function PerformanceChart({ data, account, stats }: PerformanceChartProps
   }
 
   return (
-      <Card className="h-[210px] sm:h-[308px] lg:h-[332px] flex flex-col p-2 sm:p-3 rounded-[20px] sm:rounded-[24px] glass-card">
+      <Card className="h-[210px] sm:h-[308px] lg:h-[332px] flex flex-col p-2 sm:p-3 lg:p-2 rounded-[20px] sm:rounded-[24px] glass-card">
       {/* Header */}
       <div className="flex items-center justify-between gap-2">
         <div>
@@ -368,7 +368,7 @@ export function PerformanceChart({ data, account, stats }: PerformanceChartProps
       </div>
       
       {/* Chart area - flex-1 fills remaining space */}
-      <div className="flex-1 min-h-0 w-full mt-1 sm:mt-2">
+      <div className="flex-1 min-h-0 w-full mt-1 sm:mt-2 lg:mt-1">
         <ResponsiveContainer width="100%" height="100%">
           {view === "balance" ? (
             <AreaChart data={chartData} margin={{ top: 6, right: 12, left: 2, bottom: 0 }}>
@@ -564,7 +564,7 @@ export function PerformanceChart({ data, account, stats }: PerformanceChartProps
       </div>
       {/* Legend */}
       {view === "balance" ? (
-        <div className="flex flex-wrap items-center gap-x-2 sm:gap-x-4 gap-y-1 pt-1.5 sm:pt-2 text-[10px] sm:text-xs text-muted-foreground">
+        <div className="flex flex-wrap items-center gap-x-2 sm:gap-x-4 gap-y-1 pt-1.5 sm:pt-2 lg:pt-1 text-[10px] sm:text-xs text-muted-foreground">
           <div className="flex items-center gap-1.5">
             <div className="w-4 sm:w-5 h-0.5 bg-emerald-500 rounded" />
             <span>Balance</span>
@@ -585,7 +585,7 @@ export function PerformanceChart({ data, account, stats }: PerformanceChartProps
           )}
         </div>
       ) : (
-        <div className="flex flex-wrap items-center gap-x-2 sm:gap-x-4 gap-y-1 pt-1.5 sm:pt-2 text-[10px] sm:text-xs text-muted-foreground">
+        <div className="flex flex-wrap items-center gap-x-2 sm:gap-x-4 gap-y-1 pt-1.5 sm:pt-2 lg:pt-1 text-[10px] sm:text-xs text-muted-foreground">
           <div className="flex items-center gap-1.5">
             <div className="w-2.5 h-2.5 sm:w-3 sm:h-3 rounded-full bg-emerald-500" />
             <span>Profit</span>

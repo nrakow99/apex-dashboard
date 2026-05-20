@@ -240,7 +240,7 @@ export function RiskMetricsCard({ trades }: RiskMetricsCardProps) {
   if (trades.length === 0) return null
 
   return (
-    <div className="grid grid-cols-2 md:grid-cols-4 gap-2 sm:gap-3 auto-rows-fr">
+    <div className="grid grid-cols-2 md:grid-cols-4 gap-2 sm:gap-3 lg:gap-2 auto-rows-fr">
       {metrics.map((m) => (
         <MetricCard key={m.label} metric={m} />
       ))}
@@ -252,7 +252,7 @@ function MetricCard({ metric: m }: { metric: Metric }) {
   return (
     <div
       className={cn(
-        "glass-card rounded-[14px] px-3 py-3 sm:px-4 sm:py-3.5 flex flex-col justify-between gap-2 min-h-[88px] sm:min-h-[96px] h-full transition-colors",
+        "glass-card rounded-[14px] px-3 py-3 sm:px-4 sm:py-3.5 lg:px-3 lg:py-2 flex flex-col justify-between gap-2 lg:gap-1 min-h-[88px] sm:min-h-[96px] lg:min-h-[72px] h-full transition-colors",
         m.emptyPrompt ? "opacity-65" : "hover:bg-[rgba(83,104,120,0.06)]",
       )}
     >
@@ -265,7 +265,7 @@ function MetricCard({ metric: m }: { metric: Metric }) {
             "font-bold tabular-nums leading-tight",
             m.emptyPrompt
               ? "text-[11px] sm:text-xs font-medium italic text-[#E5E4E2]/35"
-              : "text-base sm:text-lg",
+              : "text-base sm:text-lg lg:text-base",
             !m.emptyPrompt && m.color === "positive" && "text-emerald-500",
             !m.emptyPrompt && m.color === "negative" && "text-red-500",
             !m.emptyPrompt && m.color === "amber" && "text-amber-400",

@@ -795,7 +795,7 @@ export default function Dashboard() {
         </div>
       )}
 
-      <div className="max-w-[1680px] mx-auto px-3 sm:px-5 lg:px-6 py-3 sm:py-4">
+      <div className="max-w-[1680px] mx-auto px-3 sm:px-5 lg:px-6 py-3 sm:py-4 lg:py-3">
         {viewMode === "accounts" ? (
           <>
             {/* Header */}
@@ -952,13 +952,13 @@ export default function Dashboard() {
           accountStats && (
             <>
               {/* Detail Header */}
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 sm:gap-3 mb-3 sm:mb-4">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 sm:gap-3 mb-3 sm:mb-4 lg:mb-2">
                 <div className="flex items-center gap-3 sm:gap-4">
-                  <Button variant="ghost" size="icon" onClick={handleBack} className="h-9 w-9 sm:h-10 sm:w-10 shrink-0 border border-white/10 bg-slate-900/70">
+                  <Button variant="ghost" size="icon" onClick={handleBack} className="h-9 w-9 sm:h-10 sm:w-10 lg:h-9 lg:w-9 shrink-0 border border-white/10 bg-slate-900/70">
                     <ArrowLeft className="h-5 w-5" />
                   </Button>
                   <div className="min-w-0">
-                    <h1 className="text-xl sm:text-3xl font-semibold tracking-tight truncate">{selectedAccount.name}</h1>
+                    <h1 className="text-xl sm:text-3xl lg:text-2xl font-semibold tracking-tight truncate">{selectedAccount.name}</h1>
                     <p className="text-sm sm:text-base text-muted-foreground">
                       {selectedAccount.type} Account
                     </p>
@@ -1017,7 +1017,7 @@ export default function Dashboard() {
               </div>
 
               {/* TOP ROW: Stats Cards */}
-              <div className="grid gap-1.5 sm:gap-3 grid-cols-2 lg:grid-cols-5 mb-2 sm:mb-4 auto-rows-fr">
+              <div className="grid gap-1.5 sm:gap-3 lg:gap-2 grid-cols-2 lg:grid-cols-5 mb-2 sm:mb-4 lg:mb-2 auto-rows-fr">
                 <MetricsCard
                   title="Account Balance"
                   value={formatCurrency(accountStats.currentBalance)}
@@ -1115,14 +1115,14 @@ export default function Dashboard() {
               </div>
 
               {shouldShowAccountRangeCard(selectedAccount) && (
-                <div className="mb-2 sm:mb-4">
+                <div className="mb-2 sm:mb-4 lg:mb-2">
                   <AccountRangeCard account={selectedAccount} stats={displayAccountStats!} />
                 </div>
               )}
 
               {/* ROW 1.5: Risk Metrics */}
               {accountTrades.length > 0 && (
-                <div className="mb-2 sm:mb-4">
+                <div className="mb-2 sm:mb-4 lg:mb-2">
                   <RiskMetricsCard trades={accountTrades} />
                 </div>
               )}
