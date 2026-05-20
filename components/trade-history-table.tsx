@@ -93,7 +93,7 @@ function TradeDetailPanel({ trade, meta, colSpan }: { trade: Trade; meta: TradeM
   return (
     <TableRow className="border-none hover:bg-transparent">
       <TableCell colSpan={colSpan} className="p-0">
-        <div className="overflow-hidden">
+        <div className="overflow-hidden animate-in slide-in-from-top-1 fade-in duration-200">
           <div className="mx-2.5 mb-2 mt-0.5 rounded-xl bg-[rgba(83,104,120,0.05)] border border-[rgba(83,104,120,0.12)] p-2 sm:p-3">
             {!hasMeta ? (
               <p className="text-[11px] text-[#E5E4E2]/25 italic">No details recorded.</p>
@@ -231,9 +231,10 @@ export function TradeHistoryTable({ trades, onEditTrade, onDeleteTrade }: TradeH
         <div className="px-3 sm:px-[18px] py-2.5 sm:py-3.5 border-b border-white/[0.07]">
           <h2 className="text-sm sm:text-lg font-semibold">Trade History</h2>
         </div>
-        <div className="py-8 sm:py-12 px-6 text-center space-y-1.5 sm:space-y-2">
-          <p className="text-sm text-[#E5E4E2]/45">No trades logged yet.</p>
+        <div className="py-8 sm:py-12 px-6 text-center space-y-1">
+          <p className="text-sm font-medium text-[#E5E4E2]/45">No trades logged yet.</p>
           <p className="text-xs text-[#E5E4E2]/25">Protecting capital is also progress.</p>
+          <p className="text-[11px] text-[#E5E4E2]/18 pt-1">Tag setups and sessions as you go to unlock edge analytics.</p>
         </div>
       </Card>
     )
@@ -320,6 +321,12 @@ export function TradeHistoryTable({ trades, onEditTrade, onDeleteTrade }: TradeH
                             <DirectionBadge direction={allMeta[singleTrade.id].direction} />
                           )}
                         </div>
+                      )}
+                      {/* Mobile: show symbol + trade count for multi-trade days */}
+                      {isMulti && (
+                        <span className="text-[10px] text-muted-foreground/50 sm:hidden">
+                          {group.symbols.slice(0, 2).join(" · ")}{group.symbols.length > 2 ? ` +${group.symbols.length - 2}` : ""} · {group.trades.length} trades
+                        </span>
                       )}
                     </div>
                   </TableCell>

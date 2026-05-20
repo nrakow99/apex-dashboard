@@ -3,7 +3,7 @@
 import { useMemo, useState, useEffect } from "react"
 import { cn } from "@/lib/utils"
 import type { Trade } from "@/lib/types"
-import { loadAllTradeMeta } from "@/lib/trade-meta"
+import { loadAllTradeMeta, DISCIPLINE_POSITIVE } from "@/lib/trade-meta"
 import { resolveSession, SESSION_LABELS, type SessionId } from "@/lib/sessions"
 
 interface RiskMetricsCardProps {
@@ -34,6 +34,7 @@ export function RiskMetricsCard({ trades }: RiskMetricsCardProps) {
   const [bestSession, setBestSession] = useState<{ session: SessionId; pnl: number; winRate: number } | null>(null)
   const [bestSetup, setBestSetup] = useState<{ tag: string; pnl: number; winRate: number; count: number } | null>(null)
   const [lsEdge, setLsEdge] = useState<{ longWr: number; shortWr: number; longPnl: number; shortPnl: number; longCount: number; shortCount: number } | null>(null)
+  const [disciplineScore, setDisciplineScore] = useState<{ score: number; taggedCount: number } | null>(null)
   const [hasAnySetupData, setHasAnySetupData] = useState(false)
   const [hasAnyDirectionData, setHasAnyDirectionData] = useState(false)
 
@@ -112,6 +113,26 @@ export function RiskMetricsCard({ trades }: RiskMetricsCardProps) {
       })
     } else {
       setLsEdge(null)
+    }
+
+    // ── Discipline Score ─────────────────────────────────────────────────
+    // Score = (pos - neg) mapped onto 0-100. Only shown when ≥3 tagged trades.
+    const taggedTrades = trades.filter((t) => (allMeta[t.id]?.disciplineTags?.length ?? 0) > 0)
+    if (taggedTrades.length >= 3) {
+      let pos = 0
+      let neg = 0
+      for (const t of taggedTrades) {
+        const tags = allMeta[t.id]?.disciplineTags ?? []
+        for (const tag of tags) {
+          if (DISCIPLINE_POSITIVE.includes(tag as typeof DISCIPLINE_POSITIVE[number])) pos++
+          else neg++
+        }
+      }
+      const total = pos + neg
+      const score = total > 0 ? Math.round(((pos - neg) / total + 1) / 2 * 100) : 50
+      setDisciplineScore({ score: Math.max(0, Math.min(100, score)), taggedCount: taggedTrades.length })
+    } else {
+      setDisciplineScore(null)
     }
   }, [trades])
 
@@ -204,8 +225,27 @@ export function RiskMetricsCard({ trades }: RiskMetricsCardProps) {
       })
     }
 
+    // Discipline Score — only when ≥3 trades are tagged
+    if (disciplineScore) {
+      const { score } = disciplineScore
+      base.push({
+        label: "Discipline",
+        value: `${score}`,
+        sub: score >= 75 ? "Excellent" : score >= 55 ? "Good" : score >= 40 ? "Improving" : "Needs work",
+        color: score >= 75 ? "positive" : score >= 55 ? "amber" : "negative",
+      })
+    } else if (trades.length >= 3) {
+      base.push({
+        label: "Discipline",
+        value: "—",
+        sub: "Tag trades to unlock",
+        color: "neutral",
+        emptyPrompt: true,
+      })
+    }
+
     return base
-  }, [trades, bestSession, bestSetup, lsEdge, hasAnySetupData, hasAnyDirectionData])
+  }, [trades, bestSession, bestSetup, lsEdge, disciplineScore, hasAnySetupData, hasAnyDirectionData])
 
   if (trades.length === 0) return null
 

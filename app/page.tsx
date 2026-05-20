@@ -933,10 +933,15 @@ export default function Dashboard() {
                 })}
               </div>
             ) : (
-              <div className="text-center py-16 sm:py-20 glass-card rounded-[28px]">
-                <p className="text-xl text-muted-foreground mb-4">No accounts yet</p>
-                <p className="text-muted-foreground mb-6">
-                  Create your first account to start tracking your trades
+              <div className="text-center py-14 sm:py-20 glass-card rounded-[28px] border border-[rgba(83,104,120,0.12)]">
+                <div className="mb-3 flex justify-center">
+                  <div className="h-10 w-10 rounded-2xl bg-[rgba(83,104,120,0.10)] border border-[rgba(83,104,120,0.20)] flex items-center justify-center">
+                    <span className="text-lg font-bold text-[#536878]">P</span>
+                  </div>
+                </div>
+                <p className="text-lg font-semibold text-[#E5E4E2]/70 mb-1">No accounts yet</p>
+                <p className="text-sm text-[#E5E4E2]/35 mb-6 max-w-xs mx-auto">
+                  Add your first Apex or Lucid account to start tracking rules, payouts, and performance.
                 </p>
                 <AddAccountModal onAddAccount={handleAddAccount} />
               </div>

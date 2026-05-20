@@ -606,8 +606,8 @@ function PayoutHistory({ payouts, showSplit }: { payouts: Payout[]; showSplit?: 
         </div>
       ) : (
         <div className="py-4 px-4 text-center space-y-1 rounded-xl bg-[rgba(83,104,120,0.04)] border border-[rgba(83,104,120,0.12)]">
-          <p className="text-sm text-[#E5E4E2]/48">No payouts logged yet.</p>
-          <p className="text-xs text-[#E5E4E2]/28">Withdrawals will appear here once recorded.</p>
+          <p className="text-sm text-[#E5E4E2]/48">Your first payout will appear here once logged.</p>
+          <p className="text-xs text-[#E5E4E2]/28">Track withdrawals, payout cycles, and funded account progress.</p>
         </div>
       )}
     </div>

@@ -254,6 +254,14 @@ export function TradingCalendar({ account, dailyData, trades }: TradingCalendarP
         })}
       </div>
 
+      {/* Empty month message */}
+      {dailyData.length === 0 && (
+        <div className="mt-2 py-5 text-center">
+          <p className="text-sm text-[#E5E4E2]/35">No trades this month.</p>
+          <p className="text-xs text-[#E5E4E2]/20 mt-0.5">Add a trade to see daily PnL and qualifying days.</p>
+        </div>
+      )}
+
       {/* Expanded Day Detail Panel */}
       {selectedDate && selectedTrades.length > 0 && selectedDayStats && (
         <div className="mt-3 border-t border-border/50 pt-3 sm:mt-6 sm:pt-6 lg:mt-3 lg:pt-3">

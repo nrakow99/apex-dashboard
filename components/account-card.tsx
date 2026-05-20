@@ -42,6 +42,7 @@ function getAccountHealth({
   remainingToMinPayout,
   lucidEligible,
   hasPayouts,
+  isPayoutEligible,
 }: {
   account: { type: string; status: string }
   isSafe: boolean
@@ -55,6 +56,7 @@ function getAccountHealth({
   remainingToMinPayout: number | null
   lucidEligible: boolean
   hasPayouts: boolean
+  isPayoutEligible: boolean
 }): HealthStatus {
   if (account.status === "Breached" || !isSafe) {
     return { label: "Breached", color: "red" }
@@ -64,6 +66,10 @@ function getAccountHealth({
   }
   if (hasConsistency && consistencyValid === false) {
     return { label: "Consistency Risk", color: "amber" }
+  }
+  // Locked In: fully eligible for payout and sitting comfortably above floor
+  if (hasPayouts && isPayoutEligible && drawdownRemaining >= maxDrawdown * 0.55) {
+    return { label: "Locked In", color: "green" }
   }
   if (hasPayouts && (lucidEligible || (remainingToMinPayout !== null && remainingToMinPayout <= 350))) {
     return { label: "Near Payout", color: "green" }
@@ -155,6 +161,15 @@ export function AccountCard({
 
   const drawdownLabel = account.drawdownType === "EOD" ? "EOD Drawdown" : "Intraday Drawdown"
 
+  // Apex PA eligibility for "Locked In" badge
+  const apexPayoutEligibility =
+    account.firm === "Apex" && account.type === "PA" && rules.hasPayouts
+      ? getPayoutEligibility(account.id, trades, account, payouts)
+      : null
+
+  const isPayoutEligible =
+    (lucidEligibility?.isEligible ?? false) || (apexPayoutEligibility?.isEligible ?? false)
+
   const health = getAccountHealth({
     account,
     isSafe: stats.isSafe,
@@ -168,6 +183,7 @@ export function AccountCard({
     remainingToMinPayout: remainingToMinPayoutBalance,
     lucidEligible: lucidEligibility?.isEligible ?? false,
     hasPayouts: rules.hasPayouts,
+    isPayoutEligible,
   })
 
   // Eval pace insight — average daily PnL vs remaining target
