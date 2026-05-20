@@ -13,6 +13,7 @@ interface AccountRow {
   status: "Active" | "Inactive" | "Breached" | "Passed"
   drawdown_type: DrawdownType
   account_size: number
+  quantity?: number
   starting_balance: number
   profit_target: number | null
   max_drawdown: number
@@ -69,6 +70,7 @@ function rowToAccount(row: AccountRow): Account {
     status: row.status === "Inactive" ? "Active" : (row.status as "Active" | "Passed" | "Breached"),
     drawdownType: (row.drawdown_type ?? "EOD") as DrawdownType,
     accountSize: row.account_size ?? 50000,
+    quantity: row.quantity ?? 1,
     balance: row.starting_balance,
     startingBalance: row.starting_balance,
     maxBalance: row.starting_balance,
@@ -156,6 +158,7 @@ export async function createAccount(account: {
   type: "Eval" | "PA" | "Live"
   drawdownType: DrawdownType
   accountSize: number
+  quantity?: number
   startingBalance: number
   profitTarget?: number
   maxDrawdown?: number
@@ -175,6 +178,7 @@ export async function createAccount(account: {
       status: "Active",
       drawdown_type: account.drawdownType,
       account_size: account.accountSize,
+      quantity: account.quantity ?? 1,
       starting_balance: account.startingBalance,
       profit_target: account.profitTarget ?? null,
       max_drawdown: account.maxDrawdown ?? 2000,
@@ -283,6 +287,7 @@ export async function updateAccount(
     status?: "Active" | "Inactive" | "Breached" | "Passed"
     drawdownType?: DrawdownType
     accountSize?: number
+    quantity?: number
     startingBalance?: number
     profitTarget?: number | null
     maxDrawdown?: number
@@ -303,6 +308,7 @@ export async function updateAccount(
   if (updates.status !== undefined) updateData.status = updates.status
   if (updates.drawdownType !== undefined) updateData.drawdown_type = updates.drawdownType
   if (updates.accountSize !== undefined) updateData.account_size = updates.accountSize
+  if (updates.quantity !== undefined) updateData.quantity = updates.quantity
   if (updates.startingBalance !== undefined) updateData.starting_balance = updates.startingBalance
   if (updates.profitTarget !== undefined) updateData.profit_target = updates.profitTarget
   if (updates.maxDrawdown !== undefined) updateData.max_drawdown = updates.maxDrawdown

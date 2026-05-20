@@ -39,6 +39,13 @@ import {
 } from "@/components/ui/dropdown-menu"
 import { ArrowLeft, LogOut, Loader2, AlertCircle, RefreshCw, MoreHorizontal, Pencil, Trash2 } from "lucide-react"
 import { cn, formatCurrency, formatPnL } from "@/lib/utils"
+import {
+  getAccountMaxDrawdown,
+  getAccountProfitTarget,
+  getAccountQuantity,
+  sumAccountQuantities,
+} from "@/lib/account-quantity"
+import { AccountQuantityBadge } from "@/components/account-quantity-badge"
 import { useToast } from "@/hooks/use-toast"
 import {
   calculateDailyPnLData,
@@ -242,9 +249,10 @@ export default function Dashboard() {
     }
 
     if (selectedAccount.type === "Eval") {
-      const pt =
-        selectedAccount.profitTarget ??
-        (rules.hasProfitTarget ? rules.profitTarget : null)
+      const pt = getAccountProfitTarget(
+        selectedAccount,
+        rules.hasProfitTarget ? rules.profitTarget : null,
+      )
 
       if (rules.hasProfitTarget && pt != null && pt > 0) {
         return {
@@ -347,7 +355,8 @@ export default function Dashboard() {
     return {
       totalBalance,
       totalNetPnL,
-      accountCount: accounts.length,
+      accountCount: sumAccountQuantities(accounts),
+      cardCount: accounts.length,
       evalPassed,
       payoutEligible,
     }
@@ -373,6 +382,7 @@ export default function Dashboard() {
         type: accountData.type,
         drawdownType: accountData.drawdownType,
         accountSize: accountData.accountSize,
+        quantity: accountData.quantity ?? 1,
         startingBalance: accountData.startingBalance,
         profitTarget: accountData.profitTarget,
         maxDrawdown: accountData.maxDrawdown,
@@ -483,6 +493,7 @@ export default function Dashboard() {
     status: "Active" | "Inactive" | "Breached" | "Passed"
     drawdownType: DrawdownType
     accountSize: number
+    quantity: number
     startingBalance: number
     maxDrawdown: number
     dailyLossLimit: number | null
@@ -497,6 +508,7 @@ export default function Dashboard() {
         status: updates.status,
         drawdownType: updates.drawdownType,
         accountSize: updates.accountSize,
+        quantity: updates.quantity,
         startingBalance: updates.startingBalance,
         maxDrawdown: updates.maxDrawdown,
         dailyLossLimit: updates.dailyLossLimit,
@@ -868,6 +880,11 @@ export default function Dashboard() {
                   <p className="mt-0.5 font-mono text-base font-semibold tracking-tight text-[#E5E4E2] sm:text-lg">
                     {accountsOverview.accountCount}
                   </p>
+                  {accountsOverview.cardCount !== accountsOverview.accountCount && (
+                    <p className="text-[10px] text-muted-foreground mt-0.5">
+                      {accountsOverview.cardCount} cards · {accountsOverview.accountCount} accounts
+                    </p>
+                  )}
                 </div>
                 <div className="rounded-2xl border border-white/[0.07] bg-[#111318]/75 px-3 py-2.5 shadow-[inset_0_1px_0_0_rgba(255,255,255,0.04)] backdrop-blur-sm sm:px-4 sm:py-3">
                   <p className="text-[10px] font-medium uppercase tracking-[0.14em] text-slate-500">Milestones</p>
@@ -960,9 +977,18 @@ export default function Dashboard() {
                     <ArrowLeft className="h-5 w-5" />
                   </Button>
                   <div className="min-w-0">
-                    <h1 className="text-xl sm:text-3xl lg:text-2xl font-semibold tracking-tight truncate">{selectedAccount.name}</h1>
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <h1 className="text-xl sm:text-3xl lg:text-2xl font-semibold tracking-tight truncate">{selectedAccount.name}</h1>
+                      <AccountQuantityBadge account={selectedAccount} className="text-xs" />
+                    </div>
                     <p className="text-sm sm:text-base text-muted-foreground">
                       {selectedAccount.type} Account
+                      {getAccountQuantity(selectedAccount) > 1 && (
+                        <span className="text-[#94AAB8]">
+                          {" "}
+                          · {getAccountQuantity(selectedAccount)}× grouped
+                        </span>
+                      )}
                     </p>
                   </div>
                 </div>
@@ -1091,9 +1117,10 @@ export default function Dashboard() {
                   title="Drawdown Remaining"
                   value={formatCurrency(Math.max(0, displayAccountStats!.drawdownRemaining))}
                   change={{
-                    value: `of ${formatCurrency(selectedAccount.maxDrawdown)}`,
+                    value: `of ${formatCurrency(getAccountMaxDrawdown(selectedAccount))}`,
                     isPositive:
-                      displayAccountStats!.drawdownRemaining > selectedAccount.maxDrawdown * 0.5,
+                      displayAccountStats!.drawdownRemaining >
+                      getAccountMaxDrawdown(selectedAccount) * 0.5,
                   }}
                   subValue={
                     selectedAccount.drawdownType === "Intraday" &&

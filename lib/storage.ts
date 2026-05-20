@@ -1,6 +1,12 @@
 import type { Account, Trade, Payout, DailyPnL } from "./types"
 import { EOD_CONSTANTS } from "./types"
 import { getAccountRules } from "./rules"
+import {
+  getAccountStartingBalance,
+  getAccountMaxDrawdown,
+  scaleAccountRulesForQuantity,
+  getAccountQuantity,
+} from "./account-quantity"
 import { lucidFlexActiveFloor } from "./lucid-flex-floor"
 
 /** PA converted from Eval: balance/stats/payouts ignore trades before activation_start_date. */
@@ -66,7 +72,7 @@ export function calculateDailyPnLData(
   }
 
   const dates = Object.keys(tradesByDate).sort()
-  let runningBalance = account.startingBalance
+  let runningBalance = getAccountStartingBalance(account)
 
   return dates.map((date) => {
     const dayTrades = tradesByDate[date]
@@ -95,7 +101,9 @@ export function calculateAccountStats(
   const totalPnL = accountTrades.reduce((sum, t) => sum + t.pnl, 0)
   const totalPayouts = accountPayouts.reduce((sum, p) => sum + p.amount, 0)
 
-  const currentBalance = account.startingBalance + totalPnL - totalPayouts
+  const startingBalance = getAccountStartingBalance(account)
+  const maxDrawdown = getAccountMaxDrawdown(account)
+  const currentBalance = startingBalance + totalPnL - totalPayouts
 
   const dailyData = calculateDailyPnLData(account.id, trades, account, payouts)
 
@@ -103,8 +111,8 @@ export function calculateAccountStats(
   const dayComplete = isTradingDayComplete()
   const isIntraday = account.drawdownType === "Intraday"
 
-  let highestCompletedEodBalance = account.startingBalance
-  let lastCompletedEodBalance = account.startingBalance
+  let highestCompletedEodBalance = startingBalance
+  let lastCompletedEodBalance = startingBalance
 
   for (const day of dailyData) {
     if (isIntraday) {
@@ -125,9 +133,9 @@ export function calculateAccountStats(
 
   const rules = getAccountRules(account)
 
-  let activeEodFloor = peakBalance - account.maxDrawdown
+  let activeEodFloor = peakBalance - maxDrawdown
   const projectedHighest = Math.max(highestCompletedEodBalance, currentBalance)
-  let projectedEodFloor = projectedHighest - account.maxDrawdown
+  let projectedEodFloor = projectedHighest - maxDrawdown
 
   if (
     rules.lucidFlexFloor &&
@@ -136,12 +144,12 @@ export function calculateAccountStats(
   ) {
     activeEodFloor = lucidFlexActiveFloor(
       peakBalance,
-      account.maxDrawdown,
+      maxDrawdown,
       rules.lucidFlexFloor,
     )
     projectedEodFloor = lucidFlexActiveFloor(
       projectedHighest,
-      account.maxDrawdown,
+      maxDrawdown,
       rules.lucidFlexFloor,
     )
   }
@@ -240,7 +248,10 @@ export function getPayoutEligibility(
   account: Account,
   payouts: Payout[]
 ) {
-  const rules = getAccountRules(account)
+  const rules = scaleAccountRulesForQuantity(
+    getAccountRules(account),
+    getAccountQuantity(account),
+  )
   const stats = calculateAccountStats(account, trades, payouts)
   const accountPayouts = payouts.filter((p) => p.accountId === accountId)
   const payoutCount = accountPayouts.length

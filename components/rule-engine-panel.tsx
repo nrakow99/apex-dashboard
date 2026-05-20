@@ -7,6 +7,14 @@ import { cn } from "@/lib/utils"
 import type { Account, DailyPnL } from "@/lib/types"
 import { getAccountRules } from "@/lib/rules"
 import {
+  getAccountMaxDrawdown,
+  getAccountProfitTarget,
+  getAccountQuantity,
+  getAccountDailyLossLimit,
+  scaleAccountRulesForQuantity,
+  formatScaledRuleHelper,
+} from "@/lib/account-quantity"
+import {
   getRuleEngineFloorCardTitle,
   getRuleEngineFloorRowHint,
   getRuleEngineFloorRowLabel,
@@ -103,7 +111,15 @@ export function RuleEnginePanel({
   consistencyInfo,
   lucidCycleQualifyingDays,
 }: RuleEnginePanelProps) {
-  const rules = getAccountRules(account)
+  const baseRules = getAccountRules(account)
+  const qty = getAccountQuantity(account)
+  const rules = scaleAccountRulesForQuantity(baseRules, qty)
+  const effectiveMaxDrawdown = getAccountMaxDrawdown(account)
+  const effectiveProfitTarget = getAccountProfitTarget(
+    account,
+    baseRules.hasProfitTarget ? baseRules.profitTarget : null,
+  )
+  const effectiveDll = getAccountDailyLossLimit(account)
   const lucidQualifyingDaysInCycle =
     account.firm === "Lucid" && account.type === "PA" && lucidCycleQualifyingDays != null
       ? lucidCycleQualifyingDays
@@ -127,13 +143,13 @@ export function RuleEnginePanel({
   // Daily loss (today only)
   const today = dailyData[dailyData.length - 1]
   const todayPnL = today?.pnl ?? 0
-  const dailyLossRemaining = rules.dailyLossLimit + Math.min(0, todayPnL)
+  const dailyLossRemaining = effectiveDll + Math.min(0, todayPnL)
   const dailyLossStatus: "good" | "warning" | "danger" =
-    todayPnL >= -rules.dailyLossLimit * 0.8 ? "good" :
-    todayPnL >= -rules.dailyLossLimit        ? "warning" : "danger"
+    todayPnL >= -effectiveDll * 0.8 ? "good" :
+    todayPnL >= -effectiveDll ? "warning" : "danger"
 
   // Drawdown / floor
-  const drawdownPercent = (stats.drawdownRemaining / account.maxDrawdown) * 100
+  const drawdownPercent = (stats.drawdownRemaining / effectiveMaxDrawdown) * 100
   const drawdownStatus: "good" | "warning" | "danger" =
     drawdownPercent > 50 ? "good" : drawdownPercent > 20 ? "warning" : "danger"
 
@@ -226,30 +242,40 @@ export function RuleEnginePanel({
               <div className="flex justify-between">
                 <span className="text-muted-foreground">Max Loss</span>
                 <span className="font-mono text-muted-foreground">
-                  ${rules.dailyLossLimit.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                  ${effectiveDll.toLocaleString(undefined, { minimumFractionDigits: 2 })}
                 </span>
               </div>
+              {qty > 1 && baseRules.hasDLL && (
+                <p className="text-[10px] text-muted-foreground">
+                  {formatScaledRuleHelper(baseRules.dailyLossLimit, qty, "DLL")}
+                </p>
+              )}
             </div>
           </RuleCard>
         )}
 
         {/* ── Profit Target (Eval only) ─────────────────────────────────────── */}
-        {account.type === "Eval" && account.profitTarget && (
+        {account.type === "Eval" && effectiveProfitTarget && (
           <RuleCard title="Profit Goal">
             <div className="space-y-1.5 text-sm">
               <div className="flex justify-between">
                 <span className="text-muted-foreground">Progress</span>
                 <span className="font-mono font-bold">
-                  ${Math.max(0, stats.totalPnL).toLocaleString(undefined, { minimumFractionDigits: 2 })} / ${account.profitTarget.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                  ${Math.max(0, stats.totalPnL).toLocaleString(undefined, { minimumFractionDigits: 2 })} / ${effectiveProfitTarget.toLocaleString(undefined, { minimumFractionDigits: 2 })}
                 </span>
               </div>
-              <Progress value={Math.min(100, (stats.totalPnL / account.profitTarget) * 100)} className="h-1.5" />
+              <Progress value={Math.min(100, (stats.totalPnL / effectiveProfitTarget) * 100)} className="h-1.5" />
               <div className="flex justify-between pt-1">
                 <span className="text-muted-foreground">Remaining</span>
                 <span className="font-mono">
-                  ${Math.max(0, account.profitTarget - stats.totalPnL).toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                  ${Math.max(0, effectiveProfitTarget - stats.totalPnL).toLocaleString(undefined, { minimumFractionDigits: 2 })}
                 </span>
               </div>
+              {qty > 1 && account.profitTarget != null && (
+                <p className="text-[10px] text-muted-foreground">
+                  {formatScaledRuleHelper(account.profitTarget, qty, "target")}
+                </p>
+              )}
             </div>
           </RuleCard>
         )}

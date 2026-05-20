@@ -21,6 +21,11 @@ import {
 import { Plus } from "lucide-react"
 import type { Account, AccountType, Firm, DrawdownType } from "@/lib/types"
 import { getAccountRules } from "@/lib/rules"
+import {
+  formatAccountBundleHelper,
+  formatScaledRuleHelper,
+  MAX_ACCOUNT_QUANTITY,
+} from "@/lib/account-quantity"
 import { cn } from "@/lib/utils"
 
 interface AddAccountModalProps {
@@ -67,6 +72,7 @@ export function AddAccountModal({ onAddAccount }: AddAccountModalProps) {
     type: "Eval" as AccountType,
     drawdownType: "EOD" as DrawdownType,
     accountSize: 50000,
+    quantity: 1,
   })
 
   // Auto-derive rules whenever firm/type/drawdown/size changes
@@ -82,6 +88,9 @@ export function AddAccountModal({ onAddAccount }: AddAccountModalProps) {
   const set = <K extends keyof typeof form>(k: K, v: (typeof form)[K]) =>
     setForm((f) => ({ ...f, [k]: v }))
 
+  const qty = Math.max(1, Math.min(MAX_ACCOUNT_QUANTITY, Math.floor(form.quantity) || 1))
+  const aggregateStarting = form.accountSize * qty
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
     onAddAccount({
@@ -91,15 +100,16 @@ export function AddAccountModal({ onAddAccount }: AddAccountModalProps) {
       status: "Active",
       drawdownType: form.drawdownType,
       accountSize: form.accountSize,
-      balance: form.accountSize,
-      startingBalance: form.accountSize,
-      maxBalance: form.accountSize,
+      quantity: qty,
+      balance: aggregateStarting,
+      startingBalance: aggregateStarting,
+      maxBalance: aggregateStarting,
       profitTarget: rules.hasProfitTarget ? rules.profitTarget : undefined,
       maxDrawdown: rules.maxDrawdown,
       dailyLossLimit: rules.dailyLossLimit,
     })
     setOpen(false)
-    setForm({ name: "", firm: "Apex", type: "Eval", drawdownType: "EOD", accountSize: 50000 })
+    setForm({ name: "", firm: "Apex", type: "Eval", drawdownType: "EOD", accountSize: 50000, quantity: 1 })
   }
 
   const showDrawdownSelector = form.firm === "Apex"
@@ -153,25 +163,50 @@ export function AddAccountModal({ onAddAccount }: AddAccountModalProps) {
             />
           </div>
 
-          {/* Account Size */}
-          <div className="space-y-2">
-            <Label>Account Size</Label>
-            <Select
-              value={String(form.accountSize)}
-              onValueChange={(v) => set("accountSize", Number(v))}
-            >
-              <SelectTrigger className="bg-background">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {ACCOUNT_SIZES.map((s) => (
-                  <SelectItem key={s} value={String(s)}>
-                    ${s.toLocaleString()}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+          <div className="grid grid-cols-2 gap-3">
+            {/* Account Size */}
+            <div className="space-y-2">
+              <Label>Account Size</Label>
+              <Select
+                value={String(form.accountSize)}
+                onValueChange={(v) => set("accountSize", Number(v))}
+              >
+                <SelectTrigger className="bg-background h-9">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {ACCOUNT_SIZES.map((s) => (
+                    <SelectItem key={s} value={String(s)}>
+                      ${s.toLocaleString()}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            {/* Number of Accounts */}
+            <div className="space-y-2">
+              <Label>Number of Accounts</Label>
+              <Input
+                type="number"
+                min={1}
+                max={MAX_ACCOUNT_QUANTITY}
+                step={1}
+                value={form.quantity}
+                onChange={(e) => {
+                  const n = parseInt(e.target.value, 10)
+                  set("quantity", Number.isFinite(n) ? n : 1)
+                }}
+                className="bg-background font-mono h-9"
+              />
+            </div>
           </div>
+          {qty > 1 && (
+            <p className="text-[11px] text-muted-foreground -mt-2">
+              {formatAccountBundleHelper({ accountSize: form.accountSize, quantity: qty })} · Starting balance{" "}
+              <span className="font-mono text-[#94AAB8]">${aggregateStarting.toLocaleString()}</span>
+            </p>
+          )}
 
           {/* Drawdown Type (Apex only) */}
           {showDrawdownSelector && (
@@ -198,19 +233,30 @@ export function AddAccountModal({ onAddAccount }: AddAccountModalProps) {
             <div className="font-medium text-foreground mb-1">Account Rules</div>
             <div className="flex justify-between">
               <span>Max Drawdown</span>
-              <span className="font-mono">${rules.maxDrawdown.toLocaleString()}</span>
+              <span className="font-mono">${(rules.maxDrawdown * qty).toLocaleString()}</span>
             </div>
             {rules.hasDLL && (
               <div className="flex justify-between">
                 <span>Daily Loss Limit</span>
-                <span className="font-mono">${rules.dailyLossLimit.toLocaleString()}</span>
+                <span className="font-mono">${(rules.dailyLossLimit * qty).toLocaleString()}</span>
               </div>
             )}
             {rules.hasProfitTarget && (
               <div className="flex justify-between">
                 <span>Profit Target</span>
-                <span className="font-mono">${rules.profitTarget.toLocaleString()}</span>
+                <span className="font-mono">${(rules.profitTarget * qty).toLocaleString()}</span>
               </div>
+            )}
+            {qty > 1 && (
+              <p className="text-[10px] text-muted-foreground pt-1 space-y-0.5">
+                {formatScaledRuleHelper(rules.maxDrawdown, qty, "drawdown")}
+                {rules.hasProfitTarget && (
+                  <>
+                    <br />
+                    {formatScaledRuleHelper(rules.profitTarget, qty, "target")}
+                  </>
+                )}
+              </p>
             )}
             {rules.maxContracts && (
               <div className="flex justify-between">

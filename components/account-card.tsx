@@ -9,6 +9,15 @@ import type { Account, Trade, Payout } from "@/lib/types"
 import { calculateAccountStats, getConsistencyInfo, getPayoutEligibility } from "@/lib/storage"
 import { applyIntradayManualDrawdownToStats } from "@/lib/intraday-manual-drawdown"
 import { getAccountRules } from "@/lib/rules"
+import {
+  getAccountStartingBalance,
+  getAccountMaxDrawdown,
+  getAccountProfitTarget,
+  getAccountQuantity,
+  scaleAccountRulesForQuantity,
+  formatAccountBundleHelper,
+} from "@/lib/account-quantity"
+import { AccountQuantityBadge } from "@/components/account-quantity-badge"
 import { ChevronRight } from "lucide-react"
 import { AccountCardInsightBanner } from "@/components/account-card-insight-banner"
 import {
@@ -102,12 +111,18 @@ export function AccountCard({
   const rawStats = calculateAccountStats(account, trades, payouts)
   const stats = applyIntradayManualDrawdownToStats(account, rawStats)
   const rules = getAccountRules(account)
+  const qty = getAccountQuantity(account)
+  const scaledRules = scaleAccountRulesForQuantity(rules, qty)
+  const startingBalance = getAccountStartingBalance(account)
+  const effectiveMaxDrawdown = getAccountMaxDrawdown(account)
   const consistencyInfo = account.type === "PA" && rules.hasConsistency
     ? getConsistencyInfo(account.id, trades, account, payouts)
     : null
 
-  const effectiveProfitTarget =
-    account.profitTarget ?? (rules.hasProfitTarget ? rules.profitTarget : undefined)
+  const effectiveProfitTarget = getAccountProfitTarget(
+    account,
+    rules.hasProfitTarget ? rules.profitTarget : undefined,
+  )
 
   const evalPassed =
     account.type === "Eval" &&
@@ -120,19 +135,19 @@ export function AccountCard({
       : 0
 
   const minPayoutBalanceTarget =
-    account.type === "PA" && account.firm === "Apex" && rules.minBalanceToRequest > 0
-      ? rules.minBalanceToRequest
+    account.type === "PA" && account.firm === "Apex" && scaledRules.minBalanceToRequest > 0
+      ? scaledRules.minBalanceToRequest
       : null
 
   const payoutSpan =
-    minPayoutBalanceTarget != null ? minPayoutBalanceTarget - account.startingBalance : null
+    minPayoutBalanceTarget != null ? minPayoutBalanceTarget - startingBalance : null
 
   const paMinBalanceProgress =
     minPayoutBalanceTarget != null
       ? payoutSpan != null && payoutSpan > 0
         ? Math.min(
             100,
-            Math.max(0, ((stats.currentBalance - account.startingBalance) / payoutSpan) * 100)
+            Math.max(0, ((stats.currentBalance - startingBalance) / payoutSpan) * 100)
           )
         : stats.currentBalance >= minPayoutBalanceTarget
           ? 100
@@ -162,7 +177,7 @@ export function AccountCard({
   const showLiveMainGoal =
     account.type === "Live" &&
     (effectiveProfitTarget != null ||
-      (rules.minBalanceToRequest > 0 && rules.minBalanceToRequest > account.startingBalance))
+      (scaledRules.minBalanceToRequest > 0 && scaledRules.minBalanceToRequest > startingBalance))
 
   const drawdownLabel = account.drawdownType === "EOD" ? "EOD Drawdown" : "Intraday Drawdown"
 
@@ -179,7 +194,7 @@ export function AccountCard({
     account,
     isSafe: stats.isSafe,
     drawdownRemaining: stats.drawdownRemaining,
-    maxDrawdown: account.maxDrawdown,
+    maxDrawdown: effectiveMaxDrawdown,
     totalPnL: stats.totalPnL,
     evalPassed,
     evalProfitProgress,
@@ -256,7 +271,13 @@ export function AccountCard({
       {/* Header — left side only; right side is handled by absolute controls above */}
       <div className="mb-3 sm:mb-4 pr-[76px]">
         <h3 className="font-semibold text-base sm:text-lg truncate text-[#E5E4E2]">{account.name}</h3>
+        {qty > 1 && (
+          <p className="text-[10px] text-muted-foreground mt-0.5">
+            {formatAccountBundleHelper(account)}
+          </p>
+        )}
         <div className="flex items-center gap-1.5 mt-2 flex-wrap">
+          <AccountQuantityBadge account={account} />
           <Badge
             variant="outline"
             className={cn(
@@ -399,13 +420,13 @@ export function AccountCard({
               value={
                 effectiveProfitTarget != null && effectiveProfitTarget > 0
                   ? Math.min(100, (Math.max(0, stats.totalPnL) / effectiveProfitTarget) * 100)
-                  : rules.minBalanceToRequest > account.startingBalance
+                  : scaledRules.minBalanceToRequest > startingBalance
                     ? Math.min(
                         100,
                         Math.max(
                           0,
-                          ((stats.currentBalance - account.startingBalance) /
-                            (rules.minBalanceToRequest - account.startingBalance)) *
+                          ((stats.currentBalance - startingBalance) /
+                            (scaledRules.minBalanceToRequest - startingBalance)) *
                             100
                         )
                       )
@@ -423,25 +444,25 @@ export function AccountCard({
             <span
               className={cn(
                 rowValueClass,
-                stats.drawdownRemaining > account.maxDrawdown * 0.5
+                stats.drawdownRemaining > effectiveMaxDrawdown * 0.5
                   ? "text-emerald-500"
-                  : stats.drawdownRemaining > account.maxDrawdown * 0.2
+                  : stats.drawdownRemaining > effectiveMaxDrawdown * 0.2
                     ? "text-amber-500"
                     : "text-red-500"
               )}
             >
-              ${fmtMoney(Math.max(0, stats.drawdownRemaining))} / ${fmtMoney(account.maxDrawdown)}
+              ${fmtMoney(Math.max(0, stats.drawdownRemaining))} / ${fmtMoney(effectiveMaxDrawdown)}
             </span>
           </div>
           <Progress
-            value={Math.max(0, (stats.drawdownRemaining / account.maxDrawdown) * 100)}
+            value={Math.max(0, (stats.drawdownRemaining / effectiveMaxDrawdown) * 100)}
             className={cn(
               barClass,
-              stats.drawdownRemaining > account.maxDrawdown * 0.5 && "[&>div]:bg-emerald-500",
-              stats.drawdownRemaining <= account.maxDrawdown * 0.5 &&
-                stats.drawdownRemaining > account.maxDrawdown * 0.2 &&
+              stats.drawdownRemaining > effectiveMaxDrawdown * 0.5 && "[&>div]:bg-emerald-500",
+              stats.drawdownRemaining <= effectiveMaxDrawdown * 0.5 &&
+                stats.drawdownRemaining > effectiveMaxDrawdown * 0.2 &&
                 "[&>div]:bg-amber-500",
-              stats.drawdownRemaining <= account.maxDrawdown * 0.2 && "[&>div]:bg-red-500"
+              stats.drawdownRemaining <= effectiveMaxDrawdown * 0.2 && "[&>div]:bg-red-500"
             )}
           />
         </div>

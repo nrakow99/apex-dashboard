@@ -21,6 +21,11 @@ import { Loader2 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import type { Account, AccountType, Firm, DrawdownType } from "@/lib/types"
 import { getAccountRules } from "@/lib/rules"
+import {
+  formatAccountBundleHelper,
+  getAccountStartingBalance,
+  MAX_ACCOUNT_QUANTITY,
+} from "@/lib/account-quantity"
 
 const ACCOUNT_SIZES = [25000, 50000, 100000, 150000]
 
@@ -69,6 +74,7 @@ interface EditAccountModalProps {
     status: "Active" | "Inactive" | "Breached" | "Passed"
     drawdownType: DrawdownType
     accountSize: number
+    quantity: number
     startingBalance: number
     maxDrawdown: number
     dailyLossLimit: number | null
@@ -91,6 +97,7 @@ export function EditAccountModal({
     status: "Active" as "Active" | "Inactive" | "Breached" | "Passed",
     drawdownType: "EOD" as DrawdownType,
     accountSize: 50000,
+    quantity: 1,
     startingBalance: "",
     maxDrawdown: "",
     dailyLossLimit: "",
@@ -106,6 +113,7 @@ export function EditAccountModal({
         status: account.status,
         drawdownType: account.drawdownType ?? "EOD",
         accountSize: account.accountSize ?? 50000,
+        quantity: account.quantity ?? 1,
         startingBalance: account.startingBalance.toString(),
         maxDrawdown: account.maxDrawdown.toString(),
         dailyLossLimit: (account.dailyLossLimit ?? "").toString(),
@@ -124,6 +132,12 @@ export function EditAccountModal({
     accountSize: form.accountSize,
   })
 
+  const qty = Math.max(1, Math.min(MAX_ACCOUNT_QUANTITY, Math.floor(form.quantity) || 1))
+  const aggregateStarting = getAccountStartingBalance({
+    accountSize: form.accountSize,
+    quantity: qty,
+  })
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!account) return
@@ -134,7 +148,8 @@ export function EditAccountModal({
       status: form.status,
       drawdownType: form.drawdownType,
       accountSize: form.accountSize,
-      startingBalance: parseFloat(form.startingBalance) || account.startingBalance,
+      quantity: qty,
+      startingBalance: aggregateStarting,
       maxDrawdown: parseFloat(form.maxDrawdown) || rules.maxDrawdown,
       dailyLossLimit: rules.hasDLL ? (parseFloat(form.dailyLossLimit) || rules.dailyLossLimit) : null,
       profitTarget: form.type === "Eval" && form.profitTarget ? parseFloat(form.profitTarget) : null,
@@ -200,9 +215,9 @@ export function EditAccountModal({
 
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-2">
-              <Label>Account Size</Label>
+              <Label>Account Size (each)</Label>
               <Select value={String(form.accountSize)} onValueChange={(v) => set("accountSize", Number(v))} disabled={isSaving}>
-                <SelectTrigger className="bg-background"><SelectValue /></SelectTrigger>
+                <SelectTrigger className="bg-background h-9"><SelectValue /></SelectTrigger>
                 <SelectContent>
                   {ACCOUNT_SIZES.map((s) => (
                     <SelectItem key={s} value={String(s)}>${s.toLocaleString()}</SelectItem>
@@ -211,16 +226,28 @@ export function EditAccountModal({
               </Select>
             </div>
             <div className="space-y-2">
-              <Label>Starting Balance ($)</Label>
+              <Label>Number of Accounts</Label>
               <Input
                 type="number"
-                value={form.startingBalance}
-                onChange={(e) => set("startingBalance", e.target.value)}
-                className="bg-background font-mono"
+                min={1}
+                max={MAX_ACCOUNT_QUANTITY}
+                step={1}
+                value={form.quantity}
+                onChange={(e) => {
+                  const n = parseInt(e.target.value, 10)
+                  set("quantity", Number.isFinite(n) ? n : 1)
+                }}
+                className="bg-background font-mono h-9"
                 disabled={isSaving}
               />
             </div>
           </div>
+          {qty > 1 && (
+            <p className="text-[11px] text-muted-foreground -mt-2">
+              {formatAccountBundleHelper({ accountSize: form.accountSize, quantity: qty })} · Aggregate starting{" "}
+              <span className="font-mono text-[#94AAB8]">${aggregateStarting.toLocaleString()}</span>
+            </p>
+          )}
 
           {form.firm === "Apex" && (
             <div className="space-y-2">

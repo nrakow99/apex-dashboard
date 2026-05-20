@@ -45,6 +45,7 @@ import {
   COL_DATE,
   COL_SESSION_DIR,
 } from "@/components/trade-modal-layout"
+import { getAccountQuantity } from "@/lib/account-quantity"
 
 const GRADES: TradeGrade[] = ["A+", "A", "B", "C", "FOMO", "Revenge"]
 
@@ -85,6 +86,9 @@ export function TradeFormBody({
   toggleDiscipline,
   toggleSetup,
 }: TradeFormBodyProps) {
+  const selectedAccount = accounts.find((a) => a.id === formData.accountId)
+  const selectedQty = selectedAccount ? getAccountQuantity(selectedAccount) : 1
+
   return (
     <>
       {/* Date */}
@@ -204,6 +208,11 @@ export function TradeFormBody({
             ))}
           </SelectContent>
         </Select>
+        {selectedQty > 1 && (
+          <p className="text-[10px] text-muted-foreground mt-0.5">
+            This account represents {selectedQty} accounts. Enter combined PnL.
+          </p>
+        )}
       </div>
 
       {/* Symbol */}

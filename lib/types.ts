@@ -11,6 +11,8 @@ export interface Account {
   status: AccountStatus
   drawdownType: DrawdownType
   accountSize: number
+  /** Number of identical accounts represented by this card (default 1) */
+  quantity?: number
   balance: number
   startingBalance: number
   maxBalance: number

@@ -24,6 +24,7 @@ import {
 import { hasIntradayManualDrawdown } from "@/lib/intraday-manual-drawdown"
 import { isTradingDayComplete, getTodayDateStr } from "@/lib/storage"
 import { parseLocalDate, toLocalDateKey } from "@/lib/date-utils"
+import { getAccountStartingBalance, getAccountMaxDrawdown } from "@/lib/account-quantity"
 
 interface AccountStats {
   currentBalance: number
@@ -68,6 +69,8 @@ export function PerformanceChart({ data, account, stats }: PerformanceChartProps
   // Build chart data with starting point and proper floor tracking per drawdown type
   const chartData = useMemo(() => {
     const result: ChartDataPoint[] = []
+    const startingBalance = getAccountStartingBalance(account)
+    const maxDrawdown = getAccountMaxDrawdown(account)
     const todayStr = getTodayDateStr()
     const dayComplete = isTradingDayComplete()
     const isIntraday = account.drawdownType === "Intraday"
@@ -80,15 +83,15 @@ export function PerformanceChart({ data, account, stats }: PerformanceChartProps
     result.push({
       date: parseLocalDate(startDateStr).toLocaleDateString("en-US", { month: "short", day: "numeric" }),
       fullDate: startDateStr,
-      balance: account.startingBalance,
+      balance: startingBalance,
       dailyPnl: 0,
-      minBalance: account.startingBalance - account.maxDrawdown,
-      maxBalanceAtPoint: account.startingBalance,
+      minBalance: startingBalance - maxDrawdown,
+      maxBalanceAtPoint: startingBalance,
       isStartingPoint: true,
       isIncompleteDay: false,
     })
 
-    let highestBalance = account.startingBalance
+    let highestBalance = startingBalance
 
     for (const d of data) {
       const isComplete = d.date !== todayStr || dayComplete
@@ -103,7 +106,7 @@ export function PerformanceChart({ data, account, stats }: PerformanceChartProps
         }
       }
 
-      const activeFloorAtPoint = highestBalance - account.maxDrawdown
+      const activeFloorAtPoint = highestBalance - maxDrawdown
 
       result.push({
         date: parseLocalDate(d.date).toLocaleDateString("en-US", { month: "short", day: "numeric" }),
@@ -128,8 +131,9 @@ export function PerformanceChart({ data, account, stats }: PerformanceChartProps
 
   // Calculate Y-axis domain dynamically
   const yAxisDomain = useMemo(() => {
+    const startingBalance = getAccountStartingBalance(account)
     if (chartData.length === 0) {
-      return [account.startingBalance - 3000, account.startingBalance + 3000]
+      return [startingBalance - 3000, startingBalance + 3000]
     }
 
     const balances = chartData.map((d) => d.balance)
@@ -266,8 +270,8 @@ export function PerformanceChart({ data, account, stats }: PerformanceChartProps
           <ResponsiveContainer width="100%" height="100%">
             <AreaChart
               data={[
-                { date: "Start", balance: account.startingBalance, minBalance: account.startingBalance - account.maxDrawdown },
-                { date: "Now", balance: account.startingBalance, minBalance: account.startingBalance - account.maxDrawdown },
+                { date: "Start", balance: getAccountStartingBalance(account), minBalance: getAccountStartingBalance(account) - getAccountMaxDrawdown(account) },
+                { date: "Now", balance: getAccountStartingBalance(account), minBalance: getAccountStartingBalance(account) - getAccountMaxDrawdown(account) },
               ]}
               margin={{ top: 6, right: 12, left: 2, bottom: 0 }}
             >
@@ -289,11 +293,11 @@ export function PerformanceChart({ data, account, stats }: PerformanceChartProps
                 tickLine={false}
                 tick={{ fill: "#6b7280", fontSize: 12 }}
                 tickFormatter={(value) => `$${(value / 1000).toFixed(0)}k`}
-                domain={[account.startingBalance - 3000, account.startingBalance + 3000]}
+                domain={[getAccountStartingBalance(account) - 3000, getAccountStartingBalance(account) + 3000]}
                 width={60}
               />
               <ReferenceLine
-                y={account.startingBalance - account.maxDrawdown}
+                y={getAccountStartingBalance(account) - getAccountMaxDrawdown(account)}
                 stroke="#ef4444"
                 strokeDasharray="6 4"
                 strokeWidth={2}
@@ -420,7 +424,7 @@ export function PerformanceChart({ data, account, stats }: PerformanceChartProps
               />
               {/* Starting balance reference line */}
               <ReferenceLine
-                y={account.startingBalance}
+                y={getAccountStartingBalance(account)}
                 stroke="#64748b"
                 strokeDasharray="4 4"
                 strokeWidth={1}
