@@ -7,14 +7,6 @@ import { cn } from "@/lib/utils"
 import type { Account, DailyPnL } from "@/lib/types"
 import { getAccountRules } from "@/lib/rules"
 import {
-  getAccountMaxDrawdown,
-  getAccountProfitTarget,
-  getAccountQuantity,
-  getAccountDailyLossLimit,
-  scaleAccountRulesForQuantity,
-  formatScaledRuleHelper,
-} from "@/lib/account-quantity"
-import {
   getRuleEngineFloorCardTitle,
   getRuleEngineFloorRowHint,
   getRuleEngineFloorRowLabel,
@@ -111,15 +103,9 @@ export function RuleEnginePanel({
   consistencyInfo,
   lucidCycleQualifyingDays,
 }: RuleEnginePanelProps) {
-  const baseRules = getAccountRules(account)
-  const qty = getAccountQuantity(account)
-  const rules = scaleAccountRulesForQuantity(baseRules, qty)
-  const effectiveMaxDrawdown = getAccountMaxDrawdown(account)
-  const effectiveProfitTarget = getAccountProfitTarget(
-    account,
-    baseRules.hasProfitTarget ? baseRules.profitTarget : null,
-  )
-  const effectiveDll = getAccountDailyLossLimit(account)
+  const rules = getAccountRules(account)
+  const effectiveProfitTarget =
+    account.profitTarget ?? (rules.hasProfitTarget ? rules.profitTarget : null)
   const lucidQualifyingDaysInCycle =
     account.firm === "Lucid" && account.type === "PA" && lucidCycleQualifyingDays != null
       ? lucidCycleQualifyingDays
@@ -143,13 +129,13 @@ export function RuleEnginePanel({
   // Daily loss (today only)
   const today = dailyData[dailyData.length - 1]
   const todayPnL = today?.pnl ?? 0
-  const dailyLossRemaining = effectiveDll + Math.min(0, todayPnL)
+  const dailyLossRemaining = rules.dailyLossLimit + Math.min(0, todayPnL)
   const dailyLossStatus: "good" | "warning" | "danger" =
-    todayPnL >= -effectiveDll * 0.8 ? "good" :
-    todayPnL >= -effectiveDll ? "warning" : "danger"
+    todayPnL >= -rules.dailyLossLimit * 0.8 ? "good" :
+    todayPnL >= -rules.dailyLossLimit ? "warning" : "danger"
 
   // Drawdown / floor
-  const drawdownPercent = (stats.drawdownRemaining / effectiveMaxDrawdown) * 100
+  const drawdownPercent = (stats.drawdownRemaining / account.maxDrawdown) * 100
   const drawdownStatus: "good" | "warning" | "danger" =
     drawdownPercent > 50 ? "good" : drawdownPercent > 20 ? "warning" : "danger"
 
@@ -242,14 +228,9 @@ export function RuleEnginePanel({
               <div className="flex justify-between">
                 <span className="text-muted-foreground">Max Loss</span>
                 <span className="font-mono text-muted-foreground">
-                  ${effectiveDll.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                  ${rules.dailyLossLimit.toLocaleString(undefined, { minimumFractionDigits: 2 })}
                 </span>
               </div>
-              {qty > 1 && baseRules.hasDLL && (
-                <p className="text-[10px] text-muted-foreground">
-                  {formatScaledRuleHelper(baseRules.dailyLossLimit, qty, "DLL")}
-                </p>
-              )}
             </div>
           </RuleCard>
         )}
@@ -271,11 +252,6 @@ export function RuleEnginePanel({
                   ${Math.max(0, effectiveProfitTarget - stats.totalPnL).toLocaleString(undefined, { minimumFractionDigits: 2 })}
                 </span>
               </div>
-              {qty > 1 && account.profitTarget != null && (
-                <p className="text-[10px] text-muted-foreground">
-                  {formatScaledRuleHelper(account.profitTarget, qty, "target")}
-                </p>
-              )}
             </div>
           </RuleCard>
         )}

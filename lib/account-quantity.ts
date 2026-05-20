@@ -1,5 +1,4 @@
 import type { Account } from "@/lib/types"
-import type { AccountRules } from "@/lib/rules"
 
 export const MAX_ACCOUNT_QUANTITY = 20
 
@@ -10,45 +9,40 @@ export function getAccountQuantity(account: Pick<Account, "quantity">): number {
   return Math.max(1, Math.min(MAX_ACCOUNT_QUANTITY, Math.floor(raw)))
 }
 
-/** Aggregate starting balance (per-account size × quantity). */
-export function getAccountStartingBalance(
+/** Per-account size for rule engine / firm rule lookup (never scaled). */
+export function getRuleAccountSize(account: Pick<Account, "accountSize">): number {
+  return account.accountSize
+}
+
+/**
+ * Per-account starting balance for stats, floors, charts, and rule math.
+ * Never multiplied by quantity. Handles legacy rows that stored aggregate starting balance.
+ */
+export function getRuleStartingBalance(
+  account: Pick<Account, "accountSize" | "startingBalance" | "quantity">,
+): number {
+  const qty = getAccountQuantity(account)
+  const size = account.accountSize
+  const stored = account.startingBalance
+  if (qty > 1 && Math.abs(stored - size * qty) < 0.01) {
+    return size
+  }
+  return stored
+}
+
+/** Homepage / portfolio total balance: representative balance × quantity. */
+export function getPortfolioBalance(
+  representativeBalance: number,
+  account: Pick<Account, "quantity">,
+): number {
+  return representativeBalance * getAccountQuantity(account)
+}
+
+/** Portfolio buying-power context from per-account size × quantity (display only). */
+export function getPortfolioBuyingPower(
   account: Pick<Account, "accountSize" | "quantity">,
 ): number {
   return account.accountSize * getAccountQuantity(account)
-}
-
-/** Per-account max drawdown stored on the account, scaled for the bundle. */
-export function getAccountMaxDrawdown(account: Pick<Account, "maxDrawdown" | "quantity">): number {
-  return account.maxDrawdown * getAccountQuantity(account)
-}
-
-/** Per-account profit target (stored or from rules), scaled for the bundle. */
-export function getAccountProfitTarget(
-  account: Pick<Account, "profitTarget" | "quantity">,
-  perAccountTarget?: number | null,
-): number | undefined {
-  const per = account.profitTarget ?? perAccountTarget
-  if (per == null || per <= 0) return undefined
-  return per * getAccountQuantity(account)
-}
-
-/** Per-account daily loss limit, scaled for the bundle. */
-export function getAccountDailyLossLimit(
-  account: Pick<Account, "dailyLossLimit" | "quantity">,
-): number {
-  return (account.dailyLossLimit ?? 0) * getAccountQuantity(account)
-}
-
-/** Scale payout / balance thresholds that apply to the grouped bundle. */
-export function scaleAccountRulesForQuantity(rules: AccountRules, quantity: number): AccountRules {
-  if (quantity <= 1) return rules
-  return {
-    ...rules,
-    safetyNet: rules.safetyNet * quantity,
-    minBalanceToRequest: rules.minBalanceToRequest * quantity,
-    payoutCaps: rules.payoutCaps.map((c) => c * quantity),
-    payoutAbsoluteCap: rules.payoutAbsoluteCap * quantity,
-  }
 }
 
 export function formatAccountQuantityBadge(quantity: number): string | null {
@@ -69,17 +63,17 @@ export function formatAccountBundleHelper(
   return `${q}x $${sizeK} accounts`
 }
 
-/** e.g. "$3,000 target/account · $6,000 total" */
-export function formatScaledRuleHelper(
-  perAccountAmount: number,
-  quantity: number,
-  label: string,
+/** e.g. "Tracking one representative 50K account" */
+export function formatRepresentativeTrackingHelper(
+  account: Pick<Account, "accountSize" | "quantity">,
 ): string | null {
-  if (quantity <= 1) return null
-  const total = perAccountAmount * quantity
-  const fmt = (n: number) =>
-    n.toLocaleString(undefined, { maximumFractionDigits: 0 })
-  return `$${fmt(perAccountAmount)} ${label}/account · $${fmt(total)} total`
+  const q = getAccountQuantity(account)
+  if (q <= 1) return null
+  const sizeK =
+    account.accountSize >= 1000
+      ? `${Math.round(account.accountSize / 1000)}K`
+      : String(account.accountSize)
+  return `Tracking one representative $${sizeK} account`
 }
 
 export function sumAccountQuantities(accounts: Pick<Account, "quantity">[]): number {

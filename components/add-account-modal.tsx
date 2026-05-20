@@ -23,7 +23,7 @@ import type { Account, AccountType, Firm, DrawdownType } from "@/lib/types"
 import { getAccountRules } from "@/lib/rules"
 import {
   formatAccountBundleHelper,
-  formatScaledRuleHelper,
+  getPortfolioBuyingPower,
   MAX_ACCOUNT_QUANTITY,
 } from "@/lib/account-quantity"
 import { cn } from "@/lib/utils"
@@ -89,7 +89,7 @@ export function AddAccountModal({ onAddAccount }: AddAccountModalProps) {
     setForm((f) => ({ ...f, [k]: v }))
 
   const qty = Math.max(1, Math.min(MAX_ACCOUNT_QUANTITY, Math.floor(form.quantity) || 1))
-  const aggregateStarting = form.accountSize * qty
+  const portfolioBuyingPower = getPortfolioBuyingPower({ accountSize: form.accountSize, quantity: qty })
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
@@ -101,9 +101,9 @@ export function AddAccountModal({ onAddAccount }: AddAccountModalProps) {
       drawdownType: form.drawdownType,
       accountSize: form.accountSize,
       quantity: qty,
-      balance: aggregateStarting,
-      startingBalance: aggregateStarting,
-      maxBalance: aggregateStarting,
+      balance: form.accountSize,
+      startingBalance: form.accountSize,
+      maxBalance: form.accountSize,
       profitTarget: rules.hasProfitTarget ? rules.profitTarget : undefined,
       maxDrawdown: rules.maxDrawdown,
       dailyLossLimit: rules.dailyLossLimit,
@@ -203,8 +203,9 @@ export function AddAccountModal({ onAddAccount }: AddAccountModalProps) {
           </div>
           {qty > 1 && (
             <p className="text-[11px] text-muted-foreground -mt-2">
-              {formatAccountBundleHelper({ accountSize: form.accountSize, quantity: qty })} · Starting balance{" "}
-              <span className="font-mono text-[#94AAB8]">${aggregateStarting.toLocaleString()}</span>
+              {formatAccountBundleHelper({ accountSize: form.accountSize, quantity: qty })} · Portfolio buying power{" "}
+              <span className="font-mono text-[#94AAB8]">${portfolioBuyingPower.toLocaleString()}</span>
+              <span className="block mt-0.5">Rules track one representative ${(form.accountSize / 1000).toFixed(0)}K account.</span>
             </p>
           )}
 
@@ -233,30 +234,19 @@ export function AddAccountModal({ onAddAccount }: AddAccountModalProps) {
             <div className="font-medium text-foreground mb-1">Account Rules</div>
             <div className="flex justify-between">
               <span>Max Drawdown</span>
-              <span className="font-mono">${(rules.maxDrawdown * qty).toLocaleString()}</span>
+              <span className="font-mono">${rules.maxDrawdown.toLocaleString()}</span>
             </div>
             {rules.hasDLL && (
               <div className="flex justify-between">
                 <span>Daily Loss Limit</span>
-                <span className="font-mono">${(rules.dailyLossLimit * qty).toLocaleString()}</span>
+                <span className="font-mono">${rules.dailyLossLimit.toLocaleString()}</span>
               </div>
             )}
             {rules.hasProfitTarget && (
               <div className="flex justify-between">
                 <span>Profit Target</span>
-                <span className="font-mono">${(rules.profitTarget * qty).toLocaleString()}</span>
+                <span className="font-mono">${rules.profitTarget.toLocaleString()}</span>
               </div>
-            )}
-            {qty > 1 && (
-              <p className="text-[10px] text-muted-foreground pt-1 space-y-0.5">
-                {formatScaledRuleHelper(rules.maxDrawdown, qty, "drawdown")}
-                {rules.hasProfitTarget && (
-                  <>
-                    <br />
-                    {formatScaledRuleHelper(rules.profitTarget, qty, "target")}
-                  </>
-                )}
-              </p>
             )}
             {rules.maxContracts && (
               <div className="flex justify-between">

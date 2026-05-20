@@ -23,7 +23,8 @@ import type { Account, AccountType, Firm, DrawdownType } from "@/lib/types"
 import { getAccountRules } from "@/lib/rules"
 import {
   formatAccountBundleHelper,
-  getAccountStartingBalance,
+  getPortfolioBuyingPower,
+  getRuleStartingBalance,
   MAX_ACCOUNT_QUANTITY,
 } from "@/lib/account-quantity"
 
@@ -133,10 +134,10 @@ export function EditAccountModal({
   })
 
   const qty = Math.max(1, Math.min(MAX_ACCOUNT_QUANTITY, Math.floor(form.quantity) || 1))
-  const aggregateStarting = getAccountStartingBalance({
-    accountSize: form.accountSize,
-    quantity: qty,
-  })
+  const portfolioBuyingPower = getPortfolioBuyingPower({ accountSize: form.accountSize, quantity: qty })
+  const ruleStartingBalance = account
+    ? getRuleStartingBalance({ ...account, accountSize: form.accountSize, quantity: qty })
+    : form.accountSize
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -149,7 +150,7 @@ export function EditAccountModal({
       drawdownType: form.drawdownType,
       accountSize: form.accountSize,
       quantity: qty,
-      startingBalance: aggregateStarting,
+      startingBalance: ruleStartingBalance,
       maxDrawdown: parseFloat(form.maxDrawdown) || rules.maxDrawdown,
       dailyLossLimit: rules.hasDLL ? (parseFloat(form.dailyLossLimit) || rules.dailyLossLimit) : null,
       profitTarget: form.type === "Eval" && form.profitTarget ? parseFloat(form.profitTarget) : null,
@@ -244,8 +245,9 @@ export function EditAccountModal({
           </div>
           {qty > 1 && (
             <p className="text-[11px] text-muted-foreground -mt-2">
-              {formatAccountBundleHelper({ accountSize: form.accountSize, quantity: qty })} · Aggregate starting{" "}
-              <span className="font-mono text-[#94AAB8]">${aggregateStarting.toLocaleString()}</span>
+              {formatAccountBundleHelper({ accountSize: form.accountSize, quantity: qty })} · Portfolio buying power{" "}
+              <span className="font-mono text-[#94AAB8]">${portfolioBuyingPower.toLocaleString()}</span>
+              <span className="block mt-0.5">Rules track one representative account (starting ${ruleStartingBalance.toLocaleString()}).</span>
             </p>
           )}
 

@@ -40,9 +40,9 @@ import {
 import { ArrowLeft, LogOut, Loader2, AlertCircle, RefreshCw, MoreHorizontal, Pencil, Trash2 } from "lucide-react"
 import { cn, formatCurrency, formatPnL } from "@/lib/utils"
 import {
-  getAccountMaxDrawdown,
-  getAccountProfitTarget,
   getAccountQuantity,
+  getPortfolioBalance,
+  formatRepresentativeTrackingHelper,
   sumAccountQuantities,
 } from "@/lib/account-quantity"
 import { AccountQuantityBadge } from "@/components/account-quantity-badge"
@@ -249,10 +249,9 @@ export default function Dashboard() {
     }
 
     if (selectedAccount.type === "Eval") {
-      const pt = getAccountProfitTarget(
-        selectedAccount,
-        rules.hasProfitTarget ? rules.profitTarget : null,
-      )
+      const pt =
+        selectedAccount.profitTarget ??
+        (rules.hasProfitTarget ? rules.profitTarget : null)
 
       if (rules.hasProfitTarget && pt != null && pt > 0) {
         return {
@@ -344,7 +343,7 @@ export default function Dashboard() {
     let payoutEligible = 0
     for (const a of accounts) {
       const s = calculateAccountStats(a, allTrades, allPayouts)
-      totalBalance += s.currentBalance
+      totalBalance += getPortfolioBalance(s.currentBalance, a)
       totalNetPnL += s.totalPnL
       if (a.type === "Eval" && a.status === "Passed") evalPassed++
       if (a.type === "PA") {
@@ -983,10 +982,9 @@ export default function Dashboard() {
                     </div>
                     <p className="text-sm sm:text-base text-muted-foreground">
                       {selectedAccount.type} Account
-                      {getAccountQuantity(selectedAccount) > 1 && (
-                        <span className="text-[#94AAB8]">
-                          {" "}
-                          · {getAccountQuantity(selectedAccount)}× grouped
+                      {formatRepresentativeTrackingHelper(selectedAccount) && (
+                        <span className="block text-[11px] text-[#94AAB8]/90 mt-0.5">
+                          {formatRepresentativeTrackingHelper(selectedAccount)}
                         </span>
                       )}
                     </p>
@@ -1117,10 +1115,10 @@ export default function Dashboard() {
                   title="Drawdown Remaining"
                   value={formatCurrency(Math.max(0, displayAccountStats!.drawdownRemaining))}
                   change={{
-                    value: `of ${formatCurrency(getAccountMaxDrawdown(selectedAccount))}`,
+                    value: `of ${formatCurrency(selectedAccount.maxDrawdown)}`,
                     isPositive:
                       displayAccountStats!.drawdownRemaining >
-                      getAccountMaxDrawdown(selectedAccount) * 0.5,
+                      selectedAccount.maxDrawdown * 0.5,
                   }}
                   subValue={
                     selectedAccount.drawdownType === "Intraday" &&

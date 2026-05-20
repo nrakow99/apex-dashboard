@@ -24,7 +24,7 @@ import {
 import { hasIntradayManualDrawdown } from "@/lib/intraday-manual-drawdown"
 import { isTradingDayComplete, getTodayDateStr } from "@/lib/storage"
 import { parseLocalDate, toLocalDateKey } from "@/lib/date-utils"
-import { getAccountStartingBalance, getAccountMaxDrawdown } from "@/lib/account-quantity"
+import { getRuleStartingBalance } from "@/lib/account-quantity"
 
 interface AccountStats {
   currentBalance: number
@@ -69,8 +69,8 @@ export function PerformanceChart({ data, account, stats }: PerformanceChartProps
   // Build chart data with starting point and proper floor tracking per drawdown type
   const chartData = useMemo(() => {
     const result: ChartDataPoint[] = []
-    const startingBalance = getAccountStartingBalance(account)
-    const maxDrawdown = getAccountMaxDrawdown(account)
+    const startingBalance = getRuleStartingBalance(account)
+    const maxDrawdown = account.maxDrawdown
     const todayStr = getTodayDateStr()
     const dayComplete = isTradingDayComplete()
     const isIntraday = account.drawdownType === "Intraday"
@@ -131,7 +131,7 @@ export function PerformanceChart({ data, account, stats }: PerformanceChartProps
 
   // Calculate Y-axis domain dynamically
   const yAxisDomain = useMemo(() => {
-    const startingBalance = getAccountStartingBalance(account)
+    const startingBalance = getRuleStartingBalance(account)
     if (chartData.length === 0) {
       return [startingBalance - 3000, startingBalance + 3000]
     }
@@ -270,8 +270,8 @@ export function PerformanceChart({ data, account, stats }: PerformanceChartProps
           <ResponsiveContainer width="100%" height="100%">
             <AreaChart
               data={[
-                { date: "Start", balance: getAccountStartingBalance(account), minBalance: getAccountStartingBalance(account) - getAccountMaxDrawdown(account) },
-                { date: "Now", balance: getAccountStartingBalance(account), minBalance: getAccountStartingBalance(account) - getAccountMaxDrawdown(account) },
+                { date: "Start", balance: getRuleStartingBalance(account), minBalance: getRuleStartingBalance(account) - account.maxDrawdown },
+                { date: "Now", balance: getRuleStartingBalance(account), minBalance: getRuleStartingBalance(account) - account.maxDrawdown },
               ]}
               margin={{ top: 6, right: 12, left: 2, bottom: 0 }}
             >
@@ -293,11 +293,11 @@ export function PerformanceChart({ data, account, stats }: PerformanceChartProps
                 tickLine={false}
                 tick={{ fill: "#6b7280", fontSize: 12 }}
                 tickFormatter={(value) => `$${(value / 1000).toFixed(0)}k`}
-                domain={[getAccountStartingBalance(account) - 3000, getAccountStartingBalance(account) + 3000]}
+                domain={[getRuleStartingBalance(account) - 3000, getRuleStartingBalance(account) + 3000]}
                 width={60}
               />
               <ReferenceLine
-                y={getAccountStartingBalance(account) - getAccountMaxDrawdown(account)}
+                y={getRuleStartingBalance(account) - account.maxDrawdown}
                 stroke="#ef4444"
                 strokeDasharray="6 4"
                 strokeWidth={2}
@@ -424,7 +424,7 @@ export function PerformanceChart({ data, account, stats }: PerformanceChartProps
               />
               {/* Starting balance reference line */}
               <ReferenceLine
-                y={getAccountStartingBalance(account)}
+                y={getRuleStartingBalance(account)}
                 stroke="#64748b"
                 strokeDasharray="4 4"
                 strokeWidth={1}

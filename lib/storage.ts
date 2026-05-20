@@ -1,12 +1,7 @@
 import type { Account, Trade, Payout, DailyPnL } from "./types"
 import { EOD_CONSTANTS } from "./types"
 import { getAccountRules } from "./rules"
-import {
-  getAccountStartingBalance,
-  getAccountMaxDrawdown,
-  scaleAccountRulesForQuantity,
-  getAccountQuantity,
-} from "./account-quantity"
+import { getRuleStartingBalance } from "./account-quantity"
 import { lucidFlexActiveFloor } from "./lucid-flex-floor"
 
 /** PA converted from Eval: balance/stats/payouts ignore trades before activation_start_date. */
@@ -72,7 +67,7 @@ export function calculateDailyPnLData(
   }
 
   const dates = Object.keys(tradesByDate).sort()
-  let runningBalance = getAccountStartingBalance(account)
+  let runningBalance = getRuleStartingBalance(account)
 
   return dates.map((date) => {
     const dayTrades = tradesByDate[date]
@@ -101,8 +96,8 @@ export function calculateAccountStats(
   const totalPnL = accountTrades.reduce((sum, t) => sum + t.pnl, 0)
   const totalPayouts = accountPayouts.reduce((sum, p) => sum + p.amount, 0)
 
-  const startingBalance = getAccountStartingBalance(account)
-  const maxDrawdown = getAccountMaxDrawdown(account)
+  const startingBalance = getRuleStartingBalance(account)
+  const maxDrawdown = account.maxDrawdown
   const currentBalance = startingBalance + totalPnL - totalPayouts
 
   const dailyData = calculateDailyPnLData(account.id, trades, account, payouts)
@@ -248,10 +243,7 @@ export function getPayoutEligibility(
   account: Account,
   payouts: Payout[]
 ) {
-  const rules = scaleAccountRulesForQuantity(
-    getAccountRules(account),
-    getAccountQuantity(account),
-  )
+  const rules = getAccountRules(account)
   const stats = calculateAccountStats(account, trades, payouts)
   const accountPayouts = payouts.filter((p) => p.accountId === accountId)
   const payoutCount = accountPayouts.length

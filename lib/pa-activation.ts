@@ -1,7 +1,7 @@
 import type { Account, Trade, Payout } from "@/lib/types"
 import { getAccountRules } from "@/lib/rules"
 import { calculateAccountStats, getConsistencyInfo } from "@/lib/storage"
-import { getAccountQuantity, getAccountStartingBalance } from "@/lib/account-quantity"
+import { getAccountQuantity, getRuleStartingBalance } from "@/lib/account-quantity"
 import { applyIntradayManualDrawdownToStats } from "@/lib/intraday-manual-drawdown"
 
 export type ActivationStats = {
@@ -79,7 +79,7 @@ export function buildEvalToPaConversionUpdates(
     drawdownType: evalAccount.drawdownType,
     accountSize: size,
     quantity,
-    startingBalance: getAccountStartingBalance(evalAccount),
+    startingBalance: getRuleStartingBalance(evalAccount),
     profitTarget: null as number | null,
     maxDrawdown: paRules.maxDrawdown,
     dailyLossLimit: paRules.hasDLL ? paRules.dailyLossLimit : 0,

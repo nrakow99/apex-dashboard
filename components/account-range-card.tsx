@@ -5,13 +5,7 @@ import { Card } from "@/components/ui/card"
 import { cn, formatCurrency } from "@/lib/utils"
 import type { Account } from "@/lib/types"
 import { getAccountRules } from "@/lib/rules"
-import {
-  getAccountStartingBalance,
-  getAccountMaxDrawdown,
-  getAccountProfitTarget,
-  scaleAccountRulesForQuantity,
-  getAccountQuantity,
-} from "@/lib/account-quantity"
+import { getRuleStartingBalance } from "@/lib/account-quantity"
 import { getAccountRangeFloorTitle } from "@/lib/floor-display-labels"
 
 /** Fields from calculateAccountStats — no new calculations. */
@@ -27,16 +21,12 @@ export interface AccountRangeStats {
 
 export function shouldShowAccountRangeCard(account: Account): boolean {
   const rules = getAccountRules(account)
-  const effectiveProfitTarget = getAccountProfitTarget(
-    account,
-    rules.hasProfitTarget ? rules.profitTarget : null,
-  )
+  const effectiveProfitTarget =
+    account.profitTarget ?? (rules.hasProfitTarget ? rules.profitTarget : null)
 
   if (account.type === "Eval") return true
   if (effectiveProfitTarget != null && effectiveProfitTarget > 0) return true
-  const qty = getAccountQuantity(account)
-  const scaledRules = scaleAccountRulesForQuantity(rules, qty)
-  if (account.type === "PA" && scaledRules.minBalanceToRequest > 0) return true
+  if (account.type === "PA" && rules.minBalanceToRequest > 0) return true
   if (account.firm === "Lucid" && account.type === "PA") return true
   return false
 }
@@ -48,29 +38,26 @@ interface AccountRangeCardProps {
 
 export function AccountRangeCard({ account, stats }: AccountRangeCardProps) {
   const rules = getAccountRules(account)
-  const qty = getAccountQuantity(account)
-  const scaledRules = scaleAccountRulesForQuantity(rules, qty)
-  const startingBalance = getAccountStartingBalance(account)
-  const effectiveMaxDrawdown = getAccountMaxDrawdown(account)
+  const startingBalance = getRuleStartingBalance(account)
   const lucidFlex = rules.lucidFlexFloor
   const isLucidFlexPa = account.firm === "Lucid" && account.type === "PA" && lucidFlex != null
   const isLucidPaOther = account.firm === "Lucid" && account.type === "PA" && lucidFlex == null
 
   const effectiveProfitTarget = useMemo(() => {
-    return getAccountProfitTarget(account, rules.hasProfitTarget ? rules.profitTarget : null)
-  }, [account, rules.hasProfitTarget, rules.profitTarget])
+    return account.profitTarget ?? (rules.hasProfitTarget ? rules.profitTarget : null)
+  }, [account.profitTarget, rules.hasProfitTarget, rules.profitTarget])
 
   const hasProfitGoal = effectiveProfitTarget != null && effectiveProfitTarget > 0
   const isEval = account.type === "Eval"
   const payoutOnlyBar =
-    !isLucidFlexPa && !hasProfitGoal && !isEval && scaledRules.minBalanceToRequest > 0
+    !isLucidFlexPa && !hasProfitGoal && !isEval && rules.minBalanceToRequest > 0
 
   const peakForFloor = stats.floorPeakBalance ?? stats.currentBalance
 
   const floorVal = stats.activeEodFloor ?? stats.minBalance
   const passBalance =
     effectiveProfitTarget != null ? startingBalance + effectiveProfitTarget : startingBalance
-  const payoutThreshold = scaledRules.minBalanceToRequest
+  const payoutThreshold = rules.minBalanceToRequest
 
   const {
     rightEnd,
@@ -134,8 +121,8 @@ export function AccountRangeCard({ account, stats }: AccountRangeCardProps) {
     const remainingToProfitGoal =
       effectiveProfitTarget != null ? Math.max(0, effectiveProfitTarget - stats.totalPnL) : 0
     const remainingToPayout =
-      scaledRules.minBalanceToRequest > 0
-        ? Math.max(0, scaledRules.minBalanceToRequest - stats.currentBalance)
+      rules.minBalanceToRequest > 0
+        ? Math.max(0, rules.minBalanceToRequest - stats.currentBalance)
         : 0
 
     return {
@@ -144,7 +131,7 @@ export function AccountRangeCard({ account, stats }: AccountRangeCardProps) {
       rightTitle:
         hasProfitGoal || isEval
           ? "Profit target"
-          : scaledRules.minBalanceToRequest > 0
+          : rules.minBalanceToRequest > 0
             ? "Min payout balance"
             : "Target",
       rightValue:
@@ -186,7 +173,7 @@ export function AccountRangeCard({ account, stats }: AccountRangeCardProps) {
     passBalance,
     payoutThreshold,
     effectiveProfitTarget,
-    scaledRules.minBalanceToRequest,
+    rules.minBalanceToRequest,
   ])
 
   const pctInSpan = (value: number) =>
@@ -209,7 +196,7 @@ export function AccountRangeCard({ account, stats }: AccountRangeCardProps) {
   const bottomLeftEvalStyle = isEval
   const bottomLeftLabel = bottomLeftEvalStyle ? "Drawdown amount" : "Drawdown remaining"
   const bottomLeftValue = bottomLeftEvalStyle ? (
-    <span className="font-mono font-semibold text-slate-200">{formatCurrency(effectiveMaxDrawdown)}</span>
+    <span className="font-mono font-semibold text-slate-200">{formatCurrency(account.maxDrawdown)}</span>
   ) : (
     <span className="font-mono font-semibold text-slate-200">
       {formatCurrency(Math.max(0, stats.drawdownRemaining))}
