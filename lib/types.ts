@@ -39,6 +39,14 @@ export interface Trade {
   symbol: string
   pnl: number
   notes?: string
+  session?: string | null
+  direction?: string | null
+  grade?: string | null
+  setupTags?: string[]
+  disciplineTags?: string[]
+  entryPrice?: number | null
+  exitPrice?: number | null
+  contracts?: number | null
 }
 
 export interface DailyPnL {

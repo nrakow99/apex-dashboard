@@ -1,9 +1,9 @@
 /**
- * Extended per-trade metadata stored in localStorage.
- * Kept separate from the core Trade type so it doesn't touch
- * Supabase schema or any calculation logic.
+ * Per-trade journal metadata — persisted on Trade rows in Supabase.
+ * localStorage is used only as a legacy fallback / one-time migration source.
  */
 
+import type { Trade } from "./types"
 import type { SessionId } from "./sessions"
 
 export type TradeGrade = "A+" | "A" | "B" | "C" | "FOMO" | "Revenge"
@@ -44,11 +44,6 @@ export type SetupTag = (typeof SETUP_TAGS)[number]
 export type TradeDirection = "long" | "short"
 
 export interface TradeMeta {
-  /**
-   * Stable session identifier — preferred over the legacy `time` field.
-   * Use `resolveSession(meta)` from lib/sessions.ts to read, which falls
-   * back to deriving the session from the old `time` string automatically.
-   */
   session?: SessionId
   /** @deprecated Legacy HH:MM time string — kept for backward-compat only */
   time?: string
@@ -63,6 +58,102 @@ export interface TradeMeta {
 
 const META_KEY = "propdash-trade-meta"
 
+function parseTagArray(raw: unknown): string[] {
+  if (!Array.isArray(raw)) return []
+  return raw.filter((t): t is string => typeof t === "string")
+}
+
+/** Read metadata fields stored on a Trade row. */
+export function metaFromTrade(trade: Trade): TradeMeta {
+  const meta: TradeMeta = {}
+  if (trade.session) meta.session = trade.session as SessionId
+  if (trade.direction === "long" || trade.direction === "short") meta.direction = trade.direction
+  if (trade.grade) meta.grade = trade.grade as TradeGrade
+  const setup = parseTagArray(trade.setupTags)
+  if (setup.length > 0) meta.setupTags = setup as SetupTag[]
+  const discipline = parseTagArray(trade.disciplineTags)
+  if (discipline.length > 0) meta.disciplineTags = discipline as DisciplineTag[]
+  if (trade.entryPrice != null) meta.entryPrice = trade.entryPrice
+  if (trade.exitPrice != null) meta.exitPrice = trade.exitPrice
+  if (trade.contracts != null) meta.contracts = trade.contracts
+  return meta
+}
+
+export function hasPersistedTradeMeta(trade: Trade): boolean {
+  const m = metaFromTrade(trade)
+  return (
+    !!m.session ||
+    !!m.direction ||
+    !!m.grade ||
+    (m.setupTags?.length ?? 0) > 0 ||
+    (m.disciplineTags?.length ?? 0) > 0 ||
+    m.entryPrice != null ||
+    m.exitPrice != null ||
+    m.contracts != null
+  )
+}
+
+function hasMetaContent(meta: TradeMeta): boolean {
+  return (
+    !!meta.session ||
+    !!meta.time ||
+    !!meta.direction ||
+    !!meta.grade ||
+    (meta.setupTags?.length ?? 0) > 0 ||
+    (meta.disciplineTags?.length ?? 0) > 0 ||
+    meta.entryPrice != null ||
+    meta.exitPrice != null ||
+    meta.contracts != null
+  )
+}
+
+/** Merge persisted trade fields with legacy localStorage (DB wins on conflict). */
+export function getTradeMeta(tradeOrId: string | Trade, trades?: Trade[]): TradeMeta {
+  const trade =
+    typeof tradeOrId === "string"
+      ? trades?.find((t) => t.id === tradeOrId)
+      : tradeOrId
+  const id = typeof tradeOrId === "string" ? tradeOrId : tradeOrId.id
+  const local = loadAllTradeMeta()[id] ?? {}
+
+  if (!trade) return local
+
+  return { ...local, ...metaFromTrade(trade) }
+}
+
+/** Build id → meta map for analytics and tables. */
+export function buildMetaMapFromTrades(trades: Trade[]): Record<string, TradeMeta> {
+  const local = loadAllTradeMeta()
+  const map: Record<string, TradeMeta> = {}
+  for (const t of trades) {
+    map[t.id] = { ...local[t.id], ...metaFromTrade(t) }
+  }
+  return map
+}
+
+/** DB column payload for create/update. */
+export function metaToDbPayload(meta: TradeMeta): {
+  session: string | null
+  direction: string | null
+  grade: string | null
+  setup_tags: string[]
+  discipline_tags: string[]
+  entry_price: number | null
+  exit_price: number | null
+  contracts: number | null
+} {
+  return {
+    session: meta.session ?? null,
+    direction: meta.direction ?? null,
+    grade: meta.grade ?? null,
+    setup_tags: meta.setupTags ?? [],
+    discipline_tags: meta.disciplineTags ?? [],
+    entry_price: meta.entryPrice ?? null,
+    exit_price: meta.exitPrice ?? null,
+    contracts: meta.contracts ?? null,
+  }
+}
+
 export function loadAllTradeMeta(): Record<string, TradeMeta> {
   if (typeof window === "undefined") return {}
   try {
@@ -75,13 +166,8 @@ export function loadAllTradeMeta(): Record<string, TradeMeta> {
 export function saveTradeMeta(tradeId: string, meta: TradeMeta): void {
   if (typeof window === "undefined") return
   const all = loadAllTradeMeta()
-  // Deep-merge so partial updates don't wipe existing fields
   all[tradeId] = { ...all[tradeId], ...meta }
   localStorage.setItem(META_KEY, JSON.stringify(all))
-}
-
-export function getTradeMeta(tradeId: string): TradeMeta {
-  return loadAllTradeMeta()[tradeId] ?? {}
 }
 
 export function deleteTradeMeta(tradeId: string): void {
@@ -89,6 +175,44 @@ export function deleteTradeMeta(tradeId: string): void {
   const all = loadAllTradeMeta()
   delete all[tradeId]
   localStorage.setItem(META_KEY, JSON.stringify(all))
+}
+
+/** Push device-local metadata to Supabase for trades missing persisted fields. */
+export async function migrateLocalTradeMetadata(
+  trades: Trade[],
+  updateFn: (
+    tradeId: string,
+    updates: {
+      date: string
+      accountId: string
+      symbol: string
+      pnl: number
+      notes?: string | null
+    },
+    meta: TradeMeta,
+  ) => Promise<{ data: Trade | null; error: Error | null }>,
+): Promise<Trade[]> {
+  const local = loadAllTradeMeta()
+  const byId = new Map(trades.map((t) => [t.id, t]))
+
+  for (const trade of trades) {
+    const legacy = local[trade.id]
+    if (!legacy || !hasMetaContent(legacy) || hasPersistedTradeMeta(trade)) continue
+    const result = await updateFn(
+      trade.id,
+      {
+        date: trade.date,
+        accountId: trade.accountId,
+        symbol: trade.symbol,
+        pnl: trade.pnl,
+        notes: trade.notes ?? null,
+      },
+      legacy,
+    )
+    if (result.data) byId.set(trade.id, result.data)
+  }
+
+  return trades.map((t) => byId.get(t.id) ?? t)
 }
 
 // ── Grade display helpers ────────────────────────────────────────────────────

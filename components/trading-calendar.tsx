@@ -8,7 +8,7 @@ import { ChevronLeft, ChevronRight, X, Star } from "lucide-react"
 import { cn } from "@/lib/utils"
 import type { Account, DailyPnL, Trade } from "@/lib/types"
 import { getAccountRules } from "@/lib/rules"
-import { loadAllTradeMeta, DIRECTION_BADGE_STYLES, DIRECTION_LABELS, GRADE_STYLES, type TradeMeta } from "@/lib/trade-meta"
+import { buildMetaMapFromTrades, DIRECTION_BADGE_STYLES, DIRECTION_LABELS, GRADE_STYLES, type TradeMeta } from "@/lib/trade-meta"
 import { resolveSession, SESSION_LABELS } from "@/lib/sessions"
 
 interface TradingCalendarProps {
@@ -31,7 +31,7 @@ export function TradingCalendar({ account, dailyData, trades }: TradingCalendarP
   const [allMeta, setAllMeta] = useState<Record<string, TradeMeta>>({})
 
   useEffect(() => {
-    setAllMeta(loadAllTradeMeta())
+    setAllMeta(buildMetaMapFromTrades(trades))
   }, [trades])
 
   const rules = getAccountRules(account)
@@ -106,13 +106,13 @@ export function TradingCalendar({ account, dailyData, trades }: TradingCalendarP
 
   const cellShell = cn(
     "relative flex flex-col items-center justify-center gap-0.5 transition-all rounded-xl",
-    "min-h-[36px] aspect-square sm:min-h-[58px] sm:rounded-2xl sm:aspect-square sm:min-w-0",
+    "min-h-[32px] aspect-square sm:min-h-[58px] sm:rounded-2xl sm:aspect-square sm:min-w-0",
     "lg:aspect-auto lg:w-full lg:justify-center lg:rounded-xl lg:p-1.5",
     "lg:h-[clamp(78px,11.5dvh,104px)] lg:min-h-[78px] lg:max-h-[104px]",
   )
 
   return (
-    <Card className="flex flex-col rounded-[20px] sm:rounded-[24px] glass-card p-2 sm:p-4 lg:p-4 lg:min-h-[min(840px,calc(100dvh-6.5rem))]">
+    <Card className="flex flex-col rounded-[20px] sm:rounded-[24px] glass-card p-2 sm:p-4 lg:p-4 max-sm:pb-2 lg:min-h-[min(840px,calc(100dvh-6.5rem))]">
       <div className="mb-1 flex flex-shrink-0 flex-col gap-0.5 sm:gap-2 lg:mb-2 lg:gap-2">
         <div className="flex items-center justify-between gap-2">
           <h2 className="text-base font-semibold sm:text-lg">Trading Calendar</h2>

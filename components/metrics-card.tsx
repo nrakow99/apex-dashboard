@@ -5,6 +5,7 @@ import { Card } from "@/components/ui/card"
 import { cn } from "@/lib/utils"
 
 interface MetricsCardProps {
+  className?: string
   title: string
   value: string
   change?: {
@@ -21,9 +22,9 @@ interface MetricsCardProps {
   titleAction?: ReactNode
 }
 
-export function MetricsCard({ title, value, change, status, subValue, titleAction }: MetricsCardProps) {
+export function MetricsCard({ className, title, value, change, status, subValue, titleAction }: MetricsCardProps) {
   return (
-    <Card className="p-2 sm:p-3.5 lg:p-2.5 rounded-[18px] sm:rounded-[20px] glass-card glass-card-hover h-full">
+    <Card className={cn("p-2 sm:p-2.5 lg:p-2.5 rounded-[18px] sm:rounded-[20px] glass-card glass-card-hover h-full", className)}>
       <div className="space-y-0.5 sm:space-y-1 lg:space-y-0.5">
         <div className="flex items-start justify-between gap-1.5">
           <p className="text-[9px] sm:text-[11px] lg:text-[10px] font-medium text-slate-500 uppercase tracking-[0.10em] sm:tracking-[0.14em] min-w-0 flex-1 leading-tight line-clamp-2">

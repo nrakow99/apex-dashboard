@@ -63,7 +63,7 @@ function RuleCard({
 }) {
   return (
     <div className={cn(
-      "p-3 sm:p-4 rounded-xl sm:rounded-2xl border transition-all",
+      "p-2.5 sm:p-4 rounded-xl sm:rounded-2xl border transition-all",
       status === "danger"  ? "bg-red-500/10 border-red-500/30" :
       status === "warning" ? "bg-amber-500/10 border-amber-500/30" :
       "bg-slate-900/45 border-white/10",
@@ -140,8 +140,8 @@ export function RuleEnginePanel({
   const firmLabel = account.firm === "Lucid" ? "Lucid" : account.firm ?? "Apex"
 
   return (
-    <Card className="p-3 sm:p-5 rounded-[22px] sm:rounded-[26px] glass-card">
-      <div className="flex items-center justify-between mb-3 sm:mb-5">
+    <Card className="p-2.5 sm:p-5 rounded-[22px] sm:rounded-[26px] glass-card">
+      <div className="flex items-center justify-between mb-2 sm:mb-5">
         <h2 className="text-base sm:text-lg font-semibold">Rule Status</h2>
         <div className="flex items-center gap-2">
           <span className={cn(

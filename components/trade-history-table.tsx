@@ -13,7 +13,7 @@ import {
 import { cn } from "@/lib/utils"
 import { ChevronRight, MoreHorizontal, Pencil, Trash2 } from "lucide-react"
 import type { Trade } from "@/lib/types"
-import { loadAllTradeMeta, GRADE_STYLES, DISCIPLINE_POSITIVE, DIRECTION_BADGE_STYLES, DIRECTION_LABELS, type TradeMeta } from "@/lib/trade-meta"
+import { buildMetaMapFromTrades, GRADE_STYLES, DISCIPLINE_POSITIVE, DIRECTION_BADGE_STYLES, DIRECTION_LABELS, type TradeMeta } from "@/lib/trade-meta"
 import { resolveSession, SESSION_LABELS, SESSION_BADGE_STYLES } from "@/lib/sessions"
 
 interface TradeHistoryTableProps {
@@ -189,7 +189,7 @@ export function TradeHistoryTable({ trades, onEditTrade, onDeleteTrade }: TradeH
   const [allMeta, setAllMeta] = useState<Record<string, TradeMeta>>({})
 
   useEffect(() => {
-    setAllMeta(loadAllTradeMeta())
+    setAllMeta(buildMetaMapFromTrades(trades))
   }, [trades])
 
   const toggleDate = (date: string) => {

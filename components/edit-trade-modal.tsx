@@ -85,7 +85,7 @@ export function EditTradeModal({ trade, accounts, open, onOpenChange, onSave, is
   useEffect(() => {
     if (trade) {
       setFormData({ date: trade.date, accountId: trade.accountId, symbol: trade.symbol, pnl: trade.pnl.toString(), notes: trade.notes ?? "" })
-      const existing = getTradeMeta(trade.id)
+      const existing = getTradeMeta(trade)
       // Resolve session from existing meta (handles both new `session` and legacy `time`)
       const resolvedSession = resolveSession(existing) ?? DEFAULT_SESSION
       setMeta({ ...existing, session: resolvedSession })

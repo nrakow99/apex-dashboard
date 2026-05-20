@@ -68,7 +68,7 @@ import {
 } from "@/lib/pa-activation"
 import { createClient } from "@/lib/supabase/client"
 import type { Trade, Payout, Account, AccountType, DrawdownType, Firm, DailyPnL } from "@/lib/types"
-import { saveTradeMeta, type TradeMeta } from "@/lib/trade-meta"
+import { migrateLocalTradeMetadata, type TradeMeta } from "@/lib/trade-meta"
 import { RiskMetricsCard } from "@/components/risk-metrics-card"
 
 type ViewMode = "accounts" | "detail"
@@ -111,9 +111,15 @@ export default function Dashboard() {
       if (tradesResult.error) throw tradesResult.error
       if (payoutsResult.error) throw payoutsResult.error
 
+      const loadedTrades = tradesResult.data ?? []
       setAccounts(accountsResult.data ?? [])
-      setAllTrades(tradesResult.data ?? [])
+      setAllTrades(loadedTrades)
       setAllPayouts(payoutsResult.data ?? [])
+
+      if (loadedTrades.length > 0) {
+        const migrated = await migrateLocalTradeMetadata(loadedTrades, updateTrade)
+        if (migrated.length > 0) setAllTrades(migrated)
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to load data")
     } finally {
@@ -391,13 +397,10 @@ export default function Dashboard() {
   ) => {
     setIsSaving(true)
     try {
-      const result = await createTrade(tradeData)
+      const result = await createTrade(tradeData, meta)
 
       if (result.error) throw result.error
       if (result.data) {
-        // Persist extended metadata (time, grade, discipline, etc.) client-side
-        const hasMetaData = Object.values(meta).some((v) => v !== undefined && v !== "" && (!Array.isArray(v) || v.length > 0))
-        if (hasMetaData) saveTradeMeta(result.data.id, meta)
         setAllTrades([...allTrades, result.data])
         toast({ title: "Trade added", description: `${result.data.symbol} trade recorded.` })
       }
@@ -448,18 +451,20 @@ export default function Dashboard() {
   ) => {
     setIsSaving(true)
     try {
-      const result = await updateTrade(tradeId, {
-        date: updates.date,
-        accountId: updates.accountId,
-        symbol: updates.symbol,
-        pnl: updates.pnl,
-        notes: updates.notes ?? null,
-      })
+      const result = await updateTrade(
+        tradeId,
+        {
+          date: updates.date,
+          accountId: updates.accountId,
+          symbol: updates.symbol,
+          pnl: updates.pnl,
+          notes: updates.notes ?? null,
+        },
+        meta,
+      )
 
       if (result.error) throw result.error
       if (result.data) {
-        // Always save/overwrite meta on edit (preserves partial updates)
-        saveTradeMeta(tradeId, meta)
         setAllTrades(allTrades.map(t => t.id === tradeId ? result.data! : t))
         setEditingTrade(null)
         toast({ title: "Trade updated", description: "Your changes have been saved." })
@@ -801,7 +806,7 @@ export default function Dashboard() {
             {/* Header */}
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 sm:gap-3 mb-3 sm:mb-5">
               <h1 className="text-2xl sm:text-3xl font-semibold tracking-tight text-slate-100">Accounts</h1>
-              <div className="flex items-center gap-2 sm:gap-4 flex-wrap">
+              <div className="flex items-center gap-1.5 sm:gap-4 flex-wrap w-full sm:w-auto [&_button]:h-9">
                 {/* Total Cash Withdrawn */}
                 {totalCashWithdrawn > 0 && (
                   <div className="text-right pr-3 sm:pr-4 border-r border-white/10">
@@ -811,7 +816,6 @@ export default function Dashboard() {
                     </div>
                   </div>
                 )}
-                <AddAccountModal onAddAccount={handleAddAccount} />
                 {accounts.length > 0 && (
                   <AddTradeModal
                     accounts={accounts}
@@ -819,7 +823,8 @@ export default function Dashboard() {
                     onAddTrade={handleAddTrade}
                   />
                 )}
-                <Button variant="ghost" size="icon" onClick={handleSignOut} title="Sign out" className="border border-white/10 bg-slate-900/55 hover:bg-slate-800/80">
+                <AddAccountModal onAddAccount={handleAddAccount} />
+                <Button variant="ghost" size="icon" onClick={handleSignOut} title="Sign out" className="h-9 w-9 shrink-0 border border-white/10 bg-slate-900/55 hover:bg-slate-800/80">
                   <LogOut className="h-4 w-4" />
                 </Button>
               </div>
@@ -864,14 +869,11 @@ export default function Dashboard() {
                     {accountsOverview.accountCount}
                   </p>
                 </div>
-                <div className="col-span-2 rounded-2xl border border-white/[0.07] bg-[#111318]/75 px-3 py-2.5 shadow-[inset_0_1px_0_0_rgba(255,255,255,0.04)] backdrop-blur-sm sm:col-span-1 sm:px-4 sm:py-3">
+                <div className="rounded-2xl border border-white/[0.07] bg-[#111318]/75 px-3 py-2.5 shadow-[inset_0_1px_0_0_rgba(255,255,255,0.04)] backdrop-blur-sm sm:px-4 sm:py-3">
                   <p className="text-[10px] font-medium uppercase tracking-[0.14em] text-slate-500">Milestones</p>
-                  <p className="mt-0.5 text-xs leading-snug text-slate-300 sm:text-sm">
-                    <span className="font-mono text-emerald-400/95">{accountsOverview.evalPassed}</span>
-                    <span className="text-muted-foreground"> eval passed</span>
-                    <span className="mx-1.5 text-muted-foreground/40">·</span>
-                    <span className="font-mono text-[#E5E4E2]">{accountsOverview.payoutEligible}</span>
-                    <span className="text-muted-foreground"> PA payout-ready</span>
+                  <p className="mt-0.5 text-[11px] leading-tight text-slate-300 sm:text-sm">
+                    <span className="block"><span className="font-mono text-emerald-400/95">{accountsOverview.evalPassed}</span> eval passed</span>
+                    <span className="block mt-0.5"><span className="font-mono text-[#E5E4E2]">{accountsOverview.payoutEligible}</span> PA ready</span>
                   </p>
                 </div>
               </div>
@@ -1017,8 +1019,9 @@ export default function Dashboard() {
               </div>
 
               {/* TOP ROW: Stats Cards */}
-              <div className="grid gap-1.5 sm:gap-3 lg:gap-2 grid-cols-2 lg:grid-cols-5 mb-2 sm:mb-4 lg:mb-2 auto-rows-fr">
+              <div className="grid gap-1.5 sm:gap-3 lg:gap-2 grid-cols-1 lg:grid-cols-5 mb-2 sm:mb-4 lg:mb-2">
                 <MetricsCard
+                  className="order-1 lg:order-none"
                   title="Account Balance"
                   value={formatCurrency(accountStats.currentBalance)}
                   change={{
@@ -1027,6 +1030,7 @@ export default function Dashboard() {
                   }}
                 />
                 <MetricsCard
+                  className="order-3 lg:order-2"
                   title={getFloorDisplayTitle(selectedAccount)}
                   value={formatCurrency(
                     displayAccountStats!.activeEodFloor ?? displayAccountStats!.minBalance,
@@ -1065,6 +1069,7 @@ export default function Dashboard() {
                   }
                 />
                 <MetricsCard
+                  className="order-2 lg:order-3"
                   title="Total PnL"
                   value={formatPnL(accountStats.totalPnL)}
                   change={{
@@ -1074,6 +1079,7 @@ export default function Dashboard() {
                 />
                 {fourthStatMetric && (
                   <MetricsCard
+                    className="order-4 lg:order-4"
                     title={fourthStatMetric.title}
                     value={fourthStatMetric.value}
                     change={fourthStatMetric.change}
@@ -1081,6 +1087,7 @@ export default function Dashboard() {
                   />
                 )}
                 <MetricsCard
+                  className="order-5 lg:order-5"
                   title="Drawdown Remaining"
                   value={formatCurrency(Math.max(0, displayAccountStats!.drawdownRemaining))}
                   change={{

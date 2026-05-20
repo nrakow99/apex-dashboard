@@ -232,7 +232,7 @@ export function PerformanceChart({ data, account, stats }: PerformanceChartProps
   // Empty state - uses same flex layout as main chart for consistency
   if (data.length === 0) {
     return (
-      <Card className="h-[210px] sm:h-[308px] lg:h-[332px] flex flex-col p-2 sm:p-3 lg:p-2 rounded-[20px] sm:rounded-[24px] glass-card">
+      <Card className="h-[200px] sm:h-[308px] lg:h-[332px] flex flex-col p-2 sm:p-3 lg:p-2 rounded-[20px] sm:rounded-[24px] glass-card">
         {/* Header */}
         <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
           <div>
@@ -336,7 +336,7 @@ export function PerformanceChart({ data, account, stats }: PerformanceChartProps
   }
 
   return (
-      <Card className="h-[210px] sm:h-[308px] lg:h-[332px] flex flex-col p-2 sm:p-3 lg:p-2 rounded-[20px] sm:rounded-[24px] glass-card">
+      <Card className="h-[200px] sm:h-[308px] lg:h-[332px] flex flex-col p-2 sm:p-3 lg:p-2 rounded-[20px] sm:rounded-[24px] glass-card">
       {/* Header */}
       <div className="flex items-center justify-between gap-2">
         <div>

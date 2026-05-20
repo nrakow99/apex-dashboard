@@ -209,7 +209,7 @@ export function AccountCard({
   return (
     <Card
       className={cn(
-        "relative p-4 sm:p-6 glass-card glass-card-hover account-card-hover rounded-[24px] cursor-pointer group",
+        "relative p-3.5 sm:p-6 glass-card glass-card-hover account-card-hover rounded-[24px] cursor-pointer group",
         "transition-all active:scale-[0.992] active:shadow-none",
         !stats.isSafe && "border-red-500/40",
         stats.isSafe && account.type === "Eval" && "border-amber-500/[0.13]",
@@ -254,7 +254,7 @@ export function AccountCard({
       )}
 
       {/* Header — left side only; right side is handled by absolute controls above */}
-      <div className="mb-4 pr-[76px]">
+      <div className="mb-3 sm:mb-4 pr-[76px]">
         <h3 className="font-semibold text-base sm:text-lg truncate text-[#E5E4E2]">{account.name}</h3>
         <div className="flex items-center gap-1.5 mt-2 flex-wrap">
           <Badge
@@ -304,7 +304,7 @@ export function AccountCard({
         </div>
       </div>
 
-      <div className="space-y-2.5 sm:space-y-3">
+      <div className="space-y-2 sm:space-y-3">
         {/* Balance & PnL */}
         <div className="grid grid-cols-2 gap-3">
           <div>

@@ -2,6 +2,7 @@
 
 import { createClient } from "@/lib/supabase/client"
 import type { Account, Trade, Payout, Firm, DrawdownType } from "@/lib/types"
+import { metaToDbPayload, type TradeMeta } from "@/lib/trade-meta"
 
 interface AccountRow {
   id: string
@@ -34,6 +35,14 @@ interface TradeRow {
   symbol: string
   pnl: number
   notes: string | null
+  session?: string | null
+  direction?: string | null
+  grade?: string | null
+  setup_tags?: string[] | null
+  discipline_tags?: string[] | null
+  entry_price?: number | null
+  exit_price?: number | null
+  contracts?: number | null
   created_at: string
 }
 
@@ -86,6 +95,14 @@ function rowToTrade(row: TradeRow): Trade {
     symbol: row.symbol,
     pnl: Number(row.pnl),
     notes: row.notes ?? undefined,
+    session: row.session ?? undefined,
+    direction: row.direction ?? undefined,
+    grade: row.grade ?? undefined,
+    setupTags: Array.isArray(row.setup_tags) ? row.setup_tags : [],
+    disciplineTags: Array.isArray(row.discipline_tags) ? row.discipline_tags : [],
+    entryPrice: row.entry_price != null ? Number(row.entry_price) : undefined,
+    exitPrice: row.exit_price != null ? Number(row.exit_price) : undefined,
+    contracts: row.contracts != null ? Number(row.contracts) : undefined,
   }
 }
 
@@ -170,13 +187,16 @@ export async function createAccount(account: {
   return { data: rowToAccount(data as AccountRow), error: null }
 }
 
-export async function createTrade(trade: {
-  accountId: string
-  date: string
-  symbol: string
-  pnl: number
-  notes?: string
-}): Promise<{ data: Trade | null; error: Error | null }> {
+export async function createTrade(
+  trade: {
+    accountId: string
+    date: string
+    symbol: string
+    pnl: number
+    notes?: string
+  },
+  meta: TradeMeta = {},
+): Promise<{ data: Trade | null; error: Error | null }> {
   const supabase = createClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return { data: null, error: new Error("Not authenticated") }
@@ -190,6 +210,7 @@ export async function createTrade(trade: {
       symbol: trade.symbol,
       pnl: trade.pnl,
       notes: trade.notes ?? null,
+      ...metaToDbPayload(meta),
     })
     .select()
     .single()
@@ -316,7 +337,8 @@ export async function updateTrade(
     symbol?: string
     pnl?: number
     notes?: string | null
-  }
+  },
+  meta?: TradeMeta,
 ): Promise<{ data: Trade | null; error: Error | null }> {
   const supabase = createClient()
   const updateData: Record<string, unknown> = {}
@@ -325,6 +347,7 @@ export async function updateTrade(
   if (updates.symbol !== undefined) updateData.symbol = updates.symbol
   if (updates.pnl !== undefined) updateData.pnl = updates.pnl
   if (updates.notes !== undefined) updateData.notes = updates.notes
+  if (meta !== undefined) Object.assign(updateData, metaToDbPayload(meta))
 
   const { data, error } = await supabase
     .from("trades")
