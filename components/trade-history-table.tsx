@@ -93,11 +93,11 @@ function TradeDetailPanel({ trade, meta, colSpan }: { trade: Trade; meta: TradeM
     <TableRow className="border-none hover:bg-transparent">
       <TableCell colSpan={colSpan} className="p-0">
         <div className="overflow-hidden">
-          <div className="mx-3 mb-2.5 mt-0.5 rounded-xl bg-[rgba(83,104,120,0.05)] border border-[rgba(83,104,120,0.12)] p-3">
+          <div className="mx-2.5 mb-2 mt-0.5 rounded-xl bg-[rgba(83,104,120,0.05)] border border-[rgba(83,104,120,0.12)] p-2 sm:p-3">
             {!hasMeta ? (
               <p className="text-[11px] text-[#E5E4E2]/25 italic">No details recorded.</p>
             ) : (
-              <div className="space-y-2">
+              <div className="space-y-1.5 sm:space-y-2">
                 {/* Badges row */}
                 {(session || meta.direction || meta.grade) && (
                   <div className="flex items-center gap-1.5 flex-wrap">
@@ -212,11 +212,11 @@ export function TradeHistoryTable({ trades, onEditTrade, onDeleteTrade }: TradeH
 
   if (trades.length === 0) {
     return (
-      <Card className="rounded-[24px] glass-card overflow-hidden">
-        <div className="px-3.5 sm:px-[18px] py-3 sm:py-3.5 border-b border-white/[0.07]">
-          <h2 className="text-base sm:text-lg font-semibold">Trade History</h2>
+      <Card className="rounded-[20px] sm:rounded-[24px] glass-card overflow-hidden">
+        <div className="px-3 sm:px-[18px] py-2.5 sm:py-3.5 border-b border-white/[0.07]">
+          <h2 className="text-sm sm:text-lg font-semibold">Trade History</h2>
         </div>
-        <div className="py-12 px-6 text-center space-y-2">
+        <div className="py-8 sm:py-12 px-6 text-center space-y-1.5 sm:space-y-2">
           <p className="text-sm text-[#E5E4E2]/45">No trades logged yet.</p>
           <p className="text-xs text-[#E5E4E2]/25">Protecting capital is also progress.</p>
         </div>
@@ -225,9 +225,9 @@ export function TradeHistoryTable({ trades, onEditTrade, onDeleteTrade }: TradeH
   }
 
   return (
-    <Card className="rounded-[24px] glass-card overflow-hidden">
-      <div className="px-3.5 sm:px-[18px] py-3 sm:py-3.5 border-b border-white/[0.07] flex items-center justify-between">
-        <h2 className="text-base sm:text-lg font-semibold">Trade History</h2>
+    <Card className="rounded-[20px] sm:rounded-[24px] glass-card overflow-hidden">
+      <div className="px-3 sm:px-[18px] py-2.5 sm:py-3.5 border-b border-white/[0.07] flex items-center justify-between">
+        <h2 className="text-sm sm:text-lg font-semibold">Trade History</h2>
         <span className="text-[11px] text-muted-foreground tabular-nums">
           {trades.length} trade{trades.length !== 1 ? "s" : ""} · {groups.length} day{groups.length !== 1 ? "s" : ""}
         </span>
@@ -274,7 +274,7 @@ export function TradeHistoryTable({ trades, onEditTrade, onDeleteTrade }: TradeH
                   onClick={() => isMulti ? toggleDate(group.date) : singleTrade ? toggleTrade(singleTrade.id) : undefined}
                 >
                   {/* Expand chevron */}
-                  <TableCell className="py-2 sm:py-3 px-2 sm:px-4 w-9">
+                  <TableCell className="py-1.5 sm:py-3 px-2 sm:px-4 w-9">
                     <ChevronRight
                       className={cn(
                         "h-3.5 w-3.5 text-muted-foreground/40 transition-transform duration-200",
@@ -284,7 +284,7 @@ export function TradeHistoryTable({ trades, onEditTrade, onDeleteTrade }: TradeH
                   </TableCell>
 
                   {/* Date */}
-                  <TableCell className="py-2 sm:py-3.5 px-2 sm:px-3">
+                  <TableCell className="py-1.5 sm:py-3.5 px-2 sm:px-3">
                     <div className="flex flex-col gap-0.5">
                       <span className="text-xs sm:text-sm font-medium text-[#E5E4E2]/80">
                         {formatGroupDate(group.date)}
@@ -320,7 +320,7 @@ export function TradeHistoryTable({ trades, onEditTrade, onDeleteTrade }: TradeH
                   </TableCell>
 
                   {/* Daily PnL */}
-                  <TableCell className="text-right py-2 sm:py-3.5 px-2 sm:px-3">
+                  <TableCell className="text-right py-1.5 sm:py-3.5 px-2 sm:px-3">
                     <span className={cn(
                       "font-mono font-bold text-sm sm:text-[15px] tabular-nums",
                       isProfit ? "text-emerald-500" : isLoss ? "text-red-500" : "text-muted-foreground",
@@ -390,7 +390,7 @@ export function TradeHistoryTable({ trades, onEditTrade, onDeleteTrade }: TradeH
                       onClick={() => toggleTrade(trade.id)}
                     >
                       {/* Indent + chevron */}
-                      <TableCell className="py-2.5 px-3 sm:px-4 w-9">
+                      <TableCell className="py-1.5 sm:py-2.5 px-3 sm:px-4 w-9">
                         <div className="flex items-center gap-0.5 pl-1">
                           <div className={cn("w-0.5 h-3 rounded-full shrink-0", trade.pnl > 0 ? "bg-emerald-500/30" : trade.pnl < 0 ? "bg-red-500/30" : "bg-border/40")} />
                           <ChevronRight className={cn("h-3 w-3 text-muted-foreground/30 transition-transform duration-200 ml-0.5", isTradeExpanded && "rotate-90 text-muted-foreground/55")} />
@@ -398,7 +398,7 @@ export function TradeHistoryTable({ trades, onEditTrade, onDeleteTrade }: TradeH
                       </TableCell>
 
                       {/* Symbol + session info */}
-                      <TableCell className="py-2.5 px-2 sm:px-3">
+                      <TableCell className="py-1.5 sm:py-2.5 px-2 sm:px-3">
                         <div className="flex flex-col gap-0.5">
                           <span className="text-[11px] text-muted-foreground/40">·</span>
                           {resolveSession(tradeMeta) && <SessionBadge meta={tradeMeta} />}
@@ -417,7 +417,7 @@ export function TradeHistoryTable({ trades, onEditTrade, onDeleteTrade }: TradeH
                       </TableCell>
 
                       {/* Individual PnL */}
-                      <TableCell className="text-right py-2.5 px-2 sm:px-3">
+                      <TableCell className="text-right py-1.5 sm:py-2.5 px-2 sm:px-3">
                         <span className={cn("font-mono text-xs font-semibold tabular-nums",
                           trade.pnl > 0 ? "text-emerald-500/80" : trade.pnl < 0 ? "text-red-500/80" : "text-muted-foreground",
                         )}>

@@ -167,7 +167,7 @@ export function RuleEnginePanel({
 
         {/* ── Active Floor ─────────────────────────────────────────────────── */}
         <RuleCard title={getRuleEngineFloorCardTitle(account)} status={drawdownStatus}>
-          <div className="space-y-2 text-sm">
+          <div className="space-y-1.5 text-sm">
             <div className="flex justify-between items-center">
               <span className="text-muted-foreground">Current Balance</span>
               <span className="font-mono font-medium">
@@ -185,7 +185,7 @@ export function RuleEnginePanel({
                 ${stats.minBalance.toLocaleString(undefined, { minimumFractionDigits: 2 })}
               </span>
             </div>
-            <div className="pt-2 border-t border-border/50">
+            <div className="pt-1.5 border-t border-border/50">
               <div className="flex justify-between">
                 <span className="font-medium">Remaining</span>
                 <span className={cn(
@@ -199,7 +199,7 @@ export function RuleEnginePanel({
               <Progress
                 value={Math.max(0, drawdownPercent)}
                 className={cn(
-                  "h-2 mt-2",
+                  "h-1.5 mt-1.5",
                   drawdownStatus === "danger"  && "[&>div]:bg-red-500",
                   drawdownStatus === "warning" && "[&>div]:bg-amber-500",
                   drawdownStatus === "good"    && "[&>div]:bg-emerald-500"
@@ -212,7 +212,7 @@ export function RuleEnginePanel({
         {/* ── Daily Loss Limit (only when applicable) ──────────────────────── */}
         {rules.hasDLL && (
           <RuleCard title="Daily Loss Limit" status={dailyLossStatus}>
-            <div className="space-y-2 text-sm">
+            <div className="space-y-1.5 text-sm">
               <div className="flex justify-between">
                 <span className="text-muted-foreground">Remaining Today</span>
                 <span className={cn(
@@ -236,14 +236,14 @@ export function RuleEnginePanel({
         {/* ── Profit Target (Eval only) ─────────────────────────────────────── */}
         {account.type === "Eval" && account.profitTarget && (
           <RuleCard title="Profit Goal">
-            <div className="space-y-2 text-sm">
+            <div className="space-y-1.5 text-sm">
               <div className="flex justify-between">
                 <span className="text-muted-foreground">Progress</span>
                 <span className="font-mono font-bold">
                   ${Math.max(0, stats.totalPnL).toLocaleString(undefined, { minimumFractionDigits: 2 })} / ${account.profitTarget.toLocaleString(undefined, { minimumFractionDigits: 2 })}
                 </span>
               </div>
-              <Progress value={Math.min(100, (stats.totalPnL / account.profitTarget) * 100)} className="h-2" />
+              <Progress value={Math.min(100, (stats.totalPnL / account.profitTarget) * 100)} className="h-1.5" />
               <div className="flex justify-between pt-1">
                 <span className="text-muted-foreground">Remaining</span>
                 <span className="font-mono">
@@ -286,7 +286,7 @@ export function RuleEnginePanel({
                     <span className="text-muted-foreground">Tier status</span>
                     <span className="font-medium text-emerald-500/95">Max Tier Reached</span>
                   </div>
-                  <Progress value={100} className="h-1.5 [&>div]:bg-emerald-500/80" />
+                  <Progress value={100} className="h-1 [&>div]:bg-emerald-500/80" />
                 </div>
               ) : (
                 <div className="space-y-2 pt-2">
@@ -306,7 +306,7 @@ export function RuleEnginePanel({
                   </div>
                   <Progress
                     value={apexPaScaling.progressToNextTierPercent}
-                    className="h-1.5 [&>div]:bg-gradient-to-r from-[#536878]/90 to-emerald-500/90"
+                    className="h-1 [&>div]:bg-gradient-to-r from-[#536878]/90 to-emerald-500/90"
                   />
                 </div>
               )}
@@ -349,7 +349,7 @@ export function RuleEnginePanel({
             title={`Consistency Rule (${rules.consistencyPercent}%)`}
             status={consistencyInfo.isValid ? "good" : "warning"}
           >
-            <div className="space-y-1.5 text-sm">
+            <div className="space-y-1 text-sm">
               <div className="flex justify-between">
                 <span className="text-muted-foreground">Largest Day</span>
                 <span className={cn("font-mono", !consistencyInfo.isValid && "text-amber-500")}>
@@ -364,7 +364,7 @@ export function RuleEnginePanel({
                 <span className="text-muted-foreground">Max Allowed ({rules.consistencyPercent}%)</span>
                 <span className="font-mono">${consistencyInfo.maxAllowedDay.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
               </div>
-              <div className="flex justify-between pt-2 border-t border-border/50 mt-2">
+              <div className="flex justify-between pt-1.5 border-t border-border/50 mt-1.5">
                 <span className="text-muted-foreground">Status</span>
                 <span className={cn("font-medium", consistencyInfo.isValid ? "text-emerald-500" : "text-amber-500")}>
                   {consistencyInfo.isValid ? "Compliant" : "Not compliant"}
@@ -382,7 +382,7 @@ export function RuleEnginePanel({
         {/* ── Apex PA: Trading Days ─────────────────────────────────────────── */}
         {account.firm !== "Lucid" && account.type === "PA" && rules.minTradingDays > 0 && (
           <RuleCard title="Trading Days">
-            <div className="space-y-2">
+            <div className="space-y-1.5">
               <div className="flex justify-between text-sm">
                 <span className="text-muted-foreground">Days Traded</span>
                 <span className={cn(
@@ -394,7 +394,7 @@ export function RuleEnginePanel({
               </div>
               <Progress
                 value={(stats.tradingDays / rules.minTradingDays) * 100}
-                className={cn("h-2", stats.tradingDays >= rules.minTradingDays && "[&>div]:bg-emerald-500")}
+                className={cn("h-1.5", stats.tradingDays >= rules.minTradingDays && "[&>div]:bg-emerald-500")}
               />
             </div>
           </RuleCard>
@@ -403,7 +403,7 @@ export function RuleEnginePanel({
         {/* ── Apex PA: Qualifying profit days ──────────────────────────────── */}
         {account.firm !== "Lucid" && account.type === "PA" && consistencyInfo && rules.minProfitDays > 0 && (
           <RuleCard title={`$${rules.minDailyProfit}+ Profit Days`}>
-            <div className="space-y-2">
+            <div className="space-y-1.5">
               <div className="flex justify-between text-sm">
                 <span className="text-muted-foreground">Qualifying Days</span>
                 <span className={cn(
@@ -415,7 +415,7 @@ export function RuleEnginePanel({
               </div>
               <Progress
                 value={(consistencyInfo.daysWithMinProfit / rules.minProfitDays) * 100}
-                className={cn("h-2", consistencyInfo.daysWithMinProfit >= rules.minProfitDays && "[&>div]:bg-emerald-500")}
+                className={cn("h-1.5", consistencyInfo.daysWithMinProfit >= rules.minProfitDays && "[&>div]:bg-emerald-500")}
               />
             </div>
           </RuleCard>
@@ -424,7 +424,7 @@ export function RuleEnginePanel({
         {/* ── LucidFlex PA: qualifying payout days (cycle) — no Apex consistency gate ─ */}
         {account.firm === "Lucid" && account.type === "PA" && consistencyInfo && rules.minProfitDays > 0 && (
           <RuleCard title={`LucidFlex · $${rules.minDailyProfit}+ days`}>
-            <div className="space-y-2">
+            <div className="space-y-1.5">
               <p className="text-[11px] text-muted-foreground leading-snug">
                 Five payout-qualifying days per cycle (positive cycle profit required for payout eligibility).
               </p>
@@ -439,7 +439,7 @@ export function RuleEnginePanel({
               </div>
               <Progress
                 value={(lucidQualifyingDaysInCycle / rules.minProfitDays) * 100}
-                className={cn("h-2", lucidQualifyingDaysInCycle >= rules.minProfitDays && "[&>div]:bg-emerald-500")}
+                className={cn("h-1.5", lucidQualifyingDaysInCycle >= rules.minProfitDays && "[&>div]:bg-emerald-500")}
               />
             </div>
           </RuleCard>
@@ -448,7 +448,7 @@ export function RuleEnginePanel({
         {/* ── Apex PA: Min payout balance ───────────────────────────────────── */}
         {account.firm !== "Lucid" && account.type === "PA" && rules.minBalanceToRequest > 0 && (
           <RuleCard title="Min Payout Balance">
-            <div className="space-y-2 text-sm">
+            <div className="space-y-1.5 text-sm">
               <div className="flex justify-between">
                 <span className="text-muted-foreground">Target</span>
                 <span className={cn(
@@ -466,7 +466,7 @@ export function RuleEnginePanel({
               </div>
               <Progress
                 value={Math.min(100, (stats.currentBalance / rules.minBalanceToRequest) * 100)}
-                className={cn("h-2", stats.currentBalance >= rules.minBalanceToRequest && "[&>div]:bg-emerald-500")}
+                className={cn("h-1.5", stats.currentBalance >= rules.minBalanceToRequest && "[&>div]:bg-emerald-500")}
               />
             </div>
           </RuleCard>

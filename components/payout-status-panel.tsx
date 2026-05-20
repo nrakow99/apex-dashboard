@@ -157,10 +157,10 @@ function ApexPayoutPanel({ account, eligibility, payouts, onAddPayout }: PayoutS
   })()
 
   return (
-    <Card className="p-3 sm:p-4 rounded-[24px] glass-card h-fit">
+    <Card className="p-2.5 sm:p-4 rounded-[20px] sm:rounded-[24px] glass-card h-fit">
       {/* Header */}
-      <div className="flex items-center justify-between mb-2 sm:mb-2.5">
-        <h2 className="text-base sm:text-lg font-semibold">Payout Status</h2>
+      <div className="flex items-center justify-between mb-1.5 sm:mb-2.5">
+        <h2 className="text-sm sm:text-lg font-semibold">Payout Status</h2>
         <Dialog open={open} onOpenChange={(v) => { setOpen(v); if (!v) setError(null) }}>
           <DialogTrigger asChild>
             <Button
@@ -220,7 +220,7 @@ function ApexPayoutPanel({ account, eligibility, payouts, onAddPayout }: PayoutS
 
       {/* Eligibility banner */}
       <div className={cn(
-        "p-2.5 rounded-xl mb-2.5 flex items-start gap-2.5",
+        "p-2 rounded-xl mb-2 flex items-start gap-2",
         isMaxedOut ? "bg-[#536878]/10 border border-[#536878]/25" :
         eligibility.isEligible ? "bg-emerald-500/10 border border-emerald-500/30" :
         "bg-amber-500/10 border border-amber-500/30"
@@ -251,7 +251,7 @@ function ApexPayoutPanel({ account, eligibility, payouts, onAddPayout }: PayoutS
       </div>
 
       {/* Checklist */}
-      <div className="space-y-1.5 mb-2.5">
+      <div className="space-y-1 mb-2">
         {eligibility.conditions && (
           <>
             <ChecklistRow
@@ -299,7 +299,7 @@ function ApexPayoutPanel({ account, eligibility, payouts, onAddPayout }: PayoutS
       </div>
 
       {/* Available to withdraw */}
-      <div className="p-2.5 rounded-xl bg-emerald-500/10 border border-emerald-500/30 mb-2.5">
+      <div className="p-2 rounded-xl bg-emerald-500/10 border border-emerald-500/30 mb-2">
         <div className="text-xs text-emerald-500/80 mb-0.5">Available to Withdraw</div>
         <div className="text-xl font-bold font-mono text-emerald-500">
           {eligibility.availableToWithdraw >= eligibility.minPayoutAmount
@@ -312,16 +312,16 @@ function ApexPayoutPanel({ account, eligibility, payouts, onAddPayout }: PayoutS
       </div>
 
       {/* Payout progress */}
-      <div className="p-2.5 rounded-xl bg-muted/30 border border-border/50 mb-2.5">
-        <div className="flex items-center justify-between mb-1.5">
+      <div className="p-2 rounded-xl bg-muted/30 border border-border/50 mb-2">
+        <div className="flex items-center justify-between mb-1">
           <span className="text-sm font-medium">Payout Progress</span>
           <span className="text-sm font-mono">{eligibility.payoutCount} / {eligibility.maxPayouts}</span>
         </div>
-        <Progress value={(eligibility.payoutCount / eligibility.maxPayouts) * 100} className="h-2 mb-1.5" />
+        <Progress value={(eligibility.payoutCount / eligibility.maxPayouts) * 100} className="h-1.5 mb-1.5" />
         <div className="grid gap-1" style={{ gridTemplateColumns: `repeat(${payoutCaps.length}, 1fr)` }}>
           {payoutCaps.map((cap, i) => (
             <div key={i} className={cn(
-              "text-center py-1.5 px-0.5 rounded text-xs",
+              "text-center py-1 px-0.5 rounded text-xs",
               i < eligibility.payoutCount
                 ? "bg-emerald-500/20 text-emerald-500"
                 : i === eligibility.payoutCount
@@ -395,11 +395,11 @@ function LucidPayoutPanel({ account, eligibility, payouts, onAddPayout }: Payout
   const previewFirm   = previewAmount * (1 - rules.payoutSplit)
 
   return (
-    <Card className="p-3 sm:p-4 rounded-[24px] glass-card h-fit">
+    <Card className="p-2.5 sm:p-4 rounded-[20px] sm:rounded-[24px] glass-card h-fit">
       {/* Header */}
-      <div className="flex items-center justify-between mb-2 sm:mb-2.5">
+      <div className="flex items-center justify-between mb-1.5 sm:mb-2.5">
         <div>
-          <h2 className="text-base sm:text-lg font-semibold">Payout Status</h2>
+          <h2 className="text-sm sm:text-lg font-semibold">Payout Status</h2>
           <p className="text-xs text-slate-400 mt-0.5">
             LucidFlex — {Math.round(rules.payoutSplit * 100)}% / {Math.round((1 - rules.payoutSplit) * 100)}% split · min $
             {rules.minPayoutAmount} · max {Math.round(rules.payoutMaxPercent * 100)}% of cycle profit (cap $
@@ -474,7 +474,7 @@ function LucidPayoutPanel({ account, eligibility, payouts, onAddPayout }: Payout
 
       {/* Eligibility banner */}
       <div className={cn(
-        "p-2.5 rounded-xl mb-2.5 flex items-start gap-2.5",
+        "p-2 rounded-xl mb-2 flex items-start gap-2",
         isMaxedOut ? "bg-[#536878]/10 border border-[#536878]/25" :
         eligibility.isEligible ? "bg-emerald-500/10 border border-emerald-500/30" :
         "bg-amber-500/10 border border-amber-500/30"
@@ -509,7 +509,7 @@ function LucidPayoutPanel({ account, eligibility, payouts, onAddPayout }: Payout
       </p>
 
       {/* Checklist */}
-      <div className="space-y-1.5 mb-2.5">
+      <div className="space-y-1 mb-2">
         <ChecklistRow
           label={`$${eligibility.minDailyProfit}+ Profit Days (cycle)`}
           value={`${cycleProfitDays} / ${eligibility.minProfitDays}`}
@@ -523,7 +523,7 @@ function LucidPayoutPanel({ account, eligibility, payouts, onAddPayout }: Payout
       </div>
 
       {/* Available to withdraw */}
-      <div className="p-2.5 rounded-xl bg-[#536878]/10 border border-[#536878]/25 mb-2.5">
+      <div className="p-2 rounded-xl bg-[#536878]/10 border border-[#536878]/25 mb-2">
         <div className="text-xs text-slate-400 mb-0.5">Max Payout Available</div>
         <div className="text-xl font-bold font-mono text-slate-200">
           ${eligibility.maxWithdrawable >= eligibility.minPayoutAmount
@@ -534,7 +534,7 @@ function LucidPayoutPanel({ account, eligibility, payouts, onAddPayout }: Payout
           min(Cycle Profit × {Math.round((eligibility.payoutMaxPercent ?? 0.5) * 100)}%, ${(eligibility.payoutAbsoluteCap ?? 0).toLocaleString()}) cap
         </div>
         {eligibility.maxWithdrawable >= eligibility.minPayoutAmount && (
-          <div className="mt-2 pt-2 border-t border-[#536878]/20 space-y-0.5 text-xs">
+          <div className="mt-1.5 pt-1.5 border-t border-[#536878]/20 space-y-0.5 text-xs">
             <div className="flex justify-between">
               <span className="text-muted-foreground">You receive (90%)</span>
               <span className="font-mono text-slate-300">${traderReceives.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
@@ -548,12 +548,12 @@ function LucidPayoutPanel({ account, eligibility, payouts, onAddPayout }: Payout
       </div>
 
       {/* Payout count */}
-      <div className="p-2.5 rounded-xl bg-muted/30 border border-border/50 mb-2.5">
-        <div className="flex items-center justify-between mb-1.5">
+      <div className="p-2 rounded-xl bg-muted/30 border border-border/50 mb-2">
+        <div className="flex items-center justify-between mb-1">
           <span className="text-sm font-medium">Payout Progress</span>
           <span className="text-sm font-mono">{eligibility.payoutCount} / {eligibility.maxPayouts}</span>
         </div>
-        <Progress value={(eligibility.payoutCount / eligibility.maxPayouts) * 100} className="h-2 mb-1" />
+        <Progress value={(eligibility.payoutCount / eligibility.maxPayouts) * 100} className="h-1.5 mb-1" />
         <p className="text-xs text-muted-foreground">After {eligibility.maxPayouts} payouts, account may be moved live</p>
       </div>
 
@@ -581,12 +581,12 @@ function LucidPayoutPanel({ account, eligibility, payouts, onAddPayout }: Payout
 
 function PayoutHistory({ payouts, showSplit }: { payouts: Payout[]; showSplit?: boolean }) {
   return (
-    <div className="mb-3">
-      <div className="text-xs font-medium text-muted-foreground mb-1.5">Payout History</div>
+    <div className="mb-2">
+      <div className="text-xs font-medium text-muted-foreground mb-1">Payout History</div>
       {payouts.length > 0 ? (
-        <div className="space-y-1 max-h-[140px] overflow-y-auto">
+        <div className="space-y-1 max-h-[130px] overflow-y-auto">
           {payouts.slice().reverse().map((payout) => (
-            <div key={payout.id} className="flex items-center justify-between p-2.5 rounded-lg bg-muted/20 border border-border/30">
+            <div key={payout.id} className="flex items-center justify-between p-2 rounded-lg bg-muted/20 border border-border/30">
               <div className="flex items-center gap-2">
                 <DollarSign className="h-3.5 w-3.5 text-emerald-500" />
                 <div>
@@ -605,7 +605,7 @@ function PayoutHistory({ payouts, showSplit }: { payouts: Payout[]; showSplit?: 
           ))}
         </div>
       ) : (
-        <div className="py-6 px-4 text-center space-y-1 rounded-xl bg-[rgba(83,104,120,0.04)] border border-[rgba(83,104,120,0.12)]">
+        <div className="py-4 px-4 text-center space-y-1 rounded-xl bg-[rgba(83,104,120,0.04)] border border-[rgba(83,104,120,0.12)]">
           <p className="text-sm text-[#E5E4E2]/48">No payouts logged yet.</p>
           <p className="text-xs text-[#E5E4E2]/28">Withdrawals will appear here once recorded.</p>
         </div>

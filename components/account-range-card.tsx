@@ -196,15 +196,15 @@ export function AccountRangeCard({ account, stats }: AccountRangeCardProps) {
   )
 
   return (
-    <Card className="glass-card overflow-hidden rounded-[20px] border-white/10 bg-slate-950/35 px-2.5 py-3 shadow-[inset_0_1px_0_0_rgba(255,255,255,0.04)] backdrop-blur-xl sm:rounded-[24px] sm:px-4 sm:py-4">
-      <div className="mb-1.5 flex items-center justify-between gap-2">
+    <Card className="glass-card overflow-hidden rounded-[20px] border-white/10 bg-slate-950/35 px-2.5 py-2 shadow-[inset_0_1px_0_0_rgba(255,255,255,0.04)] backdrop-blur-xl sm:rounded-[24px] sm:px-4 sm:py-4">
+      <div className="mb-1 flex items-center justify-between gap-2">
         <h2 className="text-[10px] font-semibold uppercase tracking-[0.16em] text-slate-400">
           Account range
         </h2>
       </div>
 
       {/* Range bar: floor (left) → target (right) */}
-      <div className="relative mb-2.5">
+      <div className="relative mb-2">
         <div
           className={cn(
             "relative h-2.5 overflow-visible rounded-full ring-1 ring-white/10 sm:h-3",
@@ -252,7 +252,7 @@ export function AccountRangeCard({ account, stats }: AccountRangeCardProps) {
       </div>
 
       {/* Three columns — always 3-col even on mobile (compact) */}
-      <div className="grid grid-cols-3 gap-1.5 border-t border-white/10 pt-2 sm:gap-3 sm:pt-3 lg:gap-6">
+      <div className="grid grid-cols-3 gap-1.5 border-t border-white/10 pt-1.5 sm:gap-3 sm:pt-3 lg:gap-6">
         <div className="space-y-0.5 text-left sm:pr-1">
           <p className="text-[8px] sm:text-[10px] font-medium uppercase tracking-[0.10em] sm:tracking-[0.14em] text-slate-500">{leftFloorTitle}</p>
           <div className="[&_.font-mono]:text-sm sm:[&_.font-mono]:text-base lg:[&_.font-mono]:text-lg [&_span]:text-[9px] sm:[&_span]:text-xs">
@@ -274,7 +274,7 @@ export function AccountRangeCard({ account, stats }: AccountRangeCardProps) {
       </div>
 
       {/* Bottom metrics */}
-      <div className="mt-2 flex flex-col gap-1.5 border-t border-white/10 pt-2 sm:mt-3 sm:flex-row sm:items-end sm:justify-between sm:gap-6 sm:pt-3">
+      <div className="mt-1.5 flex flex-col gap-1 border-t border-white/10 pt-1.5 sm:mt-3 sm:flex-row sm:items-end sm:justify-between sm:gap-6 sm:pt-3">
         <div className="min-w-0 flex-1">
           <p className="text-[8px] sm:text-[10px] font-medium uppercase tracking-[0.10em] sm:tracking-[0.14em] text-slate-500">{bottomLeftLabel}</p>
           <div className="mt-0.5 sm:mt-1 text-xs sm:text-base">{bottomLeftValue}</div>

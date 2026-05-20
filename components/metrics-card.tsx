@@ -23,8 +23,8 @@ interface MetricsCardProps {
 
 export function MetricsCard({ title, value, change, status, subValue, titleAction }: MetricsCardProps) {
   return (
-    <Card className="p-2.5 sm:p-3.5 rounded-[20px] glass-card glass-card-hover">
-      <div className="space-y-1">
+    <Card className="p-2 sm:p-3.5 rounded-[18px] sm:rounded-[20px] glass-card glass-card-hover h-full">
+      <div className="space-y-0.5 sm:space-y-1">
         <div className="flex items-start justify-between gap-1.5">
           <p className="text-[9px] sm:text-[11px] font-medium text-slate-500 uppercase tracking-[0.10em] sm:tracking-[0.14em] min-w-0 flex-1 leading-tight line-clamp-2">
             {title}
@@ -40,7 +40,7 @@ export function MetricsCard({ title, value, change, status, subValue, titleActio
         </p>
         {change && (
           <p className={cn(
-            "text-[11px] sm:text-xs font-mono",
+            "text-[10px] sm:text-xs font-mono",
             change.isPositive ? "text-emerald-500/80" : "text-red-500/80"
           )}>
             {change.value}
@@ -49,14 +49,14 @@ export function MetricsCard({ title, value, change, status, subValue, titleActio
         )}
         {status && (
           <p className={cn(
-            "text-[11px]",
+            "text-[10px] sm:text-[11px]",
             status.isGood ? "text-muted-foreground" : "text-amber-500"
           )}>
             {status.label}
           </p>
         )}
         {subValue && (
-          <p className="text-[11px] text-muted-foreground/70 font-mono">
+          <p className="text-[10px] sm:text-[11px] text-muted-foreground/70 font-mono">
             {subValue}
           </p>
         )}

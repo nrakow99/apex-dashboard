@@ -799,7 +799,7 @@ export default function Dashboard() {
         {viewMode === "accounts" ? (
           <>
             {/* Header */}
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4 sm:mb-5">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 sm:gap-3 mb-3 sm:mb-5">
               <h1 className="text-2xl sm:text-3xl font-semibold tracking-tight text-slate-100">Accounts</h1>
               <div className="flex items-center gap-2 sm:gap-4 flex-wrap">
                 {/* Total Cash Withdrawn */}
@@ -840,7 +840,7 @@ export default function Dashboard() {
             </Tabs>
 
             {accountsOverview && (
-              <div className="mb-4 grid grid-cols-2 gap-2.5 sm:mb-5 sm:gap-3 lg:grid-cols-4">
+              <div className="mb-2.5 grid grid-cols-2 gap-1.5 sm:mb-5 sm:gap-3 lg:grid-cols-4">
                 <div className="rounded-2xl border border-white/[0.07] bg-[#111318]/75 px-3 py-2.5 shadow-[inset_0_1px_0_0_rgba(255,255,255,0.04)] backdrop-blur-sm sm:px-4 sm:py-3">
                   <p className="text-[10px] font-medium uppercase tracking-[0.14em] text-slate-500">Total balance</p>
                   <p className="mt-0.5 font-mono text-base font-semibold tracking-tight text-[#E5E4E2] sm:text-lg">
@@ -879,7 +879,7 @@ export default function Dashboard() {
 
             {/* Account Cards Grid */}
             {filteredAccounts.length > 0 ? (
-              <div className="grid gap-4 sm:gap-5 md:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">
+              <div className="grid gap-2.5 sm:gap-5 md:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">
                 {filteredAccounts.map((account) => {
                   const tradesForAccount = allTrades.filter((t) => t.accountId === account.id)
                   const payoutsForAccount = allPayouts.filter((p) => p.accountId === account.id)
@@ -1012,7 +1012,7 @@ export default function Dashboard() {
               </div>
 
               {/* TOP ROW: Stats Cards */}
-              <div className="grid gap-2 sm:gap-3 grid-cols-2 lg:grid-cols-5 mb-3 sm:mb-4">
+              <div className="grid gap-1.5 sm:gap-3 grid-cols-2 lg:grid-cols-5 mb-2 sm:mb-4 auto-rows-fr">
                 <MetricsCard
                   title="Account Balance"
                   value={formatCurrency(accountStats.currentBalance)}
@@ -1110,20 +1110,20 @@ export default function Dashboard() {
               </div>
 
               {shouldShowAccountRangeCard(selectedAccount) && (
-                <div className="mb-4 sm:mb-5">
+                <div className="mb-2 sm:mb-4">
                   <AccountRangeCard account={selectedAccount} stats={displayAccountStats!} />
                 </div>
               )}
 
               {/* ROW 1.5: Risk Metrics */}
               {accountTrades.length > 0 && (
-                <div className="mb-3 sm:mb-4">
+                <div className="mb-2 sm:mb-4">
                   <RiskMetricsCard trades={accountTrades} />
                 </div>
               )}
 
               {/* ROW 2: Full Width Chart */}
-              <div className="mb-12 sm:mb-14 lg:mb-[4.25rem]">
+              <div className="mb-3 sm:mb-8 lg:mb-[4.25rem]">
                 <PerformanceChart
                   data={accountDailyData}
                   account={selectedAccount}
@@ -1132,7 +1132,7 @@ export default function Dashboard() {
               </div>
 
               {/* ROW 3: Full Width Rule Status */}
-              <div className="mb-4 sm:mb-5">
+              <div className="mb-2 sm:mb-4">
                 <RuleEnginePanel
                   account={selectedAccount}
                   dailyData={accountDailyData}
@@ -1149,13 +1149,13 @@ export default function Dashboard() {
               </div>
 
               {/* ROW 4: Full Width Calendar */}
-              <div className="mb-6 sm:mb-8 lg:mb-10">
+              <div className="mb-2.5 sm:mb-6 lg:mb-10">
                 <TradingCalendar account={selectedAccount} dailyData={accountDailyData} trades={accountTrades} />
               </div>
 
               {/* ROW 5: Trade History + Payout Status (PA only) */}
               <div className={cn(
-                "grid gap-4 sm:gap-5",
+                "grid gap-2.5 sm:gap-5",
                 selectedAccount.type === "PA" && payoutEligibility ? "lg:grid-cols-[minmax(0,2.2fr)_minmax(320px,1fr)]" : ""
               )}>
                 <TradeHistoryTable 

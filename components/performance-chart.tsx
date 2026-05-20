@@ -232,7 +232,7 @@ export function PerformanceChart({ data, account, stats }: PerformanceChartProps
   // Empty state - uses same flex layout as main chart for consistency
   if (data.length === 0) {
     return (
-      <Card className="h-[240px] sm:h-[308px] lg:h-[332px] flex flex-col p-2.5 sm:p-3 rounded-[24px] glass-card">
+      <Card className="h-[210px] sm:h-[308px] lg:h-[332px] flex flex-col p-2 sm:p-3 rounded-[20px] sm:rounded-[24px] glass-card">
         {/* Header */}
         <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
           <div>
@@ -336,9 +336,9 @@ export function PerformanceChart({ data, account, stats }: PerformanceChartProps
   }
 
   return (
-      <Card className="h-[240px] sm:h-[308px] lg:h-[332px] flex flex-col p-2.5 sm:p-3 rounded-[24px] glass-card">
+      <Card className="h-[210px] sm:h-[308px] lg:h-[332px] flex flex-col p-2 sm:p-3 rounded-[20px] sm:rounded-[24px] glass-card">
       {/* Header */}
-      <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
+      <div className="flex items-center justify-between gap-2">
         <div>
           <h2 className="text-sm sm:text-base font-semibold">Performance</h2>
           <p className="text-xs sm:text-sm text-muted-foreground hidden sm:block">
@@ -368,7 +368,7 @@ export function PerformanceChart({ data, account, stats }: PerformanceChartProps
       </div>
       
       {/* Chart area - flex-1 fills remaining space */}
-      <div className="flex-1 min-h-0 w-full mt-2">
+      <div className="flex-1 min-h-0 w-full mt-1 sm:mt-2">
         <ResponsiveContainer width="100%" height="100%">
           {view === "balance" ? (
             <AreaChart data={chartData} margin={{ top: 6, right: 12, left: 2, bottom: 0 }}>

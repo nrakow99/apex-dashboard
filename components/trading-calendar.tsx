@@ -99,26 +99,26 @@ export function TradingCalendar({ account, dailyData, trades }: TradingCalendarP
 
   const cellShell = cn(
     "relative flex flex-col items-center justify-center gap-0.5 transition-all rounded-xl",
-    "min-h-[42px] aspect-square sm:min-h-[58px] sm:rounded-2xl sm:aspect-square sm:min-w-0",
+    "min-h-[36px] aspect-square sm:min-h-[58px] sm:rounded-2xl sm:aspect-square sm:min-w-0",
     "lg:aspect-auto lg:w-full lg:justify-center lg:rounded-xl lg:p-1.5",
     "lg:h-[clamp(78px,11.5dvh,104px)] lg:min-h-[78px] lg:max-h-[104px]",
   )
 
   return (
-    <Card className="flex flex-col rounded-[24px] glass-card p-2.5 sm:p-4 lg:p-4 lg:min-h-[min(840px,calc(100dvh-6.5rem))]">
-      <div className="mb-1 flex flex-shrink-0 flex-col gap-1 sm:gap-2 lg:mb-2 lg:gap-2">
+    <Card className="flex flex-col rounded-[20px] sm:rounded-[24px] glass-card p-2 sm:p-4 lg:p-4 lg:min-h-[min(840px,calc(100dvh-6.5rem))]">
+      <div className="mb-1 flex flex-shrink-0 flex-col gap-0.5 sm:gap-2 lg:mb-2 lg:gap-2">
         <div className="flex items-center justify-between gap-2">
           <h2 className="text-base font-semibold sm:text-lg">Trading Calendar</h2>
         </div>
-        <div className="flex items-center justify-center gap-2 sm:justify-end sm:gap-3">
-          <Button variant="ghost" size="icon" onClick={prevMonth} className="h-9 w-9 sm:h-9 sm:w-9">
-            <ChevronLeft className="h-4 w-4 sm:h-5 sm:w-5" />
+        <div className="flex items-center justify-center gap-1.5 sm:justify-end sm:gap-3">
+          <Button variant="ghost" size="icon" onClick={prevMonth} className="h-7 w-7 sm:h-9 sm:w-9">
+            <ChevronLeft className="h-4 w-4" />
           </Button>
-          <span className="min-w-[120px] text-center text-sm font-medium sm:min-w-[160px] sm:text-base">
+          <span className="min-w-[110px] text-center text-sm font-medium sm:min-w-[160px] sm:text-base">
             {monthName}
           </span>
-          <Button variant="ghost" size="icon" onClick={nextMonth} className="h-9 w-9 sm:h-9 sm:w-9">
-            <ChevronRight className="h-4 w-4 sm:h-5 sm:w-5" />
+          <Button variant="ghost" size="icon" onClick={nextMonth} className="h-7 w-7 sm:h-9 sm:w-9">
+            <ChevronRight className="h-4 w-4" />
           </Button>
         </div>
       </div>
@@ -128,7 +128,7 @@ export function TradingCalendar({ account, dailyData, trades }: TradingCalendarP
         {weekDays.map((day) => (
           <div
             key={day}
-            className="py-1 text-center text-[10px] font-medium text-muted-foreground sm:py-1.5 sm:text-xs lg:text-[11px]"
+            className="py-0.5 sm:py-1.5 text-center text-[9px] sm:text-xs font-medium text-muted-foreground lg:text-[11px]"
           >
             <span className="sm:hidden">{day.slice(0, 1)}</span>
             <span className="hidden sm:inline">{day}</span>
