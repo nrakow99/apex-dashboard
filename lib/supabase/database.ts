@@ -74,6 +74,7 @@ function rowToAccount(row: AccountRow): Account {
     activatedAt: row.activated_at ?? null,
     activationStartDate: row.activation_start_date ?? null,
     previousType: row.previous_type ?? null,
+    createdAt: row.created_at ?? null,
   }
 }
 

@@ -9,7 +9,12 @@ import type { Account, Trade, Payout } from "@/lib/types"
 import { calculateAccountStats, getConsistencyInfo, getPayoutEligibility } from "@/lib/storage"
 import { applyIntradayManualDrawdownToStats } from "@/lib/intraday-manual-drawdown"
 import { getAccountRules } from "@/lib/rules"
-import { ChevronRight, TrendingUp } from "lucide-react"
+import { ChevronRight } from "lucide-react"
+import { AccountCardInsightBanner } from "@/components/account-card-insight-banner"
+import {
+  getAccountCardInsight,
+  getAccountTenure,
+} from "@/lib/account-card-insight"
 
 interface AccountCardProps {
   account: Account
@@ -186,18 +191,16 @@ export function AccountCard({
     isPayoutEligible,
   })
 
-  // Eval pace insight — average daily PnL vs remaining target
-  const evalPace =
-    account.type === "Eval" &&
-    effectiveProfitTarget != null &&
-    effectiveProfitTarget > 0 &&
-    !evalPassed &&
-    stats.tradingDays > 0
-      ? {
-          dailyAvg: stats.totalPnL / stats.tradingDays,
-          remaining: Math.max(0, effectiveProfitTarget - stats.totalPnL),
-        }
-      : null
+  const tenure = getAccountTenure(account, trades, stats.tradingDays)
+  const insight = getAccountCardInsight({
+    account,
+    trades,
+    payouts,
+    tradingDays: stats.tradingDays,
+    totalPnL: stats.totalPnL,
+    drawdownRemaining: stats.drawdownRemaining,
+    currentBalance: stats.currentBalance,
+  })
 
   const barClass = "h-1.5"
   const rowLabelClass = "text-[10px] text-muted-foreground uppercase tracking-wider"
@@ -301,7 +304,7 @@ export function AccountCard({
         </div>
       </div>
 
-      <div className="space-y-3 sm:space-y-3.5">
+      <div className="space-y-2.5 sm:space-y-3">
         {/* Balance & PnL */}
         <div className="grid grid-cols-2 gap-3">
           <div>
@@ -413,24 +416,6 @@ export function AccountCard({
           </div>
         )}
 
-        {/* Eval pace insight */}
-        {evalPace && evalPace.dailyAvg > 0 && (
-          <div className="flex items-center gap-1.5 py-1.5 px-2 rounded-lg bg-[rgba(83,104,120,0.07)] border border-[rgba(83,104,120,0.14)]">
-            <TrendingUp className="h-3 w-3 text-[#94AAB8] shrink-0" />
-            <span className="text-[10px] text-[#E5E4E2]/50">
-              Avg{" "}
-              <span className="font-mono text-[#94AAB8] font-medium">
-                ${evalPace.dailyAvg.toLocaleString(undefined, { maximumFractionDigits: 0 })}/day
-              </span>
-              {" — "}est.{" "}
-              <span className="font-mono text-[#94AAB8] font-medium">
-                {Math.ceil(evalPace.remaining / evalPace.dailyAvg)}d
-              </span>{" "}
-              remaining
-            </span>
-          </div>
-        )}
-
         {/* Drawdown */}
         <div>
           <div className="flex justify-between items-baseline gap-2 mb-1">
@@ -459,6 +444,16 @@ export function AccountCard({
               stats.drawdownRemaining <= account.maxDrawdown * 0.2 && "[&>div]:bg-red-500"
             )}
           />
+        </div>
+
+        {/* Tenure + insight */}
+        <div className="space-y-1.5">
+          <p className="text-[10px] text-[#E5E4E2]/32 font-medium tabular-nums tracking-wide">
+            {tenure.daysOwned != null ? `Owned ${tenure.daysOwned}d` : "Owned —"}
+            {" · "}
+            Traded {tenure.daysTraded}d
+          </p>
+          <AccountCardInsightBanner insight={insight} />
         </div>
 
         {/* PA: Apex consistency summary */}

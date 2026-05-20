@@ -28,6 +28,8 @@ export interface Account {
   activationStartDate?: string | null
   /** Set when converting in place, e.g. "Eval" */
   previousType?: string | null
+  /** Account creation timestamp (ISO) */
+  createdAt?: string | null
 }
 
 export interface Trade {
