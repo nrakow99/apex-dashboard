@@ -190,7 +190,7 @@ export function AccountCard({
   return (
     <Card
       className={cn(
-        "relative p-4 sm:p-6 glass-card glass-card-hover rounded-[24px] cursor-pointer group",
+        "relative p-4 sm:p-6 glass-card glass-card-hover account-card-hover rounded-[24px] cursor-pointer group",
         "transition-all active:scale-[0.992] active:shadow-none",
         !stats.isSafe && "border-red-500/40",
         stats.isSafe && account.type === "Eval" && "border-amber-500/[0.13]",

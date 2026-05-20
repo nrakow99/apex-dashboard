@@ -15,6 +15,7 @@ interface Metric {
   value: string
   sub?: string
   color?: "positive" | "negative" | "neutral" | "amber"
+  emptyPrompt?: boolean
 }
 
 function calcConsecutiveLosses(trades: Trade[]): number {
@@ -29,21 +30,89 @@ function calcConsecutiveLosses(trades: Trade[]): number {
 }
 
 export function RiskMetricsCard({ trades }: RiskMetricsCardProps) {
-  // Best session requires localStorage — defer to client to avoid hydration mismatch.
-  const [bestSession, setBestSession] = useState<{ session: SessionId; pnl: number } | null>(null)
+  // Session/setup data requires localStorage — defer to avoid hydration mismatch.
+  const [bestSession, setBestSession] = useState<{ session: SessionId; pnl: number; winRate: number } | null>(null)
+  const [bestSetup, setBestSetup] = useState<{ tag: string; pnl: number; winRate: number; count: number } | null>(null)
+  const [lsEdge, setLsEdge] = useState<{ longWr: number; shortWr: number; longPnl: number; shortPnl: number; longCount: number; shortCount: number } | null>(null)
+  const [hasAnySetupData, setHasAnySetupData] = useState(false)
+  const [hasAnyDirectionData, setHasAnyDirectionData] = useState(false)
 
   useEffect(() => {
-    if (trades.length === 0) { setBestSession(null); return }
+    if (trades.length === 0) {
+      setBestSession(null)
+      setBestSetup(null)
+      setLsEdge(null)
+      return
+    }
+
     const allMeta = loadAllTradeMeta()
-    const totals: Partial<Record<SessionId, number>> = {}
+
+    // ── Best Session ─────────────────────────────────────────────────────────
+    const sessionTrades: Partial<Record<SessionId, Trade[]>> = {}
     for (const t of trades) {
       const session = resolveSession(allMeta[t.id] ?? {})
-      if (session) totals[session] = (totals[session] ?? 0) + t.pnl
+      if (session) {
+        if (!sessionTrades[session]) sessionTrades[session] = []
+        sessionTrades[session]!.push(t)
+      }
     }
-    const entries = Object.entries(totals) as [SessionId, number][]
-    if (entries.length === 0) { setBestSession(null); return }
-    const [session, pnl] = entries.sort(([, a], [, b]) => b - a)[0]
-    setBestSession({ session, pnl })
+    const sessionEntries = Object.entries(sessionTrades) as [SessionId, Trade[]][]
+    if (sessionEntries.length > 0) {
+      const best = sessionEntries
+        .map(([session, ts]) => ({
+          session,
+          pnl: ts.reduce((s, t) => s + t.pnl, 0),
+          winRate: ts.length > 0 ? Math.round((ts.filter((t) => t.pnl > 0).length / ts.length) * 100) : 0,
+        }))
+        .sort((a, b) => b.pnl - a.pnl)[0]
+      setBestSession(best)
+    } else {
+      setBestSession(null)
+    }
+
+    // ── Best Setup ───────────────────────────────────────────────────────────
+    const setupTrades: Record<string, Trade[]> = {}
+    for (const t of trades) {
+      const tags = allMeta[t.id]?.setupTags ?? []
+      for (const tag of tags) {
+        if (!setupTrades[tag]) setupTrades[tag] = []
+        setupTrades[tag].push(t)
+      }
+    }
+    const hasSetupData = Object.keys(setupTrades).length > 0
+    setHasAnySetupData(hasSetupData)
+    if (hasSetupData) {
+      const best = Object.entries(setupTrades)
+        .map(([tag, ts]) => ({
+          tag,
+          pnl: ts.reduce((s, t) => s + t.pnl, 0),
+          winRate: ts.length > 0 ? Math.round((ts.filter((t) => t.pnl > 0).length / ts.length) * 100) : 0,
+          count: ts.length,
+        }))
+        .filter((e) => e.count >= 1)
+        .sort((a, b) => b.pnl - a.pnl)[0]
+      setBestSetup(best ?? null)
+    } else {
+      setBestSetup(null)
+    }
+
+    // ── Long vs Short Edge ───────────────────────────────────────────────────
+    const longTrades = trades.filter((t) => allMeta[t.id]?.direction === "long")
+    const shortTrades = trades.filter((t) => allMeta[t.id]?.direction === "short")
+    const hasDirectionData = longTrades.length > 0 || shortTrades.length > 0
+    setHasAnyDirectionData(hasDirectionData)
+    if (hasDirectionData) {
+      setLsEdge({
+        longWr: longTrades.length > 0 ? Math.round((longTrades.filter((t) => t.pnl > 0).length / longTrades.length) * 100) : 0,
+        shortWr: shortTrades.length > 0 ? Math.round((shortTrades.filter((t) => t.pnl > 0).length / shortTrades.length) * 100) : 0,
+        longPnl: longTrades.reduce((s, t) => s + t.pnl, 0),
+        shortPnl: shortTrades.reduce((s, t) => s + t.pnl, 0),
+        longCount: longTrades.length,
+        shortCount: shortTrades.length,
+      })
+    } else {
+      setLsEdge(null)
+    }
   }, [trades])
 
   const metrics = useMemo<Metric[]>(() => {
@@ -65,7 +134,7 @@ export function RiskMetricsCard({ trades }: RiskMetricsCardProps) {
     const fmt = (n: number) =>
       `$${Math.abs(n).toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`
 
-    return [
+    const base: Metric[] = [
       {
         label: "Win Rate",
         value: `${winRate.toFixed(0)}%`,
@@ -92,9 +161,8 @@ export function RiskMetricsCard({ trades }: RiskMetricsCardProps) {
       },
       {
         label: "Best Session",
-        // bestSession comes from state — always "—" on server to avoid hydration mismatch
         value: bestSession ? (SESSION_LABELS[bestSession.session] ?? "—") : "—",
-        sub: bestSession ? `+${fmt(bestSession.pnl)}` : "Tag sessions",
+        sub: bestSession ? `${fmt(bestSession.pnl)} · ${bestSession.winRate}% WR` : "Tag sessions",
         color: "neutral",
       },
       {
@@ -104,7 +172,40 @@ export function RiskMetricsCard({ trades }: RiskMetricsCardProps) {
         color: maxConsecLosses >= 3 ? "negative" : maxConsecLosses > 0 ? "amber" : "positive",
       },
     ]
-  }, [trades, bestSession])
+
+    // Best Setup — only when data exists
+    if (hasAnySetupData && bestSetup) {
+      base.push({
+        label: "Best Setup",
+        value: bestSetup.tag,
+        sub: `${fmt(bestSetup.pnl)} · ${bestSetup.winRate}% WR`,
+        color: "neutral",
+      })
+    } else if (!hasAnySetupData && trades.length >= 3) {
+      base.push({
+        label: "Best Setup",
+        value: "—",
+        sub: "Tag setups to unlock",
+        color: "neutral",
+        emptyPrompt: true,
+      })
+    }
+
+    // L/S Edge — only when direction data exists
+    if (hasAnyDirectionData && lsEdge) {
+      const longBetter = lsEdge.longCount > 0 && (lsEdge.shortCount === 0 || lsEdge.longPnl >= lsEdge.shortPnl)
+      base.push({
+        label: "L/S Edge",
+        value: lsEdge.longCount > 0 && lsEdge.shortCount > 0
+          ? `${lsEdge.longWr}% / ${lsEdge.shortWr}%`
+          : lsEdge.longCount > 0 ? `L: ${lsEdge.longWr}%` : `S: ${lsEdge.shortWr}%`,
+        sub: longBetter ? "Long edge" : "Short edge",
+        color: "neutral",
+      })
+    }
+
+    return base
+  }, [trades, bestSession, bestSetup, lsEdge, hasAnySetupData, hasAnyDirectionData])
 
   if (trades.length === 0) return null
 
@@ -113,7 +214,12 @@ export function RiskMetricsCard({ trades }: RiskMetricsCardProps) {
       {metrics.map((m) => (
         <div
           key={m.label}
-          className="glass-card rounded-[14px] px-2.5 py-2 sm:px-3 sm:py-2.5 flex flex-col gap-0.5 sm:gap-1 hover:bg-[rgba(83,104,120,0.06)] transition-colors"
+          className={cn(
+            "glass-card rounded-[14px] px-2.5 py-2 sm:px-3 sm:py-2.5 flex flex-col gap-0.5 sm:gap-1 transition-colors",
+            m.emptyPrompt
+              ? "opacity-60"
+              : "hover:bg-[rgba(83,104,120,0.06)]",
+          )}
         >
           <span className="text-[9px] sm:text-[10px] font-medium uppercase tracking-wider text-[#E5E4E2]/35 leading-tight">
             {m.label}
@@ -121,16 +227,22 @@ export function RiskMetricsCard({ trades }: RiskMetricsCardProps) {
           <span
             className={cn(
               "text-sm sm:text-base font-bold tabular-nums leading-none",
-              m.color === "positive" && "text-emerald-500",
-              m.color === "negative" && "text-red-500",
-              m.color === "amber" && "text-amber-400",
-              m.color === "neutral" && "text-[#E5E4E2]/75",
+              m.emptyPrompt && "text-[#E5E4E2]/25 text-xs! font-normal!",
+              !m.emptyPrompt && m.color === "positive" && "text-emerald-500",
+              !m.emptyPrompt && m.color === "negative" && "text-red-500",
+              !m.emptyPrompt && m.color === "amber" && "text-amber-400",
+              !m.emptyPrompt && m.color === "neutral" && "text-[#E5E4E2]/75",
             )}
           >
             {m.value}
           </span>
           {m.sub && (
-            <span className="text-[9px] sm:text-[10px] text-[#E5E4E2]/30 leading-tight">{m.sub}</span>
+            <span className={cn(
+              "text-[9px] sm:text-[10px] leading-tight",
+              m.emptyPrompt ? "text-[#E5E4E2]/22 italic" : "text-[#E5E4E2]/30"
+            )}>
+              {m.sub}
+            </span>
           )}
         </div>
       ))}

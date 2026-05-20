@@ -36,8 +36,10 @@ import {
   GRADE_STYLES,
   DIRECTION_OPTIONS,
   DIRECTION_SELECTOR_STYLES,
+  SETUP_TAGS,
   type TradeGrade,
   type DisciplineTag,
+  type SetupTag,
   type TradeMeta,
   type TradeDirection,
 } from "@/lib/trade-meta"
@@ -77,6 +79,7 @@ const emptyMeta = (): TradeMeta => ({
   direction: "long",
   grade: undefined,
   disciplineTags: [],
+  setupTags: [],
   entryPrice: undefined,
   exitPrice: undefined,
   contracts: undefined,
@@ -102,6 +105,16 @@ export function AddTradeModal({ accounts, selectedAccountId, onAddTrade }: AddTr
       return {
         ...prev,
         disciplineTags: tags.includes(tag) ? tags.filter((t) => t !== tag) : [...tags, tag],
+      }
+    })
+  }
+
+  const toggleSetup = (tag: SetupTag) => {
+    setMeta((prev) => {
+      const tags = prev.setupTags ?? []
+      return {
+        ...prev,
+        setupTags: tags.includes(tag) ? tags.filter((t) => t !== tag) : [...tags, tag],
       }
     })
   }
@@ -313,6 +326,31 @@ export function AddTradeModal({ accounts, selectedAccountId, onAddTrade }: AddTr
                     )}
                   >
                     {grade}
+                  </button>
+                )
+              })}
+            </div>
+          </div>
+
+          {/* Setup */}
+          <div className="space-y-1.5">
+            <Label className="text-muted-foreground text-[11px] uppercase tracking-wider">Setup</Label>
+            <div className="flex gap-1 flex-wrap">
+              {SETUP_TAGS.map((tag) => {
+                const active = meta.setupTags?.includes(tag)
+                return (
+                  <button
+                    key={tag}
+                    type="button"
+                    onClick={() => toggleSetup(tag)}
+                    className={cn(
+                      "text-[10px] font-medium px-1.5 py-0.5 rounded border transition-all",
+                      active
+                        ? "bg-[rgba(83,104,120,0.18)] border-[rgba(83,104,120,0.38)] text-[#94AAB8]"
+                        : "border-[rgba(83,104,120,0.15)] text-[#E5E4E2]/35 hover:border-[rgba(83,104,120,0.28)] hover:text-[#94AAB8]/70",
+                    )}
+                  >
+                    {tag}
                   </button>
                 )
               })}

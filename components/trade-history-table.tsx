@@ -87,6 +87,7 @@ function TradeDetailPanel({ trade, meta, colSpan }: { trade: Trade; meta: TradeM
   const hasMeta =
     session || meta.grade || meta.direction ||
     (meta.disciplineTags && meta.disciplineTags.length > 0) ||
+    (meta.setupTags && meta.setupTags.length > 0) ||
     meta.entryPrice || meta.exitPrice || meta.contracts || trade.notes
 
   return (
@@ -128,6 +129,20 @@ function TradeDetailPanel({ trade, meta, colSpan }: { trade: Trade; meta: TradeM
                         <span className="font-mono text-[#E5E4E2]/65">{meta.contracts}</span>
                       </span>
                     )}
+                  </div>
+                )}
+
+                {/* Setup tags */}
+                {meta.setupTags && meta.setupTags.length > 0 && (
+                  <div className="flex gap-1 flex-wrap">
+                    {meta.setupTags.map((tag) => (
+                      <span
+                        key={tag}
+                        className="text-[10px] font-medium px-1.5 py-0.5 rounded border bg-[rgba(83,104,120,0.10)] border-[rgba(83,104,120,0.22)] text-[#94AAB8]/80"
+                      >
+                        {tag}
+                      </span>
+                    ))}
                   </div>
                 )}
 
@@ -273,14 +288,20 @@ export function TradeHistoryTable({ trades, onEditTrade, onDeleteTrade }: TradeH
                   )}
                   onClick={() => isMulti ? toggleDate(group.date) : singleTrade ? toggleTrade(singleTrade.id) : undefined}
                 >
-                  {/* Expand chevron */}
+                  {/* Expand chevron + left status bar */}
                   <TableCell className="py-1.5 sm:py-3 px-2 sm:px-4 w-9">
-                    <ChevronRight
-                      className={cn(
-                        "h-3.5 w-3.5 text-muted-foreground/40 transition-transform duration-200",
-                        (isGroupExpanded || singleTradeExpanded) && "rotate-90 text-muted-foreground/70",
-                      )}
-                    />
+                    <div className="flex items-center gap-1.5">
+                      <div className={cn(
+                        "w-0.5 h-4 sm:h-5 rounded-full shrink-0",
+                        isProfit ? "bg-emerald-500/50" : isLoss ? "bg-red-500/50" : "bg-white/10",
+                      )} />
+                      <ChevronRight
+                        className={cn(
+                          "h-3.5 w-3.5 text-muted-foreground/40 transition-transform duration-200",
+                          (isGroupExpanded || singleTradeExpanded) && "rotate-90 text-muted-foreground/70",
+                        )}
+                      />
+                    </div>
                   </TableCell>
 
                   {/* Date */}

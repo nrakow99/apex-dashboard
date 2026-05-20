@@ -28,6 +28,21 @@ export type DisciplineTag =
   | (typeof DISCIPLINE_POSITIVE)[number]
   | (typeof DISCIPLINE_NEGATIVE)[number]
 
+export const SETUP_TAGS = [
+  "Liquidity Sweep",
+  "FVG",
+  "IFVG",
+  "CISD",
+  "Reversal",
+  "Trend Continuation",
+  "Breakout",
+  "Failed Breakout",
+  "Retest",
+  "Continuation",
+] as const
+
+export type SetupTag = (typeof SETUP_TAGS)[number]
+
 export type TradeDirection = "long" | "short"
 
 export interface TradeMeta {
@@ -42,6 +57,7 @@ export interface TradeMeta {
   direction?: TradeDirection
   grade?: TradeGrade
   disciplineTags?: DisciplineTag[]
+  setupTags?: SetupTag[]
   entryPrice?: number
   exitPrice?: number
   contracts?: number

@@ -1,13 +1,15 @@
 "use client"
 
-import { useMemo, useState } from "react"
+import { useMemo, useState, useEffect } from "react"
 import { parseLocalDate } from "@/lib/date-utils"
 import { Card } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
-import { ChevronLeft, ChevronRight, X, TrendingUp, TrendingDown, Minus, Star } from "lucide-react"
+import { ChevronLeft, ChevronRight, X, Star } from "lucide-react"
 import { cn } from "@/lib/utils"
 import type { Account, DailyPnL, Trade } from "@/lib/types"
 import { getAccountRules } from "@/lib/rules"
+import { loadAllTradeMeta, DIRECTION_BADGE_STYLES, DIRECTION_LABELS, GRADE_STYLES, type TradeMeta } from "@/lib/trade-meta"
+import { resolveSession, SESSION_LABELS } from "@/lib/sessions"
 
 interface TradingCalendarProps {
   account: Account
@@ -26,6 +28,11 @@ interface DayStats {
 export function TradingCalendar({ account, dailyData, trades }: TradingCalendarProps) {
   const [currentDate, setCurrentDate] = useState(new Date())
   const [selectedDate, setSelectedDate] = useState<string | null>(null)
+  const [allMeta, setAllMeta] = useState<Record<string, TradeMeta>>({})
+
+  useEffect(() => {
+    setAllMeta(loadAllTradeMeta())
+  }, [trades])
 
   const rules = getAccountRules(account)
   // A qualifying day only makes sense when the account has payout rules and a
@@ -312,56 +319,72 @@ export function TradingCalendar({ account, dailyData, trades }: TradingCalendarP
             </Button>
           </div>
 
-          <div className="space-y-2">
-            {selectedTrades.map((trade) => (
-              <div
-                key={trade.id}
-                className={cn(
-                  "flex items-center justify-between rounded-lg border p-3 sm:rounded-xl sm:p-4",
-                  trade.pnl > 0
-                    ? "border-emerald-500/20 bg-emerald-500/5"
-                    : trade.pnl < 0
-                      ? "border-red-500/20 bg-red-500/5"
-                      : "border-border/50 bg-muted/30",
-                )}
-              >
-                <div className="flex items-center gap-2 sm:gap-4">
-                  <span className="font-mono text-sm font-semibold sm:text-base">{trade.symbol}</span>
-                  <span
-                    className={cn(
-                      "hidden items-center gap-1 rounded-full px-2 py-0.5 text-xs font-medium sm:flex",
-                      trade.pnl > 0
-                        ? "bg-emerald-500/20 text-emerald-500"
-                        : trade.pnl < 0
-                          ? "bg-red-500/20 text-red-500"
-                          : "bg-muted text-muted-foreground",
-                    )}
-                  >
-                    {trade.pnl > 0 ? (
-                      <>
-                        <TrendingUp className="h-3 w-3" /> Win
-                      </>
-                    ) : trade.pnl < 0 ? (
-                      <>
-                        <TrendingDown className="h-3 w-3" /> Loss
-                      </>
-                    ) : (
-                      <>
-                        <Minus className="h-3 w-3" /> Flat
-                      </>
-                    )}
-                  </span>
-                </div>
-                <span
+          <div className="space-y-1.5 sm:space-y-2">
+            {selectedTrades.map((trade) => {
+              const meta = allMeta[trade.id] ?? {}
+              const session = resolveSession(meta)
+              const sessionLabel = session ? SESSION_LABELS[session] : null
+              const grade = meta.grade
+              const direction = meta.direction
+              const setupTags = meta.setupTags ?? []
+              return (
+                <div
+                  key={trade.id}
                   className={cn(
-                    "font-mono text-base font-bold sm:text-lg",
-                    trade.pnl > 0 ? "text-emerald-500" : trade.pnl < 0 ? "text-red-500" : "text-muted-foreground",
+                    "rounded-xl border p-2.5 sm:p-3",
+                    trade.pnl > 0
+                      ? "border-emerald-500/20 bg-emerald-500/[0.04]"
+                      : trade.pnl < 0
+                        ? "border-red-500/20 bg-red-500/[0.04]"
+                        : "border-border/50 bg-muted/20",
                   )}
                 >
-                  {trade.pnl > 0 ? "+" : ""}${trade.pnl.toLocaleString()}
-                </span>
-              </div>
-            ))}
+                  {/* Top row: symbol + badges + PnL */}
+                  <div className="flex items-center justify-between gap-2">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className="font-mono text-sm font-bold">{trade.symbol}</span>
+                      {direction && (
+                        <span className={cn("text-[10px] font-medium px-1.5 py-0.5 rounded border", DIRECTION_BADGE_STYLES[direction])}>
+                          {DIRECTION_LABELS[direction]}
+                        </span>
+                      )}
+                      {sessionLabel && (
+                        <span className="text-[10px] font-medium px-1.5 py-0.5 rounded border bg-[rgba(83,104,120,0.10)] text-[#94AAB8] border-[rgba(83,104,120,0.22)]">
+                          {sessionLabel}
+                        </span>
+                      )}
+                      {grade && (
+                        <span className={cn("text-[10px] font-semibold px-1.5 py-0.5 rounded border", GRADE_STYLES[grade].activeClassName)}>
+                          {grade}
+                        </span>
+                      )}
+                    </div>
+                    <span
+                      className={cn(
+                        "font-mono text-sm font-bold tabular-nums shrink-0",
+                        trade.pnl > 0 ? "text-emerald-500" : trade.pnl < 0 ? "text-red-500" : "text-muted-foreground",
+                      )}
+                    >
+                      {trade.pnl > 0 ? "+" : ""}${trade.pnl.toLocaleString()}
+                    </span>
+                  </div>
+                  {/* Setup tags */}
+                  {setupTags.length > 0 && (
+                    <div className="mt-1.5 flex gap-1 flex-wrap">
+                      {setupTags.map((tag) => (
+                        <span key={tag} className="text-[9px] font-medium px-1 py-0.5 rounded border bg-[rgba(83,104,120,0.07)] text-[#94AAB8]/70 border-[rgba(83,104,120,0.18)]">
+                          {tag}
+                        </span>
+                      ))}
+                    </div>
+                  )}
+                  {/* Notes */}
+                  {trade.notes && (
+                    <p className="mt-1 text-[10px] text-[#E5E4E2]/40 leading-snug">{trade.notes}</p>
+                  )}
+                </div>
+              )
+            })}
           </div>
         </div>
       )}
