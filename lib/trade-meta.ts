@@ -20,7 +20,6 @@ export const DISCIPLINE_NEGATIVE = [
   "Revenge Trade",
   "Moved Stop",
   "Cut Winner Early",
-  "Traded Red Folder",
   "Ignored Bias",
 ] as const
 

@@ -190,7 +190,7 @@ export function TradeHistoryTable({ trades, onEditTrade, onDeleteTrade }: TradeH
 
   useEffect(() => {
     setAllMeta(loadAllTradeMeta())
-  }, [])
+  }, [trades])
 
   const toggleDate = (date: string) => {
     setExpandedDates((prev) => { const n = new Set(prev); n.has(date) ? n.delete(date) : n.add(date); return n })
