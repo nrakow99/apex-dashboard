@@ -6,7 +6,6 @@ import { CalendarIcon } from "lucide-react"
 import {
   Dialog,
   DialogContent,
-  DialogHeader,
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog"
@@ -151,24 +150,24 @@ export function AddTradeModal({ accounts, selectedAccountId, onAddTrade }: AddTr
         </Button>
       </DialogTrigger>
 
-      <DialogContent className="sm:max-w-[440px]">
-        <DialogHeader>
-          <DialogTitle>Add New Trade</DialogTitle>
-        </DialogHeader>
+      <DialogContent className="sm:max-w-[440px] p-0">
+        <div className="px-5 pt-5 pb-3 border-b border-white/[0.06]">
+          <DialogTitle className="text-base font-semibold">Add New Trade</DialogTitle>
+        </div>
 
-        <form onSubmit={handleSubmit} className="space-y-4 mt-3">
+        <form id="add-trade-form" onSubmit={handleSubmit} className="overflow-y-auto max-h-[min(80vh,560px)] px-5 py-3 space-y-3">
 
           {/* Date */}
-          <div className="space-y-1.5">
-            <Label>Date</Label>
+          <div className="space-y-1">
+            <Label className="text-[11px] text-muted-foreground uppercase tracking-wider">Date</Label>
             <Popover open={calendarOpen} onOpenChange={setCalendarOpen}>
               <PopoverTrigger asChild>
                 <Button
                   type="button"
                   variant="outline"
-                  className={cn("w-full justify-start text-left font-normal gap-2", !formData.date && "text-muted-foreground")}
+                  className={cn("w-full justify-start text-left font-normal gap-2 h-9", !formData.date && "text-muted-foreground")}
                 >
-                  <CalendarIcon className="h-4 w-4 shrink-0 text-muted-foreground" />
+                  <CalendarIcon className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
                   {formData.date ? format(parseDateStr(formData.date), "MMMM d, yyyy") : "Pick a date"}
                 </Button>
               </PopoverTrigger>
@@ -187,44 +186,30 @@ export function AddTradeModal({ accounts, selectedAccountId, onAddTrade }: AddTr
 
           {/* Session + Direction */}
           <div className="grid grid-cols-[1fr_auto] gap-3 items-end">
-            <div className="space-y-1.5">
+            <div className="space-y-1">
               <Label className="text-[11px] text-muted-foreground uppercase tracking-wider">Session</Label>
-              <div className="flex gap-1.5">
+              <div className="flex gap-1">
                 {SESSION_OPTIONS.map(({ id, label }) => {
                   const s = SESSION_SELECTOR_STYLES[id]
                   const active = meta.session === id
                   return (
-                    <button
-                      key={id}
-                      type="button"
-                      onClick={() => setMeta({ ...meta, session: id })}
-                      className={cn(
-                        "flex-1 text-[11px] font-semibold py-1.5 rounded-lg border transition-all",
-                        active ? s.active : s.inactive,
-                      )}
-                    >
+                    <button key={id} type="button" onClick={() => setMeta({ ...meta, session: id })}
+                      className={cn("flex-1 text-[11px] font-semibold py-1.5 rounded-lg border transition-all", active ? s.active : s.inactive)}>
                       {label}
                     </button>
                   )
                 })}
               </div>
             </div>
-            <div className="space-y-1.5">
-              <Label className="text-[11px] text-muted-foreground uppercase tracking-wider">Direction</Label>
-              <div className="flex gap-1.5">
+            <div className="space-y-1">
+              <Label className="text-[11px] text-muted-foreground uppercase tracking-wider">Dir.</Label>
+              <div className="flex gap-1">
                 {DIRECTION_OPTIONS.map(({ id, label }) => {
                   const s = DIRECTION_SELECTOR_STYLES[id]
                   const active = meta.direction === id
                   return (
-                    <button
-                      key={id}
-                      type="button"
-                      onClick={() => setMeta({ ...meta, direction: id as TradeDirection })}
-                      className={cn(
-                        "px-3 text-[11px] font-semibold py-1.5 rounded-lg border transition-all",
-                        active ? s.active : s.inactive,
-                      )}
-                    >
+                    <button key={id} type="button" onClick={() => setMeta({ ...meta, direction: id as TradeDirection })}
+                      className={cn("px-2.5 text-[11px] font-semibold py-1.5 rounded-lg border transition-all", active ? s.active : s.inactive)}>
                       {label}
                     </button>
                   )
@@ -234,10 +219,10 @@ export function AddTradeModal({ accounts, selectedAccountId, onAddTrade }: AddTr
           </div>
 
           {/* Account */}
-          <div className="space-y-1.5">
-            <Label>Account</Label>
+          <div className="space-y-1">
+            <Label className="text-[11px] text-muted-foreground uppercase tracking-wider">Account</Label>
             <Select value={formData.accountId} onValueChange={(v) => setFormData({ ...formData, accountId: v })}>
-              <SelectTrigger className="bg-background"><SelectValue /></SelectTrigger>
+              <SelectTrigger className="bg-background h-9"><SelectValue /></SelectTrigger>
               <SelectContent>
                 {accounts.map((a) => <SelectItem key={a.id} value={a.id}>{a.name}</SelectItem>)}
               </SelectContent>
@@ -246,85 +231,56 @@ export function AddTradeModal({ accounts, selectedAccountId, onAddTrade }: AddTr
 
           {/* Symbol + PnL */}
           <div className="grid grid-cols-2 gap-2">
-            <div className="space-y-1.5">
-              <Label>Symbol</Label>
+            <div className="space-y-1">
+              <Label className="text-[11px] text-muted-foreground uppercase tracking-wider">Symbol</Label>
               <Select value={formData.symbol} onValueChange={(v) => setFormData({ ...formData, symbol: v })}>
-                <SelectTrigger className="bg-background font-mono"><SelectValue /></SelectTrigger>
+                <SelectTrigger className="bg-background font-mono h-9"><SelectValue /></SelectTrigger>
                 <SelectContent>
-                  {TRADING_SYMBOLS.map((sym) => (
-                    <SelectItem key={sym} value={sym}>{sym}</SelectItem>
-                  ))}
+                  {TRADING_SYMBOLS.map((sym) => <SelectItem key={sym} value={sym}>{sym}</SelectItem>)}
                 </SelectContent>
               </Select>
             </div>
-            <div className="space-y-1.5">
-              <Label>Net PnL ($)</Label>
-              <Input
-                type="number"
-                step="0.01"
-                placeholder="0.00"
-                value={formData.pnl}
+            <div className="space-y-1">
+              <Label className="text-[11px] text-muted-foreground uppercase tracking-wider">Net PnL ($)</Label>
+              <Input type="number" step="0.01" placeholder="0.00" value={formData.pnl}
                 onChange={(e) => setFormData({ ...formData, pnl: e.target.value })}
-                className="bg-background font-mono"
-              />
+                className="bg-background font-mono h-9" />
             </div>
           </div>
 
           {/* Entry / Exit / Contracts */}
           <div className="grid grid-cols-3 gap-2">
-            <div className="space-y-1.5">
-              <Label className="text-muted-foreground text-[11px]">Entry $</Label>
-              <Input
-                type="number"
-                step="0.25"
-                placeholder="—"
-                value={meta.entryPrice ?? ""}
+            <div className="space-y-1">
+              <Label className="text-muted-foreground text-[10px] uppercase tracking-wider">Entry $</Label>
+              <Input type="number" step="0.25" placeholder="—" value={meta.entryPrice ?? ""}
                 onChange={(e) => setMeta({ ...meta, entryPrice: e.target.value ? parseFloat(e.target.value) : undefined })}
-                className="bg-background font-mono text-xs"
-              />
+                className="bg-background font-mono text-xs h-9" />
             </div>
-            <div className="space-y-1.5">
-              <Label className="text-muted-foreground text-[11px]">Exit $</Label>
-              <Input
-                type="number"
-                step="0.25"
-                placeholder="—"
-                value={meta.exitPrice ?? ""}
+            <div className="space-y-1">
+              <Label className="text-muted-foreground text-[10px] uppercase tracking-wider">Exit $</Label>
+              <Input type="number" step="0.25" placeholder="—" value={meta.exitPrice ?? ""}
                 onChange={(e) => setMeta({ ...meta, exitPrice: e.target.value ? parseFloat(e.target.value) : undefined })}
-                className="bg-background font-mono text-xs"
-              />
+                className="bg-background font-mono text-xs h-9" />
             </div>
-            <div className="space-y-1.5">
-              <Label className="text-muted-foreground text-[11px]">Contracts</Label>
-              <Input
-                type="number"
-                step="1"
-                min="1"
-                placeholder="—"
-                value={meta.contracts ?? ""}
+            <div className="space-y-1">
+              <Label className="text-muted-foreground text-[10px] uppercase tracking-wider">Qty</Label>
+              <Input type="number" step="1" min="1" placeholder="—" value={meta.contracts ?? ""}
                 onChange={(e) => setMeta({ ...meta, contracts: e.target.value ? parseInt(e.target.value) : undefined })}
-                className="bg-background font-mono text-xs"
-              />
+                className="bg-background font-mono text-xs h-9" />
             </div>
           </div>
 
           {/* Grade */}
-          <div className="space-y-1.5">
+          <div className="space-y-1">
             <Label className="text-muted-foreground text-[11px] uppercase tracking-wider">Grade</Label>
-            <div className="flex gap-1.5 flex-wrap">
+            <div className="flex gap-1 flex-wrap">
               {GRADES.map((grade) => {
                 const s = GRADE_STYLES[grade]
                 const active = meta.grade === grade
                 return (
-                  <button
-                    key={grade}
-                    type="button"
-                    onClick={() => setMeta({ ...meta, grade: active ? undefined : grade })}
-                    className={cn(
-                      "text-[11px] font-semibold px-2 py-1 rounded-md border transition-all",
-                      active ? s.activeClassName : s.className,
-                    )}
-                  >
+                  <button key={grade} type="button" onClick={() => setMeta({ ...meta, grade: active ? undefined : grade })}
+                    className={cn("text-[11px] font-semibold px-2 py-0.5 rounded-md border transition-all",
+                      active ? s.activeClassName : s.className)}>
                     {grade}
                   </button>
                 )
@@ -333,23 +289,17 @@ export function AddTradeModal({ accounts, selectedAccountId, onAddTrade }: AddTr
           </div>
 
           {/* Setup */}
-          <div className="space-y-1.5">
+          <div className="space-y-1">
             <Label className="text-muted-foreground text-[11px] uppercase tracking-wider">Setup</Label>
             <div className="flex gap-1 flex-wrap">
               {SETUP_TAGS.map((tag) => {
                 const active = meta.setupTags?.includes(tag)
                 return (
-                  <button
-                    key={tag}
-                    type="button"
-                    onClick={() => toggleSetup(tag)}
-                    className={cn(
-                      "text-[10px] font-medium px-1.5 py-0.5 rounded border transition-all",
+                  <button key={tag} type="button" onClick={() => toggleSetup(tag)}
+                    className={cn("text-[10px] font-medium px-1.5 py-0.5 rounded border transition-all",
                       active
                         ? "bg-[rgba(83,104,120,0.18)] border-[rgba(83,104,120,0.38)] text-[#94AAB8]"
-                        : "border-[rgba(83,104,120,0.15)] text-[#E5E4E2]/35 hover:border-[rgba(83,104,120,0.28)] hover:text-[#94AAB8]/70",
-                    )}
-                  >
+                        : "border-[rgba(83,104,120,0.15)] text-[#E5E4E2]/35 hover:border-[rgba(83,104,120,0.28)] hover:text-[#94AAB8]/70")}>
                     {tag}
                   </button>
                 )
@@ -358,24 +308,17 @@ export function AddTradeModal({ accounts, selectedAccountId, onAddTrade }: AddTr
           </div>
 
           {/* Discipline */}
-          <div className="space-y-1.5">
+          <div className="space-y-1">
             <Label className="text-muted-foreground text-[11px] uppercase tracking-wider">Discipline</Label>
-            <div className="space-y-1">
+            <div className="space-y-0.5">
               <div className="flex gap-1 flex-wrap">
                 {DISCIPLINE_POSITIVE.map((tag) => {
                   const active = meta.disciplineTags?.includes(tag)
                   return (
-                    <button
-                      key={tag}
-                      type="button"
-                      onClick={() => toggleDiscipline(tag)}
-                      className={cn(
-                        "text-[10px] font-medium px-1.5 py-0.5 rounded border transition-all",
-                        active
-                          ? "bg-teal-500/[0.12] border-teal-500/30 text-teal-300/90"
-                          : "border-teal-500/18 text-teal-400/45 hover:border-teal-500/28 hover:text-teal-400/65",
-                      )}
-                    >
+                    <button key={tag} type="button" onClick={() => toggleDiscipline(tag)}
+                      className={cn("text-[10px] font-medium px-1.5 py-0.5 rounded border transition-all",
+                        active ? "bg-teal-500/[0.12] border-teal-500/30 text-teal-300/90"
+                               : "border-teal-500/18 text-teal-400/45 hover:border-teal-500/28 hover:text-teal-400/65")}>
                       {tag}
                     </button>
                   )
@@ -385,17 +328,10 @@ export function AddTradeModal({ accounts, selectedAccountId, onAddTrade }: AddTr
                 {DISCIPLINE_NEGATIVE.map((tag) => {
                   const active = meta.disciplineTags?.includes(tag)
                   return (
-                    <button
-                      key={tag}
-                      type="button"
-                      onClick={() => toggleDiscipline(tag)}
-                      className={cn(
-                        "text-[10px] font-medium px-1.5 py-0.5 rounded border transition-all",
-                        active
-                          ? "bg-amber-500/[0.10] border-amber-500/28 text-amber-400/90"
-                          : "border-amber-500/16 text-amber-400/40 hover:border-amber-500/26 hover:text-amber-400/60",
-                      )}
-                    >
+                    <button key={tag} type="button" onClick={() => toggleDiscipline(tag)}
+                      className={cn("text-[10px] font-medium px-1.5 py-0.5 rounded border transition-all",
+                        active ? "bg-amber-500/[0.10] border-amber-500/28 text-amber-400/90"
+                               : "border-amber-500/16 text-amber-400/40 hover:border-amber-500/26 hover:text-amber-400/60")}>
                       {tag}
                     </button>
                   )
@@ -405,21 +341,21 @@ export function AddTradeModal({ accounts, selectedAccountId, onAddTrade }: AddTr
           </div>
 
           {/* Notes */}
-          <div className="space-y-1.5">
+          <div className="space-y-1">
             <Label className="text-muted-foreground text-[11px] uppercase tracking-wider">Notes</Label>
-            <Textarea
-              placeholder="Brief context on this trade..."
-              value={formData.notes}
+            <Textarea placeholder="Brief context on this trade..." value={formData.notes}
               onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
-              className="bg-background resize-none h-16 text-sm"
-            />
+              className="bg-background resize-none h-[72px] text-sm" />
           </div>
 
-          <div className="flex justify-end gap-2 pt-1">
-            <Button type="button" variant="ghost" onClick={() => setOpen(false)}>Cancel</Button>
-            <Button type="submit" className="bg-emerald-600 hover:bg-emerald-700">Add Trade</Button>
-          </div>
         </form>
+
+        <div className="px-5 py-3 border-t border-white/[0.06] flex justify-end gap-2">
+          <Button type="button" variant="ghost" size="sm" onClick={() => setOpen(false)}>Cancel</Button>
+          <Button form="add-trade-form" type="submit" size="sm" className="bg-emerald-600 hover:bg-emerald-700">
+            Add Trade
+          </Button>
+        </div>
       </DialogContent>
     </Dialog>
   )

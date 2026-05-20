@@ -37,7 +37,6 @@ export const SETUP_TAGS = [
   "Breakout",
   "Failed Breakout",
   "Retest",
-  "Continuation",
 ] as const
 
 export type SetupTag = (typeof SETUP_TAGS)[number]
