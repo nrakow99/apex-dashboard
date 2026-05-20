@@ -146,6 +146,16 @@ function buildEvalInsight(ctx: AccountInsightContext): AccountCardInsight {
   return { message: "Building toward target", tone: "neutral" }
 }
 
+function getQualifyingDaysRemaining(
+  eligibility: ReturnType<typeof getPayoutEligibility>,
+  rules: ReturnType<typeof getAccountRules>,
+): number {
+  if (eligibility.firm === "Lucid") {
+    return Math.max(0, rules.minProfitDays - eligibility.cycleProfitDays)
+  }
+  return Math.max(0, rules.minProfitDays - eligibility.consistencyInfo.daysWithMinProfit)
+}
+
 function buildPaInsight(ctx: AccountInsightContext): AccountCardInsight {
   const { account, trades, payouts, tradingDays, drawdownRemaining } = ctx
   const rules = getAccountRules(account)
@@ -157,10 +167,7 @@ function buildPaInsight(ctx: AccountInsightContext): AccountCardInsight {
 
   if (!rules.hasPayouts) {
     if (drawdownRemaining < maxDrawdown * 0.18) {
-      return {
-        message: `Protect buffer — $${fmtUsd(Math.max(0, drawdownRemaining))} remaining`,
-        tone: "warning",
-      }
+      return { message: "Protect buffer · drawdown near limit", tone: "warning" }
     }
     return { message: "Account stable", tone: "neutral" }
   }
@@ -171,71 +178,47 @@ function buildPaInsight(ctx: AccountInsightContext): AccountCardInsight {
     return { message: "Payout ready", tone: "positive" }
   }
 
-  if (account.firm === "Lucid" && eligibility.firm === "Lucid") {
-    const qualifyingRemaining = Math.max(0, rules.minProfitDays - eligibility.cycleProfitDays)
-    if (qualifyingRemaining > 0) {
-      return {
-        message: `${qualifyingRemaining} qualifying day${qualifyingRemaining === 1 ? "" : "s"} to payout`,
-        tone: "neutral",
-      }
-    }
-
-    if (eligibility.conditions.hasEnoughProfitDays && !eligibility.conditions.hasMinWithdrawable) {
-      return { message: "Cycle profit below minimum payout", tone: "warning" }
+  const qualifyingRemaining = getQualifyingDaysRemaining(eligibility, rules)
+  if (qualifyingRemaining > 0) {
+    return {
+      message: `${qualifyingRemaining} qualifying day${qualifyingRemaining === 1 ? "" : "s"} to payout`,
+      tone: "neutral",
     }
   }
 
+  // Qualifying days met — surface next blocker without repeating card metrics
   if (eligibility.firm === "Apex") {
-    const qualifyingRemaining = Math.max(
-      0,
-      rules.minProfitDays - eligibility.consistencyInfo.daysWithMinProfit,
-    )
-
-    if (qualifyingRemaining > 0) {
+    if (rules.hasConsistency && !eligibility.conditions.isConsistent) {
       return {
-        message: `${qualifyingRemaining} qualifying day${qualifyingRemaining === 1 ? "" : "s"} to payout`,
-        tone: "neutral",
+        message: "Qualifying days complete · Consistency rule next",
+        tone: "warning",
       }
     }
-
-    if (
-      eligibility.conditions.hasEnoughProfitDays &&
-      !eligibility.conditions.hasMinBalance &&
-      rules.minBalanceToRequest > 0
-    ) {
-      const toThreshold = Math.max(0, rules.minBalanceToRequest - ctx.currentBalance)
+    if (rules.minBalanceToRequest > 0 && !eligibility.conditions.hasMinBalance) {
       return {
-        message: `$${fmtUsd(toThreshold)} to payout threshold`,
+        message: "Qualifying days complete · Build to payout balance",
         tone: "warning",
       }
     }
   }
 
-  const minPayoutBalanceTarget =
-    account.firm === "Apex" && rules.minBalanceToRequest > 0 ? rules.minBalanceToRequest : null
-
-  if (
-    minPayoutBalanceTarget != null &&
-    ctx.currentBalance < minPayoutBalanceTarget
-  ) {
-    const toThreshold = Math.max(0, minPayoutBalanceTarget - ctx.currentBalance)
-    const apexQualifyingDone =
-      eligibility.firm === "Apex" &&
-      eligibility.consistencyInfo.daysWithMinProfit >= rules.minProfitDays
-
-    if (apexQualifyingDone || (account.firm === "Lucid" && eligibility.firm === "Lucid" && eligibility.conditions.hasEnoughProfitDays)) {
+  if (eligibility.firm === "Lucid") {
+    if (!eligibility.conditions.hasPositiveCycleProfit) {
       return {
-        message: `$${fmtUsd(toThreshold)} to payout threshold`,
+        message: "Qualifying days complete · Positive cycle profit next",
+        tone: "warning",
+      }
+    }
+    if (!eligibility.conditions.hasMinWithdrawable) {
+      return {
+        message: "Qualifying days complete · Grow cycle profit",
         tone: "warning",
       }
     }
   }
 
   if (drawdownRemaining < maxDrawdown * 0.18) {
-    return {
-      message: `Protect buffer — $${fmtUsd(Math.max(0, drawdownRemaining))} remaining`,
-      tone: "warning",
-    }
+    return { message: "Protect buffer · drawdown near limit", tone: "warning" }
   }
 
   return { message: "Account stable", tone: "neutral" }
