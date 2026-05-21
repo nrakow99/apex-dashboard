@@ -1,5 +1,13 @@
-import type { Firm, AccountType, DrawdownType } from "./types"
-import type { LucidFlexFloorParams } from "./lucid-flex-floor"
+import type { Firm, AccountType, DrawdownType, TradeifyProgram } from "./types"
+import { lucidFlexFloorForSize, type LucidFlexFloorParams } from "./lucid-flex-floor"
+import {
+  TRADEIFY_EVAL,
+  TRADEIFY_FLEX,
+  TRADEIFY_DAILY,
+  tradeifyEvalProfitTarget,
+  tradeifyLockParams,
+  toTradeifySizeKey,
+} from "./tradeify-rules"
 
 export interface AccountRules {
   // Drawdown
@@ -42,8 +50,18 @@ export interface AccountRules {
   hasScaling: boolean
   maxContracts: string  // "" if not specified
 
-  /** LucidFlex PA only: stop-out floor schedule (null for Apex / Lucid Eval / non-Flex) */
+  /** LucidFlex / Tradeify funded: EOD lock floor schedule */
   lucidFlexFloor: LucidFlexFloorParams | null
+
+  bufferAmount: number
+  winningDayThreshold: number
+
+  payoutPolicyKind:
+    | "apex_safety_net"
+    | "lucid_cycle"
+    | "tradeify_flex"
+    | "tradeify_daily"
+    | "none"
 }
 
 // ─── Size key helper ─────────────────────────────────────────────────────────
@@ -119,22 +137,27 @@ const LUCID_FLEX_PA: Record<SizeKey, {
   minDailyProfit: number
   payoutAbsoluteCap: number
 }> = {
-  25000:  { maxDrawdown: 1000, maxContracts: "2 mini / 20 micros",   minDailyProfit: 100, payoutAbsoluteCap: 1000 },
+  25000:  { maxDrawdown: 1000, maxContracts: "2 mini / 20 micros",   minDailyProfit: 150, payoutAbsoluteCap: 0 },
   50000:  { maxDrawdown: 2000, maxContracts: "4 mini / 40 micros",   minDailyProfit: 150, payoutAbsoluteCap: 2000 },
   100000: { maxDrawdown: 3000, maxContracts: "6 mini / 60 micros",   minDailyProfit: 200, payoutAbsoluteCap: 2500 },
   150000: { maxDrawdown: 4500, maxContracts: "10 mini / 100 micros", minDailyProfit: 250, payoutAbsoluteCap: 3000 },
 }
 
-/** Locked-floor params — specified for 50K LucidFlex PA; other sizes trail min(peak−DD, rules) only via peak−DD until we add program-specific rows */
-const LUCID_FLEX_FLOOR_BY_SIZE: Partial<Record<SizeKey, LucidFlexFloorParams>> = {
-  50000: {
-    minimumFloor: 48_100,
-    lockPeakThreshold: 52_100,
-    lockedFloor: 50_100,
-  },
-}
-
 // ─── Main export ─────────────────────────────────────────────────────────────
+
+export function resolveTradeifyProgram(account: {
+  firm?: Firm | null
+  type: AccountType
+  program?: TradeifyProgram | null
+  dailyLossLimit?: number | null
+}): TradeifyProgram | null {
+  if (account.firm !== "Tradeify") return null
+  if (account.program) return account.program
+  if (account.type === "Eval") return "select_eval"
+  // Legacy funded rows: infer Daily from DLL, else Flex
+  if ((account.dailyLossLimit ?? 0) > 0) return "select_daily"
+  return "select_flex"
+}
 
 export function getAccountRules(account: {
   firm: Firm
@@ -143,8 +166,12 @@ export function getAccountRules(account: {
   accountSize: number
   maxDrawdown?: number
   dailyLossLimit?: number
+  program?: TradeifyProgram | null
+  legacyFiftyKTarget?: boolean
+  profitTarget?: number
 }): AccountRules {
-  const size = toSizeKey(account.accountSize)
+  const firm = account.firm ?? "Apex"
+  const size = toSizeKey(account.accountSize ?? 50000)
 
   const base: AccountRules = {
     maxDrawdown: account.maxDrawdown ?? 2000,
@@ -170,11 +197,90 @@ export function getAccountRules(account: {
     hasScaling: false,
     maxContracts: "",
     lucidFlexFloor: null,
+    bufferAmount: 0,
+    winningDayThreshold: 0,
+    payoutPolicyKind: "none",
+  }
+
+  // ── Tradeify ────────────────────────────────────────────────────────────────
+
+  if (firm === "Tradeify") {
+    const program = resolveTradeifyProgram({ ...account, firm })
+    const tSize = toTradeifySizeKey(account.accountSize)
+
+    if (program === "select_eval" || account.type === "Eval") {
+      const r = TRADEIFY_EVAL[tSize]
+      const target = tradeifyEvalProfitTarget(
+        account.accountSize,
+        account.legacyFiftyKTarget,
+      )
+      return {
+        ...base,
+        floorLabel: "Active EOD Floor",
+        maxDrawdown: r.maxDrawdown,
+        hasDLL: false,
+        hasProfitTarget: true,
+        profitTarget: account.profitTarget ?? target,
+        hasConsistency: true,
+        consistencyPercent: 40,
+        minTradingDays: 3,
+        maxContracts: r.maxContracts,
+        payoutPolicyKind: "none",
+      }
+    }
+
+    if (program === "select_flex") {
+      const r = TRADEIFY_FLEX[tSize]
+      return {
+        ...base,
+        floorLabel: "EOD Floor (lock available)",
+        maxDrawdown: r.maxDrawdown,
+        hasDLL: false,
+        hasPayouts: true,
+        maxPayouts: 99,
+        minDailyProfit: r.winningDayThreshold,
+        minProfitDays: 5,
+        winningDayThreshold: r.winningDayThreshold,
+        payoutMaxPercent: 0.5,
+        payoutAbsoluteCap: r.payoutCap,
+        payoutSplit: 0.9,
+        minPayoutAmount: 1,
+        minBalanceToRequest: 0,
+        hasConsistency: false,
+        hasScaling: true,
+        maxContracts: r.maxContracts,
+        lucidFlexFloor: tradeifyLockParams("select_flex", account.accountSize),
+        payoutPolicyKind: "tradeify_flex",
+      }
+    }
+
+    if (program === "select_daily") {
+      const r = TRADEIFY_DAILY[tSize]
+      return {
+        ...base,
+        floorLabel: "EOD Floor (lock available)",
+        maxDrawdown: r.maxDrawdown,
+        hasDLL: true,
+        dailyLossLimit: r.dailyLossLimit,
+        hasPayouts: true,
+        maxPayouts: 99,
+        bufferAmount: r.buffer,
+        payoutAbsoluteCap: r.payoutCap,
+        payoutSplit: 0.9,
+        minPayoutAmount: 250,
+        minBalanceToRequest: 0,
+        hasConsistency: false,
+        hasScaling: true,
+        maxContracts: r.maxContracts,
+        lucidFlexFloor: tradeifyLockParams("select_daily", account.accountSize),
+        payoutPolicyKind: "tradeify_daily",
+      }
+    }
   }
 
   // ── Apex ──────────────────────────────────────────────────────────────────
 
-  if (account.firm === "Apex") {
+  if (firm === "Apex") {
     if (account.type === "Eval") {
       if (account.drawdownType === "Intraday") {
         const r = APEX_INTRADAY_EVAL[size]
@@ -210,7 +316,7 @@ export function getAccountRules(account: {
           hasDLL: false,
           hasPayouts: true,
           maxPayouts: 6,
-          minTradingDays: 5,
+          minTradingDays: 0,
           minDailyProfit: r.minDailyProfit,
           minProfitDays: 5,
           safetyNet: r.safetyNet,
@@ -218,8 +324,11 @@ export function getAccountRules(account: {
           payoutCaps: r.payoutCaps,
           payoutSplit: 1.0,
           minPayoutAmount: 500,
-          hasConsistency: false,
+          hasConsistency: true,
+          consistencyPercent: 50,
           maxContracts: eod.maxContracts,
+          hasScaling: true,
+          payoutPolicyKind: "apex_safety_net",
         }
       } else {
         // EOD PA
@@ -231,7 +340,7 @@ export function getAccountRules(account: {
           dailyLossLimit: r.dailyLossLimit,
           hasPayouts: true,
           maxPayouts: 6,
-          minTradingDays: 5,
+          minTradingDays: 0,
           minDailyProfit: r.minDailyProfit,
           minProfitDays: 5,
           safetyNet: r.safetyNet,
@@ -241,6 +350,8 @@ export function getAccountRules(account: {
           minPayoutAmount: 500,
           hasConsistency: true,
           consistencyPercent: 50,
+          hasScaling: true,
+          payoutPolicyKind: "apex_safety_net",
         }
       }
     }
@@ -248,7 +359,7 @@ export function getAccountRules(account: {
 
   // ── Lucid ─────────────────────────────────────────────────────────────────
 
-  if (account.firm === "Lucid") {
+  if (firm === "Lucid") {
     if (account.type === "Eval") {
       const r = LUCID_EVAL[size]
       return {
@@ -283,7 +394,8 @@ export function getAccountRules(account: {
         hasConsistency: false,
         hasScaling: false,
         maxContracts: r.maxContracts,
-        lucidFlexFloor: LUCID_FLEX_FLOOR_BY_SIZE[size] ?? null,
+        lucidFlexFloor: lucidFlexFloorForSize(size, r.maxDrawdown),
+        payoutPolicyKind: "lucid_cycle",
       }
     }
   }

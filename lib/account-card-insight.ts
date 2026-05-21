@@ -4,7 +4,7 @@ import {
   getConsistencyInfo,
   getPayoutEligibility,
 } from "@/lib/storage"
-import { getAccountRules } from "@/lib/rules"
+import { getAccountRules, resolveTradeifyProgram } from "@/lib/rules"
 import { parseLocalDate } from "@/lib/date-utils"
 
 export type AccountInsightTone = "neutral" | "positive" | "warning" | "muted"
@@ -94,12 +94,46 @@ function buildEvalInsight(ctx: AccountInsightContext): AccountCardInsight {
   const effectiveProfitTarget =
     account.profitTarget ?? (rules.hasProfitTarget ? rules.profitTarget : null)
 
+  const consistencyInfo = rules.hasConsistency
+    ? getConsistencyInfo(account.id, trades, account, payouts)
+    : null
+  const consistencyOk = !consistencyInfo || consistencyInfo.isValid
+  const profitTargetMet =
+    effectiveProfitTarget != null && totalPnL >= effectiveProfitTarget
   const evalPassed =
-    effectiveProfitTarget != null &&
-    (account.status === "Passed" || totalPnL >= effectiveProfitTarget)
+    profitTargetMet &&
+    consistencyOk &&
+    (account.status === "Passed" || profitTargetMet)
 
   if (tradingDays === 0) {
     return { message: "No trades logged yet", tone: "muted" }
+  }
+
+  if (account.firm === "Tradeify" && rules.minTradingDays > 0 && tradingDays < rules.minTradingDays) {
+    const need = rules.minTradingDays - tradingDays
+    return {
+      message: `${need} trading day${need > 1 ? "s" : ""} required`,
+      tone: "neutral",
+    }
+  }
+
+  if (
+    (account.firm === "Lucid" || account.firm === "Tradeify") &&
+    rules.hasConsistency &&
+    consistencyInfo
+  ) {
+    if (!consistencyOk && consistencyInfo.totalProfit > 0) {
+      if (consistencyInfo.additionalProfitNeeded > 0) {
+        return {
+          message: `Need $${fmtUsd(consistencyInfo.additionalProfitNeeded, 2)} to restore consistency`,
+          tone: "warning",
+        }
+      }
+      return { message: "Consistency rule not met", tone: "warning" }
+    }
+    if (consistencyOk && consistencyInfo.totalProfit > 0) {
+      return { message: "Consistency in check", tone: "positive" }
+    }
   }
 
   const remaining =
@@ -136,10 +170,19 @@ function buildEvalInsight(ctx: AccountInsightContext): AccountCardInsight {
   }
 
   if (!evalPassed && effectiveProfitTarget != null && remaining > 0) {
-    return { message: "Building toward target", tone: "neutral" }
+    if (profitTargetMet && !consistencyOk) {
+      return { message: "Consistency rule not met", tone: "warning" }
+    }
+    return {
+      message:
+        account.firm === "Lucid" || account.firm === "Tradeify"
+          ? `$${fmtUsd(remaining)} to target`
+          : "Building toward target",
+      tone: "neutral",
+    }
   }
 
-  if (evalPassed) {
+  if (evalPassed && consistencyOk) {
     return { message: "Profit target met", tone: "positive" }
   }
 
@@ -153,7 +196,10 @@ function getQualifyingDaysRemaining(
   if (eligibility.firm === "Lucid") {
     return Math.max(0, rules.minProfitDays - eligibility.cycleProfitDays)
   }
-  return Math.max(0, rules.minProfitDays - eligibility.consistencyInfo.daysWithMinProfit)
+  if (eligibility.firm === "Tradeify" && eligibility.tradeifyProgram === "select_flex") {
+    return Math.max(0, rules.minProfitDays - (eligibility.winningDays ?? 0))
+  }
+  return Math.max(0, rules.minProfitDays - (eligibility.consistencyInfo?.daysWithMinProfit ?? 0))
 }
 
 function buildPaInsight(ctx: AccountInsightContext): AccountCardInsight {
@@ -180,39 +226,106 @@ function buildPaInsight(ctx: AccountInsightContext): AccountCardInsight {
 
   const qualifyingRemaining = getQualifyingDaysRemaining(eligibility, rules)
   if (qualifyingRemaining > 0) {
+    const program = resolveTradeifyProgram(account)
+    if (account.firm === "Tradeify" && program === "select_flex") {
+      return {
+        message: `${qualifyingRemaining} winning day${qualifyingRemaining === 1 ? "" : "s"} to payout`,
+        tone: "neutral",
+      }
+    }
     return {
-      message: `${qualifyingRemaining} qualifying day${qualifyingRemaining === 1 ? "" : "s"} to payout`,
+      message:
+        account.firm === "Lucid"
+          ? `${qualifyingRemaining} payout day${qualifyingRemaining === 1 ? "" : "s"} remaining`
+          : account.firm === "Apex"
+            ? `${qualifyingRemaining} payout day${qualifyingRemaining === 1 ? "" : "s"} remaining`
+            : `${qualifyingRemaining} qualifying day${qualifyingRemaining === 1 ? "" : "s"} to payout`,
       tone: "neutral",
+    }
+  }
+
+  if (account.firm === "Lucid" && rules.hasPayouts && qualifyingRemaining === 0) {
+    return { message: "No minimum balance required", tone: "neutral" }
+  }
+
+  if (account.firm === "Tradeify" && rules.hasPayouts) {
+    const program = resolveTradeifyProgram(account)
+    if (program === "select_flex" && qualifyingRemaining === 0) {
+      return { message: "No minimum balance required", tone: "neutral" }
     }
   }
 
   // Qualifying days met — surface next blocker without repeating card metrics
   if (eligibility.firm === "Apex") {
-    if (rules.hasConsistency && !eligibility.conditions.isConsistent) {
-      return {
-        message: "Qualifying days complete · Consistency rule next",
-        tone: "warning",
-      }
+    if (rules.hasConsistency && !eligibility.conditions?.isConsistent) {
+      return { message: "Consistency rule not met", tone: "warning" }
     }
-    if (rules.minBalanceToRequest > 0 && !eligibility.conditions.hasMinBalance) {
+    if (rules.minBalanceToRequest > 0 && !eligibility.conditions?.hasMinBalance) {
       return {
-        message: "Qualifying days complete · Build to payout balance",
+        message: "Payout days complete · Balance threshold next",
         tone: "warning",
       }
     }
   }
 
   if (eligibility.firm === "Lucid") {
-    if (!eligibility.conditions.hasPositiveCycleProfit) {
+    if (!eligibility.conditions?.hasPositiveCycleProfit) {
       return {
         message: "Qualifying days complete · Positive cycle profit next",
         tone: "warning",
       }
     }
-    if (!eligibility.conditions.hasMinWithdrawable) {
+    if (!eligibility.conditions?.hasMinWithdrawable) {
       return {
         message: "Qualifying days complete · Grow cycle profit",
         tone: "warning",
+      }
+    }
+  }
+
+  if (eligibility.firm === "Tradeify") {
+    const program = resolveTradeifyProgram(account)
+    if (program === "select_flex") {
+      if (!eligibility.conditions?.hasPositiveCycleProfit) {
+        return { message: "Cycle profit must recover", tone: "warning" }
+      }
+      if ((eligibility.cycleProfit ?? 0) > 0 && qualifyingRemaining === 0) {
+        return { message: "Cycle profit positive", tone: "positive" }
+      }
+      if (qualifyingRemaining > 0) {
+        return {
+          message: `${qualifyingRemaining} winning day${qualifyingRemaining === 1 ? "" : "s"} to payout`,
+          tone: "neutral",
+        }
+      }
+      return { message: "No minimum balance required", tone: "neutral" }
+    }
+    if (program === "select_daily") {
+      if (
+        eligibility.conditions &&
+        "isAboveBuffer" in eligibility.conditions &&
+        !eligibility.conditions.isAboveBuffer
+      ) {
+        return { message: "Below buffer", tone: "warning" }
+      }
+      if (!eligibility.conditions?.hasPositiveCycleProfit) {
+        return { message: "Cycle profit must recover", tone: "warning" }
+      }
+      if (eligibility.maxWithdrawable < rules.minPayoutAmount) {
+        const need = Math.ceil(rules.minPayoutAmount - eligibility.maxWithdrawable)
+        return {
+          message: `$${need} to daily payout minimum`,
+          tone: "neutral",
+        }
+      }
+      if (eligibility.aboveBuffer != null && eligibility.aboveBuffer > 0) {
+        return {
+          message: `$${fmtUsd(eligibility.aboveBuffer)} above buffer`,
+          tone: "positive",
+        }
+      }
+      if (rules.hasDLL && drawdownRemaining < maxDrawdown * 0.2) {
+        return { message: "Protect DLL", tone: "warning" }
       }
     }
   }

@@ -74,7 +74,7 @@ import {
   isEvalEligibleForPaActivation,
 } from "@/lib/pa-activation"
 import { createClient } from "@/lib/supabase/client"
-import type { Trade, Payout, Account, AccountType, DrawdownType, Firm, DailyPnL } from "@/lib/types"
+import type { Trade, Payout, Account, AccountType, DrawdownType, Firm, DailyPnL, TradeifyProgram } from "@/lib/types"
 import { migrateLocalTradeMetadata, type TradeMeta } from "@/lib/trade-meta"
 import { RiskMetricsCard } from "@/components/risk-metrics-card"
 
@@ -186,14 +186,11 @@ export default function Dashboard() {
   const consistencyInfo = useMemo(() => {
     if (!selectedAccount) return null
     const rules = getAccountRules(selectedAccount)
-    if (rules.hasConsistency)
+    if (rules.hasConsistency) {
       return getConsistencyInfo(selectedAccount.id, allTrades, selectedAccount, allPayouts)
-    // LucidFlex PA: qualifying profit-day count (no Apex-style consistency rule)
-    if (
-      selectedAccount.firm === "Lucid" &&
-      selectedAccount.type === "PA" &&
-      rules.minProfitDays > 0
-    ) {
+    }
+    // Apex PA: qualifying-day count lives on consistencyInfo (no eval-style consistency card)
+    if (selectedAccount.firm === "Apex" && selectedAccount.type === "PA" && rules.minProfitDays > 0) {
       return getConsistencyInfo(selectedAccount.id, allTrades, selectedAccount, allPayouts)
     }
     return null
@@ -231,6 +228,23 @@ export default function Dashboard() {
             isPositive: count >= minReq,
           },
           subValue: `$${minDaily.toLocaleString()}+ profit days (this payout cycle)`,
+        }
+      }
+
+      if (
+        selectedAccount.firm === "Tradeify" &&
+        payoutEligibility?.firm === "Tradeify" &&
+        payoutEligibility.tradeifyProgram === "select_flex"
+      ) {
+        const count = payoutEligibility.winningDays ?? 0
+        return {
+          title: "Winning Days",
+          value: count.toString(),
+          change: {
+            value: `${count} / ${minReq} required`,
+            isPositive: count >= minReq,
+          },
+          subValue: `$${rules.winningDayThreshold}+ profit days (this cycle)`,
         }
       }
 
@@ -386,6 +400,8 @@ export default function Dashboard() {
         profitTarget: accountData.profitTarget,
         maxDrawdown: accountData.maxDrawdown,
         dailyLossLimit: accountData.dailyLossLimit,
+        program: accountData.program ?? null,
+        legacyFiftyKTarget: accountData.legacyFiftyKTarget,
       })
 
       if (result.error) throw result.error
@@ -497,6 +513,7 @@ export default function Dashboard() {
     maxDrawdown: number
     dailyLossLimit: number | null
     profitTarget?: number | null
+    program?: TradeifyProgram | null
   }) => {
     setIsSaving(true)
     try {
@@ -512,6 +529,7 @@ export default function Dashboard() {
         maxDrawdown: updates.maxDrawdown,
         dailyLossLimit: updates.dailyLossLimit,
         profitTarget: updates.profitTarget ?? null,
+        program: updates.program,
       })
 
       if (result.error) throw result.error
@@ -759,7 +777,7 @@ export default function Dashboard() {
         }}
         evalAccount={activatePaEval}
         isSubmitting={isSaving}
-        onConfirm={async ({ name, activatedAtIso, activationStartDate }) => {
+        onConfirm={async ({ name, activatedAtIso, activationStartDate, tradeifyProgram }) => {
           if (!activatePaEval) return
           const evalAcc = activatePaEval
           setIsSaving(true)
@@ -769,6 +787,7 @@ export default function Dashboard() {
               name,
               activatedAtIso,
               activationStartDate,
+              tradeifyProgram,
             )
             const result = await updateAccount(evalAcc.id, updates)
             if (result.error) throw result.error
@@ -1180,7 +1199,11 @@ export default function Dashboard() {
                     selectedAccount.type === "PA" &&
                     payoutEligibility?.firm === "Lucid"
                       ? payoutEligibility.cycleProfitDays
-                      : undefined
+                      : selectedAccount.firm === "Tradeify" &&
+                          payoutEligibility?.firm === "Tradeify" &&
+                          payoutEligibility.tradeifyProgram === "select_flex"
+                        ? payoutEligibility.winningDays ?? 0
+                        : undefined
                   }
                 />
               </div>
@@ -1200,7 +1223,9 @@ export default function Dashboard() {
                   onEditTrade={setEditingTrade}
                   onDeleteTrade={setDeletingTrade}
                 />
-                {selectedAccount.type === "PA" && payoutEligibility && (
+                {selectedAccount.type === "PA" &&
+                  payoutEligibility &&
+                  getAccountRules(selectedAccount).hasPayouts && (
                   <PayoutStatusPanel
                     account={selectedAccount}
                     eligibility={payoutEligibility}

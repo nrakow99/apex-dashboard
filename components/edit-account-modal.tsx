@@ -19,8 +19,9 @@ import {
 } from "@/components/ui/select"
 import { Loader2 } from "lucide-react"
 import { cn } from "@/lib/utils"
-import type { Account, AccountType, Firm, DrawdownType } from "@/lib/types"
+import type { Account, AccountType, Firm, DrawdownType, TradeifyProgram } from "@/lib/types"
 import { getAccountRules } from "@/lib/rules"
+import { defaultTradeifyAccountName } from "@/lib/tradeify-rules"
 import {
   formatAccountBundleHelper,
   getPortfolioBuyingPower,
@@ -80,6 +81,7 @@ interface EditAccountModalProps {
     maxDrawdown: number
     dailyLossLimit: number | null
     profitTarget?: number | null
+    program?: TradeifyProgram | null
   }) => Promise<void>
   isSaving?: boolean
 }
@@ -103,6 +105,7 @@ export function EditAccountModal({
     maxDrawdown: "",
     dailyLossLimit: "",
     profitTarget: "",
+    program: "select_eval" as TradeifyProgram,
   })
 
   useEffect(() => {
@@ -119,18 +122,33 @@ export function EditAccountModal({
         maxDrawdown: account.maxDrawdown.toString(),
         dailyLossLimit: (account.dailyLossLimit ?? "").toString(),
         profitTarget: account.profitTarget?.toString() ?? "",
+        program:
+          account.program ??
+          (account.type === "Eval" ? "select_eval" : "select_flex"),
       })
     }
   }, [account])
 
+  useEffect(() => {
+    if ((form.firm === "Lucid" || form.firm === "Tradeify") && form.drawdownType === "Intraday") {
+      setForm((f) => ({ ...f, drawdownType: "EOD" }))
+    }
+  }, [form.firm, form.drawdownType])
+
   const set = <K extends keyof typeof form>(k: K, v: (typeof form)[K]) =>
     setForm((f) => ({ ...f, [k]: v }))
 
+  const isTradeify = form.firm === "Tradeify"
+  const tradeifyType: AccountType =
+    form.program === "select_eval" ? "Eval" : "PA"
+  const effectiveType = isTradeify ? tradeifyType : form.type
+
   const rules = getAccountRules({
     firm: form.firm,
-    type: form.type,
-    drawdownType: form.drawdownType,
+    type: effectiveType,
+    drawdownType: isTradeify ? "EOD" : form.drawdownType,
     accountSize: form.accountSize,
+    program: isTradeify ? form.program : undefined,
   })
 
   const qty = Math.max(1, Math.min(MAX_ACCOUNT_QUANTITY, Math.floor(form.quantity) || 1))
@@ -143,17 +161,23 @@ export function EditAccountModal({
     e.preventDefault()
     if (!account) return
     await onSave(account.id, {
-      name: form.name,
+      name: form.name || (isTradeify ? defaultTradeifyAccountName(form.accountSize, form.program) : form.name),
       firm: form.firm,
-      type: form.type,
+      type: effectiveType,
       status: form.status,
-      drawdownType: form.drawdownType,
+      drawdownType: isTradeify ? "EOD" : form.drawdownType,
       accountSize: form.accountSize,
       quantity: qty,
       startingBalance: ruleStartingBalance,
       maxDrawdown: parseFloat(form.maxDrawdown) || rules.maxDrawdown,
       dailyLossLimit: rules.hasDLL ? (parseFloat(form.dailyLossLimit) || rules.dailyLossLimit) : null,
-      profitTarget: form.type === "Eval" && form.profitTarget ? parseFloat(form.profitTarget) : null,
+      profitTarget:
+        effectiveType === "Eval" && form.profitTarget
+          ? parseFloat(form.profitTarget)
+          : effectiveType === "Eval" && rules.hasProfitTarget
+            ? rules.profitTarget
+            : null,
+      program: isTradeify ? form.program : null,
     })
   }
 
@@ -177,25 +201,79 @@ export function EditAccountModal({
           <div className="space-y-2">
             <Label>Firm</Label>
             <SegmentedControl
-              options={[{ value: "Apex", label: "Apex" }, { value: "Lucid", label: "Lucid" }]}
+              options={[
+                { value: "Apex", label: "Apex" },
+                { value: "Lucid", label: "Lucid" },
+                { value: "Tradeify", label: "Tradeify" },
+              ]}
               value={form.firm}
-              onChange={(v) => set("firm", v)}
+              onChange={(v) => {
+                set("firm", v)
+                if (v === "Tradeify") {
+                  setForm((f) => ({
+                    ...f,
+                    firm: v,
+                    drawdownType: "EOD",
+                    program: "select_eval",
+                  }))
+                }
+              }}
               disabled={isSaving}
             />
           </div>
 
-          <div className="grid grid-cols-2 gap-4">
+          {isTradeify ? (
             <div className="space-y-2">
-              <Label>Account Type</Label>
-              <Select value={form.type} onValueChange={(v: AccountType) => set("type", v)} disabled={isSaving}>
-                <SelectTrigger className="bg-background"><SelectValue /></SelectTrigger>
+              <Label>Program</Label>
+              <Select
+                value={form.program}
+                onValueChange={(v) => set("program", v as TradeifyProgram)}
+                disabled={isSaving}
+              >
+                <SelectTrigger className="bg-background h-9">
+                  <SelectValue />
+                </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="Eval">Eval</SelectItem>
-                  <SelectItem value="PA">PA / Funded</SelectItem>
-                  <SelectItem value="Live">Live</SelectItem>
+                  <SelectItem value="select_eval">Select Evaluation</SelectItem>
+                  <SelectItem value="select_flex">Select Flex Funded</SelectItem>
+                  <SelectItem value="select_daily">Select Daily Funded</SelectItem>
                 </SelectContent>
               </Select>
+              <p className="text-[11px] text-muted-foreground">Tradeify Select uses EOD drawdown only.</p>
             </div>
+          ) : (
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label>Account Type</Label>
+                <Select value={form.type} onValueChange={(v: AccountType) => set("type", v)} disabled={isSaving}>
+                  <SelectTrigger className="bg-background"><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="Eval">Eval</SelectItem>
+                    <SelectItem value="PA">PA / Funded</SelectItem>
+                    <SelectItem value="Live">Live</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-2">
+                <Label>Status</Label>
+                <Select
+                  value={form.status}
+                  onValueChange={(v: "Active" | "Inactive" | "Breached" | "Passed") => set("status", v)}
+                  disabled={isSaving}
+                >
+                  <SelectTrigger className="bg-background"><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="Active">Active</SelectItem>
+                    <SelectItem value="Passed">Passed</SelectItem>
+                    <SelectItem value="Breached">Breached</SelectItem>
+                    <SelectItem value="Inactive">Inactive</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+          )}
+
+          {isTradeify && (
             <div className="space-y-2">
               <Label>Status</Label>
               <Select
@@ -212,7 +290,7 @@ export function EditAccountModal({
                 </SelectContent>
               </Select>
             </div>
-          </div>
+          )}
 
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-2">
@@ -291,7 +369,7 @@ export function EditAccountModal({
             )}
           </div>
 
-          {form.type === "Eval" && (
+          {effectiveType === "Eval" && (
             <div className="space-y-2">
               <Label>Profit Target ($)</Label>
               <Input

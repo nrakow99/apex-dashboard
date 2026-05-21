@@ -1,7 +1,10 @@
 export type AccountType = "Eval" | "PA" | "Live"
 export type AccountStatus = "Active" | "Passed" | "Breached"
 export type DrawdownType = "EOD" | "Intraday"
-export type Firm = "Apex" | "Lucid"
+export type Firm = "Apex" | "Lucid" | "Tradeify"
+
+/** Tradeify Select program (null for Apex/Lucid). */
+export type TradeifyProgram = "select_eval" | "select_flex" | "select_daily"
 
 export interface Account {
   id: string
@@ -32,6 +35,10 @@ export interface Account {
   previousType?: string | null
   /** Account creation timestamp (ISO) */
   createdAt?: string | null
+  /** Tradeify only: select_eval | select_flex | select_daily */
+  program?: TradeifyProgram | null
+  /** Tradeify 50K Select Eval: use $2,500 legacy profit target */
+  legacyFiftyKTarget?: boolean
 }
 
 export interface Trade {

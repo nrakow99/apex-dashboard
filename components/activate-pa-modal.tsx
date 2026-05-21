@@ -17,6 +17,7 @@ import {
   getPaActivationRuleSummary,
 } from "@/lib/pa-activation"
 import { formatCurrency } from "@/lib/utils"
+import { cn } from "@/lib/utils"
 
 interface ActivatePaModalProps {
   open: boolean
@@ -26,6 +27,7 @@ interface ActivatePaModalProps {
     name: string
     activatedAtIso: string
     activationStartDate: string
+    tradeifyProgram?: "select_flex" | "select_daily"
   }) => Promise<void>
   isSubmitting?: boolean
 }
@@ -39,17 +41,34 @@ export function ActivatePaModal({
 }: ActivatePaModalProps) {
   const [name, setName] = useState("")
   const [activationDate, setActivationDate] = useState("")
+  const [tradeifyPolicy, setTradeifyPolicy] = useState<"select_flex" | "select_daily">("select_flex")
+
+  const isTradeify = evalAccount?.firm === "Tradeify"
 
   useEffect(() => {
     if (evalAccount && open) {
-      setName(defaultPaAccountName(evalAccount))
+      setTradeifyPolicy("select_flex")
+      setName(
+        isTradeify
+          ? defaultPaAccountName(evalAccount, "select_flex")
+          : defaultPaAccountName(evalAccount),
+      )
       setActivationDate("")
     }
-  }, [evalAccount, open])
+  }, [evalAccount, open, isTradeify])
+
+  useEffect(() => {
+    if (evalAccount && open && isTradeify) {
+      setName(defaultPaAccountName(evalAccount, tradeifyPolicy))
+    }
+  }, [tradeifyPolicy, evalAccount, open, isTradeify])
 
   if (!evalAccount) return null
 
-  const summaryLines = getPaActivationRuleSummary(evalAccount)
+  const summaryLines = getPaActivationRuleSummary(
+    evalAccount,
+    isTradeify ? tradeifyPolicy : undefined,
+  )
   const ddLabel =
     evalAccount.drawdownType === "Intraday"
       ? "Intraday trailing"
@@ -57,11 +76,18 @@ export function ActivatePaModal({
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    const finalName = name.trim() || defaultPaAccountName(evalAccount)
+    const finalName =
+      name.trim() ||
+      defaultPaAccountName(evalAccount, isTradeify ? tradeifyPolicy : undefined)
     const activationStartDate =
       activationDate || new Date().toISOString().slice(0, 10)
     const activatedAtIso = new Date().toISOString()
-    await onConfirm({ name: finalName, activatedAtIso, activationStartDate })
+    await onConfirm({
+      name: finalName,
+      activatedAtIso,
+      activationStartDate,
+      tradeifyProgram: isTradeify ? tradeifyPolicy : undefined,
+    })
   }
 
   return (
@@ -69,7 +95,7 @@ export function ActivatePaModal({
       <DialogContent className="sm:max-w-[440px]">
         <DialogHeader>
           <DialogTitle className="text-xl tracking-tight">
-            Activate Performance Account
+            {isTradeify ? "Activate Funded Account" : "Activate Performance Account"}
           </DialogTitle>
         </DialogHeader>
 
@@ -97,9 +123,43 @@ export function ActivatePaModal({
             </div>
           </div>
 
+          {isTradeify && (
+            <div className="space-y-2">
+              <Label>Choose payout policy (permanent)</Label>
+              <div className="flex gap-0 p-1 bg-[#0F1115]/80 border border-white/[0.08] rounded-xl">
+                {(
+                  [
+                    { value: "select_flex" as const, label: "Select Flex" },
+                    { value: "select_daily" as const, label: "Select Daily" },
+                  ] as const
+                ).map((opt) => (
+                  <button
+                    key={opt.value}
+                    type="button"
+                    onClick={() => setTradeifyPolicy(opt.value)}
+                    className={cn(
+                      "flex-1 py-2 px-2 rounded-lg text-sm font-medium transition-all",
+                      tradeifyPolicy === opt.value
+                        ? "bg-[#1E2229] text-[#E5E4E2] shadow-[inset_0_0_0_1px_rgba(83,104,120,0.40)]"
+                        : "text-slate-500 hover:text-[#E5E4E2]",
+                    )}
+                  >
+                    {opt.label}
+                  </button>
+                ))}
+              </div>
+              <p className="text-[11px] text-amber-500/90 font-medium">
+                This choice is permanent for this funded account.
+              </p>
+              <p className="text-[11px] text-muted-foreground">
+                Flex: 5 winning days · 50% profit cap. Daily: buffer + daily eligibility.
+              </p>
+            </div>
+          )}
+
           <div className="space-y-2">
             <div className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
-              PA rule summary
+              {isTradeify ? "Funded rule summary" : "PA rule summary"}
             </div>
             <ul className="rounded-xl border border-white/[0.07] bg-[#0F1115]/50 px-3 py-2.5 text-xs text-slate-400 space-y-1.5 list-disc list-inside">
               {summaryLines.map((line) => (
@@ -114,48 +174,41 @@ export function ActivatePaModal({
               id="pa-name"
               value={name}
               onChange={(e) => setName(e.target.value)}
-              placeholder={defaultPaAccountName(evalAccount)}
+              placeholder={defaultPaAccountName(
+                evalAccount,
+                isTradeify ? tradeifyPolicy : undefined,
+              )}
               className="bg-background"
               autoComplete="off"
             />
           </div>
 
           <div className="space-y-2">
-            <Label htmlFor="pa-activation-date">PA metrics start date (optional)</Label>
+            <Label htmlFor="activation-date">Activation date (optional)</Label>
             <Input
-              id="pa-activation-date"
+              id="activation-date"
               type="date"
               value={activationDate}
               onChange={(e) => setActivationDate(e.target.value)}
               className="bg-background"
             />
             <p className="text-[11px] text-muted-foreground">
-              Defaults to today. PA stats, payouts, and eligibility count only trades on or after this
-              date; older eval trades stay saved but are ignored for PA rules.
+              PA metrics use trades on or after this date. Defaults to today.
             </p>
           </div>
 
           <div className="flex justify-end gap-3 pt-2">
-            <Button
-              type="button"
-              variant="ghost"
-              onClick={() => onOpenChange(false)}
-              disabled={isSubmitting}
-            >
+            <Button type="button" variant="ghost" onClick={() => onOpenChange(false)}>
               Cancel
             </Button>
-            <Button
-              type="submit"
-              disabled={isSubmitting}
-              className="bg-gradient-to-r from-emerald-600 to-[#3d5a6a] hover:from-emerald-500 hover:to-[#4a6b7e] text-white shadow-md shadow-emerald-900/20"
-            >
+            <Button type="submit" disabled={isSubmitting} className="bg-emerald-600 hover:bg-emerald-700">
               {isSubmitting ? (
                 <>
-                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  <Loader2 className="h-4 w-4 animate-spin mr-2" />
                   Activating…
                 </>
               ) : (
-                "Confirm activation"
+                "Activate"
               )}
             </Button>
           </div>

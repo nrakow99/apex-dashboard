@@ -1,6 +1,6 @@
 import type { Account, Trade, Payout, DailyPnL } from "./types"
 import { EOD_CONSTANTS } from "./types"
-import { getAccountRules } from "./rules"
+import { getAccountRules, resolveTradeifyProgram } from "./rules"
 import { getRuleStartingBalance } from "./account-quantity"
 import { lucidFlexActiveFloor } from "./lucid-flex-floor"
 
@@ -132,11 +132,7 @@ export function calculateAccountStats(
   const projectedHighest = Math.max(highestCompletedEodBalance, currentBalance)
   let projectedEodFloor = projectedHighest - maxDrawdown
 
-  if (
-    rules.lucidFlexFloor &&
-    account.firm === "Lucid" &&
-    account.type === "PA"
-  ) {
+  if (rules.lucidFlexFloor && account.type === "PA" && (account.firm === "Lucid" || account.firm === "Tradeify")) {
     activeEodFloor = lucidFlexActiveFloor(
       peakBalance,
       maxDrawdown,
@@ -173,27 +169,151 @@ export function calculateAccountStats(
 
 // ─── Consistency info ─────────────────────────────────────────────────────────
 
-export function getConsistencyInfo(accountId: string, trades: Trade[], account: Account, payouts: Payout[]) {
-  const rules = getAccountRules(account)
-  const dailyData = calculateDailyPnLData(accountId, trades, account, payouts)
-  const totalProfit = dailyData.reduce((sum, d) => sum + Math.max(0, d.pnl), 0)
-  const largestWinningDay = Math.max(0, ...dailyData.map((d) => d.pnl))
-  const maxAllowedDay = totalProfit * (rules.consistencyPercent / 100)
-  const isValid = totalProfit <= 0 || largestWinningDay <= maxAllowedDay
-  const maxAllowedProfitToday = totalProfit > 0 ? maxAllowedDay - largestWinningDay : Infinity
-  const requiredTotalProfit = rules.consistencyPercent > 0
-    ? largestWinningDay / (rules.consistencyPercent / 100)
-    : 0
-  const additionalProfitNeeded = Math.max(0, requiredTotalProfit - totalProfit)
-  const daysWithMinProfit = dailyData.filter((d) => d.pnl >= rules.minDailyProfit).length
+/** Apex PA (Intraday or EOD): 50% net-profit consistency since last payout. */
+export function isApexPaConsistency(account: Account): boolean {
+  return account.firm === "Apex" && account.type === "PA"
+}
+
+/** @deprecated Use isApexPaConsistency */
+export function isApexIntradayPaConsistency(account: Account): boolean {
+  return isApexPaConsistency(account)
+}
+
+/** LucidFlex Eval: largest day / account profit (net daily PnL) ≤ 50% */
+export function isLucidEvalConsistency(account: Account): boolean {
+  return account.firm === "Lucid" && account.type === "Eval"
+}
+
+export function isTradeifyEvalConsistency(account: Account): boolean {
+  return (
+    account.firm === "Tradeify" &&
+    (resolveTradeifyProgram(account) === "select_eval" || account.type === "Eval")
+  )
+}
+
+function roundMoney(n: number): number {
+  return Math.round(n * 100) / 100
+}
+
+function getLastPayoutDate(account: Account, payouts: Payout[]): string | null {
+  const accountPayouts = payoutsEffectiveForAccount(
+    account,
+    payouts.filter((p) => p.accountId === account.id),
+  )
+  if (accountPayouts.length === 0) return null
+  return accountPayouts
+    .slice()
+    .sort((a, b) => a.date.localeCompare(b.date))
+    .at(-1)!.date
+}
+
+function dailyPnLForConsistencyPeriod(
+  accountId: string,
+  trades: Trade[],
+  account: Account,
+  payouts: Payout[],
+): DailyPnL[] {
+  const allDaily = calculateDailyPnLData(accountId, trades, account, payouts)
+  if (!isApexPaConsistency(account)) return allDaily
+
+  const lastPayoutDate = getLastPayoutDate(account, payouts)
+  if (!lastPayoutDate) return allDaily
+  return allDaily.filter((d) => d.date > lastPayoutDate)
+}
+
+/** Net-profit 50% rule (Apex Intraday PA payout / representative account). */
+function computeNetProfitConsistency(
+  dailyData: DailyPnL[],
+  consistencyPercent: number,
+) {
+  const totalProfit = roundMoney(dailyData.reduce((sum, d) => sum + d.pnl, 0))
+  const largestWinningDay = roundMoney(
+    Math.max(0, ...dailyData.map((d) => d.pnl), 0),
+  )
+  const maxAllowedDay = roundMoney(totalProfit * (consistencyPercent / 100))
+  const isValid = totalProfit > 0 && largestWinningDay <= maxAllowedDay
+  const requiredTotalProfit =
+    consistencyPercent > 0 && largestWinningDay > 0
+      ? roundMoney(largestWinningDay / (consistencyPercent / 100))
+      : 0
+  const additionalProfitNeeded = roundMoney(Math.max(0, requiredTotalProfit - totalProfit))
+  const maxAllowedProfitToday =
+    totalProfit > 0 ? Math.max(0, roundMoney(maxAllowedDay - largestWinningDay)) : 0
 
   return {
     largestWinningDay,
     totalProfit,
     maxAllowedDay,
     isValid,
-    maxAllowedProfitToday: Math.max(0, maxAllowedProfitToday),
+    maxAllowedProfitToday,
     additionalProfitNeeded,
+  }
+}
+
+/** Legacy positive-sum consistency (Eval / Apex EOD / Lucid). */
+function computePositiveSumConsistency(
+  dailyData: DailyPnL[],
+  consistencyPercent: number,
+) {
+  const totalProfit = roundMoney(
+    dailyData.reduce((sum, d) => sum + Math.max(0, d.pnl), 0),
+  )
+  const largestWinningDay = roundMoney(
+    Math.max(0, ...dailyData.map((d) => d.pnl), 0),
+  )
+  const maxAllowedDay = roundMoney(totalProfit * (consistencyPercent / 100))
+  const isValid = totalProfit <= 0 || largestWinningDay <= maxAllowedDay
+  const requiredTotalProfit =
+    consistencyPercent > 0 && largestWinningDay > 0
+      ? roundMoney(largestWinningDay / (consistencyPercent / 100))
+      : 0
+  const additionalProfitNeeded = roundMoney(Math.max(0, requiredTotalProfit - totalProfit))
+  const maxAllowedProfitToday =
+    totalProfit > 0 ? Math.max(0, roundMoney(maxAllowedDay - largestWinningDay)) : Infinity
+
+  return {
+    largestWinningDay,
+    totalProfit,
+    maxAllowedDay,
+    isValid,
+    maxAllowedProfitToday,
+    additionalProfitNeeded,
+  }
+}
+
+export function getConsistencyInfo(accountId: string, trades: Trade[], account: Account, payouts: Payout[]) {
+  const rules = getAccountRules(account)
+  const allDaily = calculateDailyPnLData(accountId, trades, account, payouts)
+  const daysWithMinProfit = allDaily.filter((d) => d.pnl >= rules.minDailyProfit).length
+
+  if (!rules.hasConsistency) {
+    return {
+      largestWinningDay: 0,
+      totalProfit: 0,
+      maxAllowedDay: 0,
+      isValid: true,
+      maxAllowedProfitToday: Infinity,
+      additionalProfitNeeded: 0,
+      daysWithMinProfit,
+    }
+  }
+
+  const periodDaily = isApexPaConsistency(account)
+    ? dailyPnLForConsistencyPeriod(accountId, trades, account, payouts)
+    : allDaily
+
+  const metrics =
+    isApexPaConsistency(account) ||
+    isLucidEvalConsistency(account) ||
+    isTradeifyEvalConsistency(account)
+      ? computeNetProfitConsistency(
+          isApexPaConsistency(account) ? periodDaily : allDaily,
+          rules.consistencyPercent,
+        )
+      : computePositiveSumConsistency(allDaily, rules.consistencyPercent)
+
+  return {
+    ...metrics,
     daysWithMinProfit,
   }
 }
@@ -231,10 +351,13 @@ function getCycleData(
     tradesByDate[t.date] = (tradesByDate[t.date] ?? 0) + t.pnl
   }
 
-  const dailyPnLs = Object.values(tradesByDate)
+  const dailyRows = Object.entries(tradesByDate)
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([date, pnl]) => ({ date, pnl }))
+  const dailyPnLs = dailyRows.map((d) => d.pnl)
   const cycleProfit = dailyPnLs.reduce((s, v) => s + v, 0)
 
-  return { cycleProfit, dailyPnLs }
+  return { cycleProfit, dailyPnLs, dailyRows }
 }
 
 export function getPayoutEligibility(
@@ -248,14 +371,157 @@ export function getPayoutEligibility(
   const accountPayouts = payouts.filter((p) => p.accountId === accountId)
   const payoutCount = accountPayouts.length
 
+  // ── Tradeify Select Flex / Daily ──────────────────────────────────────────
+
+  if (account.firm === "Tradeify") {
+    const program = resolveTradeifyProgram(account)
+    const { cycleProfit, dailyRows } = getCycleData(accountId, trades, account, payouts)
+    const startingBalance = getRuleStartingBalance(account)
+
+    if (program === "select_flex") {
+      const winningDays = dailyRows.filter((d) => d.pnl >= rules.winningDayThreshold).length
+      const totalProfitForCap = Math.max(0, stats.totalPnL)
+      const rawPayout = totalProfitForCap * rules.payoutMaxPercent
+      const maxWithdrawable = Math.min(Math.max(0, rawPayout), rules.payoutAbsoluteCap)
+      const traderReceives = maxWithdrawable * rules.payoutSplit
+
+      const conditions = {
+        hasEnoughWinningDays: winningDays >= rules.minProfitDays,
+        hasPositiveCycleProfit: cycleProfit > 0,
+        hasMinWithdrawable: maxWithdrawable >= rules.minPayoutAmount,
+        hasPayoutsRemaining: payoutCount < rules.maxPayouts,
+      }
+      const isEligible = Object.values(conditions).every(Boolean)
+
+      const missingConditions: string[] = []
+      if (!conditions.hasEnoughWinningDays) {
+        const needed = rules.minProfitDays - winningDays
+        missingConditions.push(
+          `${needed} more winning day${needed > 1 ? "s" : ""} ($${rules.winningDayThreshold}+)`,
+        )
+      }
+      if (!conditions.hasPositiveCycleProfit) {
+        missingConditions.push("Cycle profit must be positive")
+      }
+      if (!conditions.hasMinWithdrawable) {
+        missingConditions.push("Estimated payout below minimum")
+      }
+
+      return {
+        isEligible,
+        firm: "Tradeify" as const,
+        tradeifyProgram: "select_flex" as const,
+        conditions,
+        missingConditions,
+        availableToWithdraw: maxWithdrawable,
+        maxWithdrawable,
+        payoutCount,
+        maxPayouts: rules.maxPayouts,
+        cycleProfit,
+        cycleProfitDays: winningDays,
+        winningDays,
+        totalProfitForPayout: totalProfitForCap,
+        minProfitDays: rules.minProfitDays,
+        minDailyProfit: rules.winningDayThreshold,
+        payoutMaxPercent: rules.payoutMaxPercent,
+        payoutAbsoluteCap: rules.payoutAbsoluteCap,
+        payoutSplit: rules.payoutSplit,
+        traderReceives,
+        lucidSplit: maxWithdrawable * (1 - rules.payoutSplit),
+        minPayoutAmount: rules.minPayoutAmount,
+        stats,
+        maxPayoutAllowed: maxWithdrawable,
+        currentPayoutTier: payoutCount + 1,
+        safetyNet: 0,
+        consistencyInfo: getConsistencyInfo(accountId, trades, account, payouts),
+        bufferAmount: 0,
+        aboveBuffer: 0,
+        continuityMax: 0,
+      }
+    }
+
+    if (program === "select_daily") {
+      const bufferLine = startingBalance + rules.bufferAmount
+      const aboveBuffer = Math.max(0, stats.currentBalance - bufferLine)
+      const continuityMax = Math.max(0, cycleProfit * 2)
+      const maxWithdrawable = Math.min(
+        continuityMax,
+        rules.payoutAbsoluteCap,
+        aboveBuffer,
+      )
+      const traderReceives = maxWithdrawable * rules.payoutSplit
+
+      const conditions = {
+        hasPositiveCycleProfit: cycleProfit > 0,
+        isAboveBuffer: stats.currentBalance > bufferLine,
+        hasMinWithdrawable: maxWithdrawable >= rules.minPayoutAmount,
+        hasPayoutsRemaining: payoutCount < rules.maxPayouts,
+      }
+      const isEligible = Object.values(conditions).every(Boolean)
+
+      const missingConditions: string[] = []
+      if (!conditions.hasPositiveCycleProfit) {
+        missingConditions.push("Cycle profit must be positive")
+      }
+      if (!conditions.isAboveBuffer) {
+        missingConditions.push("Below buffer")
+      }
+      if (!conditions.hasMinWithdrawable) {
+        if (aboveBuffer < rules.minPayoutAmount) {
+          const need = rules.minPayoutAmount - maxWithdrawable
+          missingConditions.push(
+            `Need $${need.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} more profit to reach $${rules.minPayoutAmount} minimum payout`,
+          )
+        } else {
+          missingConditions.push("Available above buffer below minimum payout")
+        }
+      }
+
+      return {
+        isEligible,
+        firm: "Tradeify" as const,
+        tradeifyProgram: "select_daily" as const,
+        conditions,
+        missingConditions,
+        availableToWithdraw: maxWithdrawable,
+        maxWithdrawable,
+        payoutCount,
+        maxPayouts: rules.maxPayouts,
+        cycleProfit,
+        cycleProfitDays: 0,
+        minProfitDays: 0,
+        minDailyProfit: 0,
+        payoutMaxPercent: 0,
+        payoutAbsoluteCap: rules.payoutAbsoluteCap,
+        payoutSplit: rules.payoutSplit,
+        traderReceives,
+        lucidSplit: maxWithdrawable * (1 - rules.payoutSplit),
+        minPayoutAmount: rules.minPayoutAmount,
+        stats,
+        maxPayoutAllowed: maxWithdrawable,
+        currentPayoutTier: payoutCount + 1,
+        safetyNet: 0,
+        consistencyInfo: getConsistencyInfo(accountId, trades, account, payouts),
+        bufferAmount: rules.bufferAmount,
+        bufferLine,
+        aboveBuffer,
+        continuityMax,
+      }
+    }
+  }
+
   // ── Lucid cycle-based payout ──────────────────────────────────────────────
 
   if (account.firm === "Lucid") {
     const { cycleProfit, dailyPnLs } = getCycleData(accountId, trades, account, payouts)
     const cycleProfitDays = dailyPnLs.filter((v) => v >= rules.minDailyProfit).length
-    const rawPayout = cycleProfit > 0 ? cycleProfit * rules.payoutMaxPercent : 0
-    const availablePayout = Math.min(rawPayout, rules.payoutAbsoluteCap)
-    const maxWithdrawable = availablePayout >= rules.minPayoutAmount ? availablePayout : 0
+    const rawPayout = Math.max(0, cycleProfit) * rules.payoutMaxPercent
+    const hasPayoutCap = rules.payoutAbsoluteCap > 0
+    const availablePayout = hasPayoutCap
+      ? Math.min(rawPayout, rules.payoutAbsoluteCap)
+      : rawPayout
+    const maxWithdrawable =
+      availablePayout >= rules.minPayoutAmount ? availablePayout : 0
     const traderReceives = maxWithdrawable * rules.payoutSplit
     const lucidSplit = maxWithdrawable * (1 - rules.payoutSplit)
 
@@ -273,7 +539,13 @@ export function getPayoutEligibility(
       missingConditions.push(`${needed} more $${rules.minDailyProfit}+ profit day${needed > 1 ? "s" : ""} this cycle`)
     }
     if (!conditions.hasPositiveCycleProfit) missingConditions.push("Cycle profit must be positive")
-    if (!conditions.hasMinWithdrawable) missingConditions.push(`Below minimum payout ($${rules.minPayoutAmount})`)
+    if (!conditions.hasMinWithdrawable) {
+      missingConditions.push(
+        hasPayoutCap
+          ? `Below minimum payout ($${rules.minPayoutAmount})`
+          : "Cycle profit too low for minimum payout",
+      )
+    }
     if (!conditions.hasPayoutsRemaining) missingConditions.push(`All ${rules.maxPayouts} payouts used`)
 
     return {
@@ -287,6 +559,7 @@ export function getPayoutEligibility(
       maxPayouts: rules.maxPayouts,
       cycleProfit,
       cycleProfitDays,
+      lucidPayoutCapKnown: hasPayoutCap,
       minProfitDays: rules.minProfitDays,
       minDailyProfit: rules.minDailyProfit,
       payoutMaxPercent: rules.payoutMaxPercent,
@@ -313,12 +586,11 @@ export function getPayoutEligibility(
   const maxWithdrawable = Math.min(availableToWithdraw, maxPayoutAllowed)
 
   const conditions = {
-    hasEnoughTradingDays: stats.tradingDays >= rules.minTradingDays,
     hasEnoughProfitDays: consistencyInfo.daysWithMinProfit >= rules.minProfitDays,
     isConsistent: !rules.hasConsistency || consistencyInfo.isValid,
     hasMinBalance: stats.currentBalance >= rules.minBalanceToRequest,
     isAboveSafetyNet: stats.currentBalance > rules.safetyNet,
-    hasMinWithdrawable: availableToWithdraw >= rules.minPayoutAmount,
+    hasMinWithdrawable: maxWithdrawable >= rules.minPayoutAmount,
     hasPayoutsRemaining: payoutCount < rules.maxPayouts,
   }
   const isEligible = Object.values(conditions).every(Boolean)
@@ -326,10 +598,22 @@ export function getPayoutEligibility(
   const missingConditions: string[] = []
   if (!conditions.hasEnoughProfitDays) {
     const needed = rules.minProfitDays - consistencyInfo.daysWithMinProfit
-    missingConditions.push(`${needed} more $${rules.minDailyProfit}+ profit day${needed > 1 ? "s" : ""}`)
+    missingConditions.push(`${needed} more $${rules.minDailyProfit}+ qualifying day${needed > 1 ? "s" : ""}`)
   }
   if (!conditions.isConsistent) {
-    missingConditions.push(`$${consistencyInfo.additionalProfitNeeded.toLocaleString()} more profit for consistency`)
+    if (isApexPaConsistency(account)) {
+      if (consistencyInfo.totalProfit <= 0) {
+        missingConditions.push("No net profits since last payout")
+      } else {
+        missingConditions.push("Largest day exceeds 50% of total profit")
+      }
+    } else if (consistencyInfo.additionalProfitNeeded > 0) {
+      missingConditions.push(
+        `$${consistencyInfo.additionalProfitNeeded.toLocaleString()} more profit for consistency`,
+      )
+    } else {
+      missingConditions.push("Consistency rule not met")
+    }
   }
   if (!conditions.hasMinBalance) {
     const needed = rules.minBalanceToRequest - stats.currentBalance
@@ -339,7 +623,7 @@ export function getPayoutEligibility(
     missingConditions.push(`Below minimum payout amount ($${rules.minPayoutAmount})`)
   }
   if (!conditions.hasPayoutsRemaining) {
-    missingConditions.push(`All ${rules.maxPayouts} payouts have been used`)
+    missingConditions.push("Maximum payouts reached")
   }
 
   return {

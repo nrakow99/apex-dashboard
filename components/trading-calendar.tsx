@@ -7,7 +7,8 @@ import { Button } from "@/components/ui/button"
 import { ChevronLeft, ChevronRight, X, Star } from "lucide-react"
 import { cn } from "@/lib/utils"
 import type { Account, DailyPnL, Trade } from "@/lib/types"
-import { getAccountRules } from "@/lib/rules"
+import { getAccountRules, resolveTradeifyProgram } from "@/lib/rules"
+import { getRuleStartingBalance } from "@/lib/account-quantity"
 import { buildMetaMapFromTrades, DIRECTION_BADGE_STYLES, DIRECTION_LABELS, GRADE_STYLES, type TradeMeta } from "@/lib/trade-meta"
 import { resolveSession, SESSION_LABELS } from "@/lib/sessions"
 
@@ -35,11 +36,47 @@ export function TradingCalendar({ account, dailyData, trades }: TradingCalendarP
   }, [trades])
 
   const rules = getAccountRules(account)
-  // A qualifying day only makes sense when the account has payout rules and a
-  // defined profit-day threshold (PA accounts only — never Evals or Live).
+  const tradeifyProgram = resolveTradeifyProgram(account)
+  const isTradeifyFlex = account.firm === "Tradeify" && tradeifyProgram === "select_flex"
+  const isTradeifyEval =
+    account.firm === "Tradeify" &&
+    (tradeifyProgram === "select_eval" || account.type === "Eval")
+
+  const isEvalAccount = account.type === "Eval"
   const showQualifyingStars =
-    rules.hasPayouts && rules.minProfitDays > 0 && rules.minDailyProfit > 0
-  const minQualifyingProfit = rules.minDailyProfit
+    !isEvalAccount &&
+    ((account.firm === "Apex" &&
+      rules.hasPayouts &&
+      rules.minProfitDays > 0 &&
+      rules.minDailyProfit > 0) ||
+      (account.firm === "Lucid" &&
+        account.type === "PA" &&
+        rules.hasPayouts &&
+        rules.minProfitDays > 0) ||
+      isTradeifyFlex)
+  const minQualifyingProfit = isTradeifyFlex
+    ? rules.winningDayThreshold
+    : rules.minDailyProfit
+
+  const tradeifyConsistencyWarnDates = useMemo(() => {
+    if (!isTradeifyEval) return new Set<string>()
+    const sorted = [...dailyData].sort((a, b) => a.date.localeCompare(b.date))
+    let cumulative = 0
+    const warn = new Set<string>()
+    for (const d of sorted) {
+      cumulative += d.pnl
+      if (cumulative > 0 && d.pnl > 0 && d.pnl > cumulative * 0.4) {
+        warn.add(d.date)
+      }
+    }
+    return warn
+  }, [dailyData, isTradeifyEval])
+
+  const startingBalance = getRuleStartingBalance(account)
+  const bufferLine =
+    account.firm === "Tradeify" && tradeifyProgram === "select_daily"
+      ? startingBalance + rules.bufferAmount
+      : 0
 
   const getDaysInMonth = (date: Date) => {
     return new Date(date.getFullYear(), date.getMonth() + 1, 0).getDate()
@@ -162,6 +199,16 @@ export function TradingCalendar({ account, dailyData, trades }: TradingCalendarP
             dayStats.pnl > 0 &&
             dayStats.pnl >= minQualifyingProfit
 
+          const dailyPayoutReady =
+            account.firm === "Tradeify" &&
+            tradeifyProgram === "select_daily" &&
+            dayStats != null &&
+            dayStats.pnl > 0 &&
+            (dailyData.find((d) => d.date === dateKey)?.balance ?? 0) > bufferLine
+
+          const consistencyWarn =
+            isTradeifyEval && hasTrades && tradeifyConsistencyWarnDates.has(dateKey)
+
           return (
             <button
               key={day}
@@ -194,12 +241,27 @@ export function TradingCalendar({ account, dailyData, trades }: TradingCalendarP
                 // empty weekend
                 !hasTrades && isWeekend && "cursor-default border border-white/[0.025] bg-[rgba(10,10,10,0.12)] opacity-60",
                 isSelected && "ring-2 ring-primary ring-offset-1 ring-offset-background sm:ring-offset-2",
+                consistencyWarn &&
+                  "ring-1 ring-amber-500/70 ring-offset-1 ring-offset-background",
                 hasTrades && "cursor-pointer active:scale-[0.96] transition-transform",
               )}
             >
-              {qualifiesForPayout && (
+              {consistencyWarn && !qualifiesForPayout && !dailyPayoutReady && (
+                <div
+                  className="absolute left-0.5 top-0.5 h-1.5 w-1.5 rounded-full bg-amber-500 sm:h-2 sm:w-2"
+                  title="Day exceeds 40% consistency share"
+                />
+              )}
+              {(qualifiesForPayout || dailyPayoutReady) && (
                 <div className="absolute right-0.5 top-0.5 sm:right-1 sm:top-1 lg:right-0.5 lg:top-0.5">
-                  <Star className="h-2 w-2 fill-amber-400 text-amber-400 sm:h-3 sm:w-3" />
+                  <Star
+                    className={cn(
+                      "h-2 w-2 sm:h-3 sm:w-3",
+                      dailyPayoutReady && !qualifiesForPayout
+                        ? "fill-emerald-400 text-emerald-400"
+                        : "fill-amber-400 text-amber-400",
+                    )}
+                  />
                 </div>
               )}
               <span

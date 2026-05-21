@@ -19,8 +19,9 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import { Plus } from "lucide-react"
-import type { Account, AccountType, Firm, DrawdownType } from "@/lib/types"
+import type { Account, AccountType, Firm, DrawdownType, TradeifyProgram } from "@/lib/types"
 import { getAccountRules } from "@/lib/rules"
+import { defaultTradeifyAccountName } from "@/lib/tradeify-rules"
 import {
   formatAccountBundleHelper,
   getPortfolioBuyingPower,
@@ -73,14 +74,25 @@ export function AddAccountModal({ onAddAccount }: AddAccountModalProps) {
     drawdownType: "EOD" as DrawdownType,
     accountSize: 50000,
     quantity: 1,
+    program: "select_eval" as TradeifyProgram,
   })
 
-  // Auto-derive rules whenever firm/type/drawdown/size changes
-  const rules = getAccountRules({ ...form, maxDrawdown: 0, dailyLossLimit: 0 })
+  const isTradeify = form.firm === "Tradeify"
+  const tradeifyType: AccountType =
+    form.program === "select_eval" ? "Eval" : "PA"
 
-  // Reset drawdown type when Lucid is selected (Lucid defaults to EOD)
+  const rules = getAccountRules({
+    firm: form.firm,
+    type: isTradeify ? tradeifyType : form.type,
+    drawdownType: isTradeify ? "EOD" : form.drawdownType,
+    accountSize: form.accountSize,
+    program: isTradeify ? form.program : undefined,
+    maxDrawdown: 0,
+    dailyLossLimit: 0,
+  })
+
   useEffect(() => {
-    if (form.firm === "Lucid" && form.drawdownType === "Intraday") {
+    if ((form.firm === "Lucid" || form.firm === "Tradeify") && form.drawdownType === "Intraday") {
       setForm((f) => ({ ...f, drawdownType: "EOD" }))
     }
   }, [form.firm, form.drawdownType])
@@ -91,14 +103,20 @@ export function AddAccountModal({ onAddAccount }: AddAccountModalProps) {
   const qty = Math.max(1, Math.min(MAX_ACCOUNT_QUANTITY, Math.floor(form.quantity) || 1))
   const portfolioBuyingPower = getPortfolioBuyingPower({ accountSize: form.accountSize, quantity: qty })
 
+  const defaultName = () => {
+    if (isTradeify) return defaultTradeifyAccountName(form.accountSize, form.program)
+    return `${form.firm} ${(form.accountSize / 1000).toFixed(0)}K ${isTradeify ? tradeifyType : form.type}`
+  }
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
+    const accountType = isTradeify ? tradeifyType : form.type
     onAddAccount({
-      name: form.name || `${form.firm} ${(form.accountSize / 1000).toFixed(0)}K ${form.type}`,
+      name: form.name || defaultName(),
       firm: form.firm,
-      type: form.type,
+      type: accountType,
       status: "Active",
-      drawdownType: form.drawdownType,
+      drawdownType: isTradeify ? "EOD" : form.drawdownType,
       accountSize: form.accountSize,
       quantity: qty,
       balance: form.accountSize,
@@ -106,13 +124,23 @@ export function AddAccountModal({ onAddAccount }: AddAccountModalProps) {
       maxBalance: form.accountSize,
       profitTarget: rules.hasProfitTarget ? rules.profitTarget : undefined,
       maxDrawdown: rules.maxDrawdown,
-      dailyLossLimit: rules.dailyLossLimit,
+      dailyLossLimit: rules.hasDLL ? rules.dailyLossLimit : 0,
+      program: isTradeify ? form.program : undefined,
     })
     setOpen(false)
-    setForm({ name: "", firm: "Apex", type: "Eval", drawdownType: "EOD", accountSize: 50000, quantity: 1 })
+    setForm({
+      name: "",
+      firm: "Apex",
+      type: "Eval",
+      drawdownType: "EOD",
+      accountSize: 50000,
+      quantity: 1,
+      program: "select_eval",
+    })
   }
 
   const showDrawdownSelector = form.firm === "Apex"
+  const showApexTypeSelector = !isTradeify
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
@@ -143,25 +171,58 @@ export function AddAccountModal({ onAddAccount }: AddAccountModalProps) {
           <div className="space-y-2">
             <Label>Firm</Label>
             <SegmentedControl
-              options={[{ value: "Apex", label: "Apex" }, { value: "Lucid", label: "Lucid" }]}
+              options={[
+                { value: "Apex", label: "Apex" },
+                { value: "Lucid", label: "Lucid" },
+                { value: "Tradeify", label: "Tradeify" },
+              ]}
               value={form.firm}
-              onChange={(v) => set("firm", v)}
+              onChange={(v) => {
+                set("firm", v)
+                if (v === "Tradeify") {
+                  setForm((f) => ({
+                    ...f,
+                    firm: v,
+                    drawdownType: "EOD",
+                    program: "select_eval",
+                  }))
+                }
+              }}
             />
           </div>
 
-          {/* Account Type */}
-          <div className="space-y-2">
-            <Label>Account Type</Label>
-            <SegmentedControl
-              options={[
-                { value: "Eval", label: "Eval" },
-                { value: "PA", label: "PA / Funded" },
-                { value: "Live", label: "Live" },
-              ]}
-              value={form.type}
-              onChange={(v) => set("type", v)}
-            />
-          </div>
+          {isTradeify ? (
+            <div className="space-y-2">
+              <Label>Program</Label>
+              <Select
+                value={form.program}
+                onValueChange={(v) => set("program", v as TradeifyProgram)}
+              >
+                <SelectTrigger className="bg-background h-9">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="select_eval">Select Evaluation</SelectItem>
+                  <SelectItem value="select_flex">Select Flex Funded</SelectItem>
+                  <SelectItem value="select_daily">Select Daily Funded</SelectItem>
+                </SelectContent>
+              </Select>
+              <p className="text-[11px] text-muted-foreground">Tradeify Select uses EOD drawdown only.</p>
+            </div>
+          ) : showApexTypeSelector ? (
+            <div className="space-y-2">
+              <Label>Account Type</Label>
+              <SegmentedControl
+                options={[
+                  { value: "Eval", label: "Eval" },
+                  { value: "PA", label: "PA / Funded" },
+                  { value: "Live", label: "Live" },
+                ]}
+                value={form.type}
+                onChange={(v) => set("type", v)}
+              />
+            </div>
+          ) : null}
 
           <div className="grid grid-cols-2 gap-3">
             {/* Account Size */}

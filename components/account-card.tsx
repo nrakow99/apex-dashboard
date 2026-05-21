@@ -8,7 +8,8 @@ import { cn } from "@/lib/utils"
 import type { Account, Trade, Payout } from "@/lib/types"
 import { calculateAccountStats, getConsistencyInfo, getPayoutEligibility } from "@/lib/storage"
 import { applyIntradayManualDrawdownToStats } from "@/lib/intraday-manual-drawdown"
-import { getAccountRules } from "@/lib/rules"
+import { getAccountRules, resolveTradeifyProgram } from "@/lib/rules"
+import { tradeifyProgramLabel } from "@/lib/tradeify-rules"
 import {
   getRuleStartingBalance,
   getAccountQuantity,
@@ -151,7 +152,9 @@ export function AccountCard({
     minPayoutBalanceTarget != null ? Math.max(0, minPayoutBalanceTarget - stats.currentBalance) : null
 
   const lucidEligibility =
-    account.firm === "Lucid" && account.type === "PA" && rules.hasPayouts
+    (account.firm === "Lucid" || account.firm === "Tradeify") &&
+    account.type === "PA" &&
+    rules.hasPayouts
       ? getPayoutEligibility(account.id, trades, account, payouts)
       : null
 
@@ -181,7 +184,9 @@ export function AccountCard({
       : null
 
   const isPayoutEligible =
-    (lucidEligibility?.isEligible ?? false) || (apexPayoutEligibility?.isEligible ?? false)
+    (lucidEligibility?.isEligible ?? false) ||
+    (apexPayoutEligibility?.isEligible ?? false) ||
+    (lucidEligibility?.firm === "Tradeify" && lucidEligibility.isEligible)
 
   const health = getAccountHealth({
     account,
@@ -277,22 +282,30 @@ export function AccountCard({
               "text-[10px] px-2 py-0.5 premium-pill",
               account.firm === "Apex" && "border-orange-500/50 text-orange-400",
               account.firm === "Lucid" && "border-[#536878]/50 text-[#A0B4BF]",
+              account.firm === "Tradeify" && "border-violet-500/50 text-violet-300",
               !account.firm && "border-orange-500/50 text-orange-400"
             )}
           >
             {account.firm ?? "Apex"}
           </Badge>
-          <Badge
-            variant="outline"
-            className={cn(
-              "text-[10px] px-2 py-0.5 premium-pill",
-              account.type === "Eval" && "border-amber-500/50 text-amber-400",
-              account.type === "PA" && "border-emerald-500/50 text-emerald-400",
-              account.type === "Live" && "border-[#536878]/50 text-[#94AAB8]"
-            )}
-          >
-            {account.type}
-          </Badge>
+          {account.firm === "Tradeify" && resolveTradeifyProgram(account) && (
+            <Badge variant="outline" className="text-[10px] px-2 py-0.5 premium-pill border-violet-500/40 text-violet-300">
+              {tradeifyProgramLabel(resolveTradeifyProgram(account)!)}
+            </Badge>
+          )}
+          {account.firm !== "Tradeify" && (
+            <Badge
+              variant="outline"
+              className={cn(
+                "text-[10px] px-2 py-0.5 premium-pill",
+                account.type === "Eval" && "border-amber-500/50 text-amber-400",
+                account.type === "PA" && "border-emerald-500/50 text-emerald-400",
+                account.type === "Live" && "border-[#536878]/50 text-[#94AAB8]"
+              )}
+            >
+              {account.type}
+            </Badge>
+          )}
           <Badge
             variant="outline"
             className={cn(

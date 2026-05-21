@@ -6,6 +6,9 @@ import { Progress } from "@/components/ui/progress"
 import { cn } from "@/lib/utils"
 import type { Account, DailyPnL } from "@/lib/types"
 import { getAccountRules } from "@/lib/rules"
+import { isApexPaConsistency, isLucidEvalConsistency, isTradeifyEvalConsistency } from "@/lib/storage"
+import { getTradeifyScalingTier } from "@/lib/tradeify-scaling"
+import { resolveTradeifyProgram } from "@/lib/rules"
 import {
   getRuleEngineFloorCardTitle,
   getRuleEngineFloorRowHint,
@@ -82,18 +85,38 @@ function countVisibleRuleCards(
   account: Account,
   rules: ReturnType<typeof getAccountRules>,
   consistencyInfo: ConsistencyInfo | null,
+  tradeifyProgram: ReturnType<typeof resolveTradeifyProgram>,
+  hasApexPaScaling: boolean,
+  hasTradeifyScaling: boolean,
 ): number {
-  let n = 1
+  const effectiveProfitTarget =
+    account.profitTarget ?? (rules.hasProfitTarget ? rules.profitTarget : null)
+
+  let n = 1 // drawdown / floor
   if (rules.hasDLL) n++
-  if (account.type === "Eval" && account.profitTarget) n++
-  if (rules.maxContracts) n++
-  if (rules.hasScaling) n++
-  if (rules.hasConsistency && consistencyInfo) n++
-  if (account.firm !== "Lucid" && account.type === "PA" && rules.minTradingDays > 0) n++
-  if (account.firm !== "Lucid" && account.type === "PA" && consistencyInfo && rules.minProfitDays > 0) n++
-  if (account.firm !== "Lucid" && account.type === "PA" && rules.minBalanceToRequest > 0) n++
-  if (account.firm === "Lucid" && account.type === "PA" && consistencyInfo && rules.minProfitDays > 0) n++
+  if (account.type === "Eval" && rules.hasProfitTarget && effectiveProfitTarget) n++
+  if (account.firm === "Apex" && account.type === "PA" && hasApexPaScaling) n++
+  else if (account.firm === "Tradeify" && account.type === "PA" && hasTradeifyScaling) n++
+  else if (rules.maxContracts) n++
+  if (rules.hasConsistency && consistencyInfo && account.type === "Eval") n++
+  if (account.firm === "Tradeify" && account.type === "Eval" && rules.minTradingDays > 0) n++
+  if (account.firm === "Apex" && account.type === "PA" && consistencyInfo && rules.minProfitDays > 0) n++
+  if (account.firm === "Tradeify" && tradeifyProgram === "select_flex" && account.type === "PA" && rules.minProfitDays > 0) n++
+  if (account.firm === "Lucid" && account.type === "PA" && rules.minProfitDays > 0) n++
+  if (account.firm === "Apex" && account.type === "PA" && rules.minBalanceToRequest > 0) n++
   return n
+}
+
+function ruleStatusSubtitle(account: Account, rules: ReturnType<typeof getAccountRules>): string {
+  if (account.type === "Eval") {
+    return "Pass requirements — profit target, drawdown, and position limits"
+  }
+  if (account.type === "PA" && rules.hasPayouts) {
+    if (account.firm === "Apex") return "Risk limits and payout-day progress (payout rules in Payout Status)"
+    if (account.firm === "Lucid") return "Drawdown and payout-cycle day progress"
+    if (account.firm === "Tradeify") return "Drawdown, scaling, and cycle progress"
+  }
+  return "Drawdown and position limits"
 }
 
 export function RuleEnginePanel({
@@ -107,50 +130,79 @@ export function RuleEnginePanel({
   const effectiveProfitTarget =
     account.profitTarget ?? (rules.hasProfitTarget ? rules.profitTarget : null)
   const lucidQualifyingDaysInCycle =
-    account.firm === "Lucid" && account.type === "PA" && lucidCycleQualifyingDays != null
+    (account.firm === "Lucid" || account.firm === "Tradeify") &&
+    account.type === "PA" &&
+    lucidCycleQualifyingDays != null
       ? lucidCycleQualifyingDays
       : (consistencyInfo?.daysWithMinProfit ?? 0)
+
+  const tradeifyScaling = useMemo(
+    () => getTradeifyScalingTier(account, stats.currentBalance),
+    [account, stats.currentBalance],
+  )
 
   const apexPaScaling = useMemo(
     () => getApexPaScalingTier(account, stats),
     [account, stats],
   )
 
+  const tradeifyProgram = resolveTradeifyProgram(account)
+
   const ruleGridClass = useMemo(() => {
     const r = getAccountRules(account)
-    const count = countVisibleRuleCards(account, r, consistencyInfo)
+    const count = countVisibleRuleCards(
+      account,
+      r,
+      consistencyInfo,
+      tradeifyProgram,
+      !!(account.firm === "Apex" && account.type === "PA" && apexPaScaling),
+      !!(account.firm === "Tradeify" && account.type === "PA" && tradeifyScaling),
+    )
     if (count <= 1) return "grid-cols-1"
     if (count === 2) return "grid-cols-1 sm:grid-cols-2"
     if (count === 3) return "grid-cols-1 md:grid-cols-3"
     if (count === 4) return "grid-cols-1 sm:grid-cols-2"
     return "grid-cols-1 md:grid-cols-2 xl:grid-cols-3"
-  }, [account, consistencyInfo])
+  }, [account, consistencyInfo, tradeifyProgram, apexPaScaling, tradeifyScaling])
 
-  // Daily loss (today only)
+  // Daily loss (today only); EOD PA uses tier DLL from scaling when available
   const today = dailyData[dailyData.length - 1]
   const todayPnL = today?.pnl ?? 0
-  const dailyLossRemaining = rules.dailyLossLimit + Math.min(0, todayPnL)
+  const effectiveDll =
+    account.firm === "Apex" && account.type === "PA" && apexPaScaling
+      ? apexPaScaling.dailyLossLimit
+      : rules.dailyLossLimit
+  const dailyLossRemaining = effectiveDll + Math.min(0, todayPnL)
   const dailyLossStatus: "good" | "warning" | "danger" =
-    todayPnL >= -rules.dailyLossLimit * 0.8 ? "good" :
-    todayPnL >= -rules.dailyLossLimit ? "warning" : "danger"
+    !rules.hasDLL
+      ? "good"
+      : todayPnL >= -effectiveDll * 0.8
+        ? "good"
+        : todayPnL >= -effectiveDll
+          ? "warning"
+          : "danger"
 
   // Drawdown / floor
   const drawdownPercent = (stats.drawdownRemaining / account.maxDrawdown) * 100
   const drawdownStatus: "good" | "warning" | "danger" =
     drawdownPercent > 50 ? "good" : drawdownPercent > 20 ? "warning" : "danger"
 
-  const firmLabel = account.firm === "Lucid" ? "Lucid" : account.firm ?? "Apex"
+  const firmLabel = account.firm ?? "Apex"
 
   return (
     <Card className="p-2.5 sm:p-5 rounded-[22px] sm:rounded-[26px] glass-card">
-      <div className="flex items-center justify-between mb-2 sm:mb-5">
-        <h2 className="text-base sm:text-lg font-semibold">Rule Status</h2>
-        <div className="flex items-center gap-2">
+      <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-2 mb-2 sm:mb-5">
+        <div>
+          <h2 className="text-base sm:text-lg font-semibold">Rule Status</h2>
+          <p className="text-[11px] text-muted-foreground mt-0.5 max-w-md">{ruleStatusSubtitle(account, rules)}</p>
+        </div>
+        <div className="flex items-center gap-2 shrink-0">
           <span className={cn(
             "text-xs font-medium px-2.5 py-1 rounded-full border",
-            account.firm === "Lucid"
-              ? "bg-[#536878]/[0.12] text-[#A0B4BF] border-[#536878]/30"
-              : "bg-orange-500/10 text-orange-400 border-orange-500/30"
+            account.firm === "Lucid" && "bg-[#536878]/[0.12] text-[#A0B4BF] border-[#536878]/30",
+            account.firm === "Tradeify" && "bg-violet-500/10 text-violet-300 border-violet-500/30",
+            account.firm === "Apex" && "bg-orange-500/10 text-orange-400 border-orange-500/30",
+            !account.firm && "bg-orange-500/10 text-orange-400 border-orange-500/30"
           )}>
             {firmLabel}
           </span>
@@ -208,6 +260,11 @@ export function RuleEnginePanel({
                 )}
               />
             </div>
+            {account.firm === "Apex" && account.type === "PA" && account.drawdownType === "EOD" && (
+              <p className="text-[10px] text-muted-foreground/70 pt-1 border-t border-border/40">
+                Inactivity rules may apply per Apex policy after extended non-trading periods.
+              </p>
+            )}
           </div>
         </RuleCard>
 
@@ -228,7 +285,10 @@ export function RuleEnginePanel({
               <div className="flex justify-between">
                 <span className="text-muted-foreground">Max Loss</span>
                 <span className="font-mono text-muted-foreground">
-                  ${rules.dailyLossLimit.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                  ${effectiveDll.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                  {apexPaScaling && account.drawdownType === "EOD" && (
+                    <span className="text-[10px] text-muted-foreground/70 ml-1">· Tier {apexPaScaling.level}</span>
+                  )}
                 </span>
               </div>
             </div>
@@ -236,7 +296,7 @@ export function RuleEnginePanel({
         )}
 
         {/* ── Profit Target (Eval only) ─────────────────────────────────────── */}
-        {account.type === "Eval" && effectiveProfitTarget && (
+        {account.type === "Eval" && rules.hasProfitTarget && effectiveProfitTarget && (
           <RuleCard title="Profit Goal">
             <div className="space-y-1.5 text-sm">
               <div className="flex justify-between">
@@ -258,7 +318,7 @@ export function RuleEnginePanel({
 
         {/* ── Position Limit / Apex PA scaling ───────────────────────────── */}
         {account.firm === "Apex" && account.type === "PA" && apexPaScaling ? (
-          <RuleCard title="Position Limit">
+          <RuleCard title={account.drawdownType === "EOD" ? "Position Scaling" : "Position Limit"}>
             <div className="space-y-2 text-sm">
               <div className="flex justify-between gap-3">
                 <span className="text-muted-foreground">Current Tier</span>
@@ -270,12 +330,14 @@ export function RuleEnginePanel({
                   {apexPaScaling.maxContracts} {apexPaScaling.maxContracts === 1 ? "contract" : "contracts"}
                 </span>
               </div>
-              <div className="flex justify-between gap-3">
-                <span className="text-muted-foreground">Daily Loss Limit</span>
-                <span className="font-mono font-medium">
-                  ${apexPaScaling.dailyLossLimit.toLocaleString()}
-                </span>
-              </div>
+              {account.drawdownType === "EOD" && (
+                <div className="flex justify-between gap-3">
+                  <span className="text-muted-foreground">Tier Daily Loss Limit</span>
+                  <span className="font-mono font-medium">
+                    ${apexPaScaling.dailyLossLimit.toLocaleString()}
+                  </span>
+                </div>
+              )}
               <div className="flex justify-between gap-3 border-t border-border/40 pt-2">
                 <span className="text-muted-foreground">Current Profit</span>
                 <span className="font-mono font-medium text-emerald-400/95">
@@ -314,6 +376,30 @@ export function RuleEnginePanel({
               )}
             </div>
           </RuleCard>
+        ) : account.firm === "Tradeify" && account.type === "PA" && tradeifyScaling ? (
+          <RuleCard title="Position Scaling">
+            <div className="space-y-2 text-sm">
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">Current Tier</span>
+                <span className="font-mono font-medium">{tradeifyScaling.currentContracts}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">Account Profit</span>
+                <span className="font-mono text-emerald-400/95">
+                  ${tradeifyScaling.profit.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                </span>
+              </div>
+              {tradeifyScaling.nextTier ? (
+                <div className="text-xs text-muted-foreground pt-1 border-t border-border/40">
+                  Next: {tradeifyScaling.nextTier.contracts} at +$
+                  {tradeifyScaling.nextTier.minProfit.toLocaleString()} (
+                  ${tradeifyScaling.profitToNext.toLocaleString()} to go)
+                </div>
+              ) : (
+                <div className="text-xs text-emerald-500/90 pt-1">Max tier reached</div>
+              )}
+            </div>
+          </RuleCard>
         ) : (
           rules.maxContracts && (
             <RuleCard title="Position Limit">
@@ -327,39 +413,27 @@ export function RuleEnginePanel({
           )
         )}
 
-        {/* ── Scaling Plan (Lucid PA) ───────────────────────────────────────── */}
-        {rules.hasScaling && (
-          <RuleCard title="Scaling Plan">
-            <div className="space-y-1 text-sm">
-              <div className="flex justify-between">
-                <span className="text-muted-foreground">Status</span>
-                <span className="font-medium text-emerald-500">Active</span>
-              </div>
-              {rules.maxContracts && (
-                <div className="flex justify-between">
-                  <span className="text-muted-foreground">Current Max</span>
-                  <span className="font-mono">{rules.maxContracts}</span>
-                </div>
-              )}
-            </div>
-          </RuleCard>
-        )}
-
         {/* ── Consistency Rule (only when applicable) ──────────────────────── */}
-        {rules.hasConsistency && consistencyInfo && (
+        {rules.hasConsistency && consistencyInfo && account.type === "Eval" && (
           <RuleCard
             title={`Consistency Rule (${rules.consistencyPercent}%)`}
-            status={consistencyInfo.isValid ? "good" : "warning"}
+            status={consistencyInfo.isValid ? "good" : (isApexPaConsistency(account) || isLucidEvalConsistency(account) || isTradeifyEvalConsistency(account)) ? "danger" : "warning"}
           >
             <div className="space-y-1 text-sm">
               <div className="flex justify-between">
                 <span className="text-muted-foreground">Largest Day</span>
-                <span className={cn("font-mono", !consistencyInfo.isValid && "text-amber-500")}>
+                <span className={cn("font-mono", !consistencyInfo.isValid && "text-red-400")}>
                   ${consistencyInfo.largestWinningDay.toLocaleString(undefined, { minimumFractionDigits: 2 })}
                 </span>
               </div>
               <div className="flex justify-between">
-                <span className="text-muted-foreground">Total Profit</span>
+                <span className="text-muted-foreground">
+                  {isLucidEvalConsistency(account)
+                    ? "Account Profit"
+                    : isTradeifyEvalConsistency(account)
+                      ? "Total Net Profit"
+                      : "Total Profit"}
+                </span>
                 <span className="font-mono">${consistencyInfo.totalProfit.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
               </div>
               <div className="flex justify-between">
@@ -368,21 +442,57 @@ export function RuleEnginePanel({
               </div>
               <div className="flex justify-between pt-1.5 border-t border-border/50 mt-1.5">
                 <span className="text-muted-foreground">Status</span>
-                <span className={cn("font-medium", consistencyInfo.isValid ? "text-emerald-500" : "text-amber-500")}>
-                  {consistencyInfo.isValid ? "Compliant" : "Not compliant"}
+                <span className={cn("font-medium", consistencyInfo.isValid ? "text-emerald-500" : "text-red-400")}>
+                  {consistencyInfo.isValid ? "Passed" : "Failed"}
                 </span>
               </div>
               {!consistencyInfo.isValid && consistencyInfo.additionalProfitNeeded > 0 && (
-                <div className="text-xs text-amber-500 pt-1">
-                  Need ${consistencyInfo.additionalProfitNeeded.toLocaleString(undefined, { minimumFractionDigits: 2 })} more profit
+                <div className={cn("text-xs pt-1", (isApexPaConsistency(account) || isLucidEvalConsistency(account)) ? "text-red-400/90" : "text-amber-500")}>
+                  Need ${consistencyInfo.additionalProfitNeeded.toLocaleString(undefined, { minimumFractionDigits: 2 })} more profit to restore compliance
+                </div>
+              )}
+              {!consistencyInfo.isValid && consistencyInfo.totalProfit <= 0 && isApexPaConsistency(account) && (
+                <div className="text-xs text-red-400/90 pt-1">
+                  No net profits since last payout
+                </div>
+              )}
+              {!consistencyInfo.isValid && consistencyInfo.totalProfit <= 0 && isLucidEvalConsistency(account) && (
+                <div className="text-xs text-red-400/90 pt-1">
+                  Account profit must be positive for consistency
+                </div>
+              )}
+              {!consistencyInfo.isValid && consistencyInfo.totalProfit <= 0 && isTradeifyEvalConsistency(account) && (
+                <div className="text-xs text-red-400/90 pt-1">
+                  Total net profit must be positive for consistency
                 </div>
               )}
             </div>
           </RuleCard>
         )}
 
+        {/* ── Tradeify Select Eval: Trading Days ───────────────────────────── */}
+        {account.firm === "Tradeify" && account.type === "Eval" && rules.minTradingDays > 0 && (
+          <RuleCard title="Trading Days">
+            <div className="space-y-1.5">
+              <div className="flex justify-between text-sm">
+                <span className="text-muted-foreground">Days Traded</span>
+                <span className={cn(
+                  "font-mono font-bold",
+                  stats.tradingDays >= rules.minTradingDays ? "text-emerald-500" : "text-amber-500"
+                )}>
+                  {stats.tradingDays} / {rules.minTradingDays}
+                </span>
+              </div>
+              <Progress
+                value={(stats.tradingDays / rules.minTradingDays) * 100}
+                className={cn("h-1.5", stats.tradingDays >= rules.minTradingDays && "[&>div]:bg-emerald-500")}
+              />
+            </div>
+          </RuleCard>
+        )}
+
         {/* ── Apex PA: Trading Days ─────────────────────────────────────────── */}
-        {account.firm !== "Lucid" && account.type === "PA" && rules.minTradingDays > 0 && (
+        {account.firm !== "Lucid" && account.firm !== "Tradeify" && account.type === "PA" && rules.minTradingDays > 0 && (
           <RuleCard title="Trading Days">
             <div className="space-y-1.5">
               <div className="flex justify-between text-sm">
@@ -403,8 +513,11 @@ export function RuleEnginePanel({
         )}
 
         {/* ── Apex PA: Qualifying profit days ──────────────────────────────── */}
-        {account.firm !== "Lucid" && account.type === "PA" && consistencyInfo && rules.minProfitDays > 0 && (
-          <RuleCard title={`$${rules.minDailyProfit}+ Profit Days`}>
+        {account.firm === "Apex" && account.type === "PA" && consistencyInfo && rules.minProfitDays > 0 && (
+          <RuleCard title={`Qualifying Days ($${rules.minDailyProfit}+)`}>
+            <p className="text-[11px] text-muted-foreground leading-snug mb-2">
+              Payout eligibility details (consistency, balance, tiers) are in Payout Status.
+            </p>
             <div className="space-y-1.5">
               <div className="flex justify-between text-sm">
                 <span className="text-muted-foreground">Qualifying Days</span>
@@ -424,14 +537,37 @@ export function RuleEnginePanel({
         )}
 
         {/* ── LucidFlex PA: qualifying payout days (cycle) — no Apex consistency gate ─ */}
-        {account.firm === "Lucid" && account.type === "PA" && consistencyInfo && rules.minProfitDays > 0 && (
-          <RuleCard title={`LucidFlex · $${rules.minDailyProfit}+ days`}>
+        {account.firm === "Tradeify" && tradeifyProgram === "select_flex" && account.type === "PA" && rules.minProfitDays > 0 && (
+          <RuleCard title={`Winning Days ($${rules.winningDayThreshold}+)`}>
+            <p className="text-[11px] text-muted-foreground leading-snug mb-2">
+              Five winning days this cycle · payout amount in Payout Status.
+            </p>
+            <div className="space-y-1.5">
+              <div className="flex justify-between text-sm">
+                <span className="text-muted-foreground">Winning Days</span>
+                <span className={cn(
+                  "font-mono font-bold",
+                  lucidQualifyingDaysInCycle >= rules.minProfitDays ? "text-emerald-500" : "text-amber-500"
+                )}>
+                  {lucidQualifyingDaysInCycle} / {rules.minProfitDays}
+                </span>
+              </div>
+              <Progress
+                value={(lucidQualifyingDaysInCycle / rules.minProfitDays) * 100}
+                className={cn("h-1.5", lucidQualifyingDaysInCycle >= rules.minProfitDays && "[&>div]:bg-emerald-500")}
+              />
+            </div>
+          </RuleCard>
+        )}
+
+        {account.firm === "Lucid" && account.type === "PA" && rules.minProfitDays > 0 && (
+          <RuleCard title={`Payout Days ($${rules.minDailyProfit}+)`}>
             <div className="space-y-1.5">
               <p className="text-[11px] text-muted-foreground leading-snug">
-                Five payout-qualifying days per cycle (positive cycle profit required for payout eligibility).
+                Five separate ${rules.minDailyProfit}+ profit days this cycle · no minimum balance to request.
               </p>
               <div className="flex justify-between text-sm">
-                <span className="text-muted-foreground">Qualifying days (this cycle)</span>
+                <span className="text-muted-foreground">Payout Days</span>
                 <span className={cn(
                   "font-mono font-bold",
                   lucidQualifyingDaysInCycle >= rules.minProfitDays ? "text-emerald-500" : "text-amber-500"
@@ -448,11 +584,14 @@ export function RuleEnginePanel({
         )}
 
         {/* ── Apex PA: Min payout balance ───────────────────────────────────── */}
-        {account.firm !== "Lucid" && account.type === "PA" && rules.minBalanceToRequest > 0 && (
-          <RuleCard title="Min Payout Balance">
+        {account.firm === "Apex" && account.type === "PA" && rules.minBalanceToRequest > 0 && (
+          <RuleCard title="Minimum Balance">
+            <p className="text-[11px] text-muted-foreground leading-snug mb-2">
+              Apex PA balance required to request a payout (see Payout Status for safety net).
+            </p>
             <div className="space-y-1.5 text-sm">
               <div className="flex justify-between">
-                <span className="text-muted-foreground">Target</span>
+                <span className="text-muted-foreground">Minimum Balance</span>
                 <span className={cn(
                   "font-mono font-bold",
                   stats.currentBalance >= rules.minBalanceToRequest ? "text-emerald-500" : "text-amber-500"

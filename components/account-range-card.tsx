@@ -27,7 +27,7 @@ export function shouldShowAccountRangeCard(account: Account): boolean {
   if (account.type === "Eval") return true
   if (effectiveProfitTarget != null && effectiveProfitTarget > 0) return true
   if (account.type === "PA" && rules.minBalanceToRequest > 0) return true
-  if (account.firm === "Lucid" && account.type === "PA") return true
+  if ((account.firm === "Lucid" || account.firm === "Tradeify") && account.type === "PA") return true
   return false
 }
 
@@ -40,7 +40,10 @@ export function AccountRangeCard({ account, stats }: AccountRangeCardProps) {
   const rules = getAccountRules(account)
   const startingBalance = getRuleStartingBalance(account)
   const lucidFlex = rules.lucidFlexFloor
-  const isLucidFlexPa = account.firm === "Lucid" && account.type === "PA" && lucidFlex != null
+  const isLucidFlexPa =
+    (account.firm === "Lucid" || account.firm === "Tradeify") &&
+    account.type === "PA" &&
+    lucidFlex != null
   const isLucidPaOther = account.firm === "Lucid" && account.type === "PA" && lucidFlex == null
 
   const effectiveProfitTarget = useMemo(() => {

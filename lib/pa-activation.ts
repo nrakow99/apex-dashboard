@@ -1,5 +1,6 @@
-import type { Account, Trade, Payout } from "@/lib/types"
+import type { Account, Trade, Payout, TradeifyProgram } from "@/lib/types"
 import { getAccountRules } from "@/lib/rules"
+import { defaultTradeifyAccountName } from "@/lib/tradeify-rules"
 import { calculateAccountStats, getConsistencyInfo } from "@/lib/storage"
 import { getAccountQuantity, getRuleStartingBalance } from "@/lib/account-quantity"
 import { applyIntradayManualDrawdownToStats } from "@/lib/intraday-manual-drawdown"
@@ -41,14 +42,24 @@ export function isEvalEligibleForPaActivation(
     consistencyOk = ci.isValid
   }
 
+  const fullStats = calculateAccountStats(account, trades, payouts)
+  const daysOk =
+    rules.minTradingDays <= 0 || fullStats.tradingDays >= rules.minTradingDays
+
   const profitOk = stats.totalPnL >= target
   const safeOk = stats.isSafe
   const markedPassed = account.status === "Passed"
 
-  return markedPassed || (profitOk && safeOk && consistencyOk)
+  return markedPassed || (profitOk && safeOk && consistencyOk && daysOk)
 }
 
-export function defaultPaAccountName(account: Account): string {
+export function defaultPaAccountName(
+  account: Account,
+  tradeifyProgram?: "select_flex" | "select_daily",
+): string {
+  if (account.firm === "Tradeify" && tradeifyProgram) {
+    return defaultTradeifyAccountName(account.accountSize, tradeifyProgram)
+  }
   const k = account.accountSize >= 1000 ? `${Math.round(account.accountSize / 1000)}K` : String(account.accountSize)
   return `${account.firm} ${k} PA`
 }
@@ -62,12 +73,19 @@ export function buildEvalToPaConversionUpdates(
   name: string,
   activatedAtIso: string,
   activationStartDate: string,
+  tradeifyProgram?: "select_flex" | "select_daily",
 ) {
+  const program: TradeifyProgram | undefined =
+    evalAccount.firm === "Tradeify"
+      ? tradeifyProgram ?? "select_flex"
+      : undefined
+
   const paRules = getAccountRules({
     firm: evalAccount.firm,
     type: "PA",
     drawdownType: evalAccount.drawdownType,
     accountSize: evalAccount.accountSize,
+    program,
   })
   const size = evalAccount.accountSize
   const quantity = getAccountQuantity(evalAccount)
@@ -89,16 +107,26 @@ export function buildEvalToPaConversionUpdates(
     activatedAt: activatedAtIso,
     activationStartDate,
     previousType: "Eval",
+    program: program ?? null,
   }
 }
 
 /** Short bullet lines for the activation modal (display only). */
-export function getPaActivationRuleSummary(evalAccount: Account): string[] {
+export function getPaActivationRuleSummary(
+  evalAccount: Account,
+  tradeifyProgram?: "select_flex" | "select_daily",
+): string[] {
+  const program: TradeifyProgram | undefined =
+    evalAccount.firm === "Tradeify"
+      ? tradeifyProgram ?? "select_flex"
+      : undefined
+
   const paRules = getAccountRules({
     firm: evalAccount.firm,
     type: "PA",
     drawdownType: evalAccount.drawdownType,
     accountSize: evalAccount.accountSize,
+    program,
   })
   const lines: string[] = [
     `Max drawdown: $${paRules.maxDrawdown.toLocaleString()}`,
@@ -115,6 +143,18 @@ export function getPaActivationRuleSummary(evalAccount: Account): string[] {
       lines.push(
         `Cycle: ${paRules.minProfitDays} × $${paRules.minDailyProfit}+ days · ${Math.round(paRules.payoutMaxPercent * 100)}% / cap $${paRules.payoutAbsoluteCap.toLocaleString()}`,
       )
+    }
+    if (evalAccount.firm === "Tradeify" && program === "select_flex") {
+      lines.push(
+        `5 winning days ($${paRules.winningDayThreshold}+) · up to 50% of total profit (cap $${paRules.payoutAbsoluteCap.toLocaleString()})`,
+      )
+      lines.push("No minimum balance to request payout")
+    }
+    if (evalAccount.firm === "Tradeify" && program === "select_daily") {
+      lines.push(
+        `Daily payout · buffer $${paRules.bufferAmount.toLocaleString()} · cap $${paRules.payoutAbsoluteCap.toLocaleString()}`,
+      )
+      lines.push(`Daily loss limit: $${paRules.dailyLossLimit.toLocaleString()}`)
     }
   }
   if (paRules.maxContracts) lines.push(`Contracts: ${paRules.maxContracts}`)

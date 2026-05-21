@@ -18,3 +18,15 @@ export function lucidFlexActiveFloor(
   const trailing = peakBalance - maxDrawdown
   return Math.max(flex.minimumFloor, trailing)
 }
+
+/** LucidFlex funded: lock at starting balance + $100 once peak reaches size + max loss + $100 */
+export function lucidFlexFloorForSize(
+  accountSize: number,
+  maxDrawdown: number,
+): LucidFlexFloorParams {
+  return {
+    lockPeakThreshold: accountSize + maxDrawdown + 100,
+    lockedFloor: accountSize + 100,
+    minimumFloor: accountSize - maxDrawdown,
+  }
+}

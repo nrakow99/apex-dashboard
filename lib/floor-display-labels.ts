@@ -6,8 +6,11 @@ import { formatCurrency } from "@/lib/utils"
 /** Top metric card + rule card + chart: primary floor / threshold title */
 export function getFloorDisplayTitle(account: Account): string {
   const rules = getAccountRules(account)
-  if (rules.lucidFlexFloor && account.firm === "Lucid" && account.type === "PA") {
-    return account.drawdownType === "Intraday" ? "Lucid Flex threshold" : "Lucid Flex floor"
+  if (rules.lucidFlexFloor && account.type === "PA") {
+    if (account.firm === "Tradeify") return "EOD Floor (lock available)"
+    if (account.firm === "Lucid") {
+      return account.drawdownType === "Intraday" ? "Lucid Flex threshold" : "Lucid Flex floor"
+    }
   }
   if (account.drawdownType === "EOD") return "Active EOD Floor"
   if (account.type === "Eval") return "Intraday Threshold"
@@ -20,9 +23,10 @@ export function getFloorMetricStatusLabel(
   opts: { isTradingDayComplete: boolean },
 ): string {
   const rules = getAccountRules(account)
-  if (rules.lucidFlexFloor && account.firm === "Lucid" && account.type === "PA") {
+  if (rules.lucidFlexFloor && account.type === "PA") {
     const f = rules.lucidFlexFloor
-    return `Locks ${formatCurrency(f.lockedFloor)} after ${formatCurrency(f.lockPeakThreshold)} peak`
+    const prefix = account.firm === "Tradeify" ? "Locks" : "Locks"
+    return `${prefix} ${formatCurrency(f.lockedFloor)} after ${formatCurrency(f.lockPeakThreshold)} peak · or at payout`
   }
   if (account.drawdownType === "EOD") {
     return opts.isTradingDayComplete ? "Updated" : "Updates at 2PM"
@@ -43,7 +47,9 @@ export function shouldShowEodProjectedFloorSubValue(
 ): boolean {
   if (account.drawdownType !== "EOD") return false
   const rules = getAccountRules(account)
-  if (rules.lucidFlexFloor && account.firm === "Lucid" && account.type === "PA") return false
+  if (rules.lucidFlexFloor && (account.firm === "Lucid" || account.firm === "Tradeify") && account.type === "PA") {
+    return false
+  }
   return (
     !stats.isTradingDayComplete && stats.projectedEodFloor !== stats.activeEodFloor
   )
@@ -57,9 +63,9 @@ export function getRuleEngineFloorCardTitle(account: Account): string {
 /** Rule Status: small caption under the floor row label */
 export function getRuleEngineFloorRowHint(account: Account): string {
   const rules = getAccountRules(account)
-  if (rules.lucidFlexFloor && account.firm === "Lucid" && account.type === "PA") {
+  if (rules.lucidFlexFloor && account.type === "PA") {
     const f = rules.lucidFlexFloor
-    return `Locks at ${formatCurrency(f.lockedFloor)} once peak reaches ${formatCurrency(f.lockPeakThreshold)}`
+    return `Locks at ${formatCurrency(f.lockedFloor)} once peak reaches ${formatCurrency(f.lockPeakThreshold)} (or payout)`
   }
   if (account.drawdownType === "EOD") return "Updates at 2PM"
   if (hasIntradayManualDrawdown(account)) return "Manually updated from Tradovate"
@@ -70,7 +76,8 @@ export function getRuleEngineFloorRowHint(account: Account): string {
 /** Rule Status: label next to the floor dollar amount */
 export function getRuleEngineFloorRowLabel(account: Account): string {
   const rules = getAccountRules(account)
-  if (rules.lucidFlexFloor && account.firm === "Lucid" && account.type === "PA") {
+  if (rules.lucidFlexFloor && account.type === "PA") {
+    if (account.firm === "Tradeify") return "EOD floor"
     return account.drawdownType === "Intraday" ? "Flex threshold" : "Flex floor"
   }
   if (account.drawdownType === "EOD") return "Active Floor"

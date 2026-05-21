@@ -1,7 +1,7 @@
 "use client"
 
 import { createClient } from "@/lib/supabase/client"
-import type { Account, Trade, Payout, Firm, DrawdownType } from "@/lib/types"
+import type { Account, Trade, Payout, Firm, DrawdownType, TradeifyProgram } from "@/lib/types"
 import { metaToDbPayload, type TradeMeta } from "@/lib/trade-meta"
 
 interface AccountRow {
@@ -24,6 +24,8 @@ interface AccountRow {
   activated_at?: string | null
   activation_start_date?: string | null
   previous_type?: string | null
+  program?: string | null
+  legacy_fifty_k_target?: boolean | null
   created_at: string
   updated_at: string
 }
@@ -65,7 +67,7 @@ function rowToAccount(row: AccountRow): Account {
   return {
     id: row.id,
     name: row.name,
-    firm: row.firm ?? "Apex",
+    firm: (row.firm === "Lucid" || row.firm === "Tradeify" ? row.firm : "Apex") as Firm,
     type: row.type,
     status: row.status === "Inactive" ? "Active" : (row.status as "Active" | "Passed" | "Breached"),
     drawdownType: (row.drawdown_type ?? "EOD") as DrawdownType,
@@ -86,6 +88,8 @@ function rowToAccount(row: AccountRow): Account {
     activationStartDate: row.activation_start_date ?? null,
     previousType: row.previous_type ?? null,
     createdAt: row.created_at ?? null,
+    program: (row.program as TradeifyProgram | null) ?? null,
+    legacyFiftyKTarget: row.legacy_fifty_k_target ?? false,
   }
 }
 
@@ -163,6 +167,8 @@ export async function createAccount(account: {
   profitTarget?: number
   maxDrawdown?: number
   dailyLossLimit?: number
+  program?: TradeifyProgram | null
+  legacyFiftyKTarget?: boolean
 }): Promise<{ data: Account | null; error: Error | null }> {
   const supabase = createClient()
   const { data: { user } } = await supabase.auth.getUser()
@@ -183,6 +189,8 @@ export async function createAccount(account: {
       profit_target: account.profitTarget ?? null,
       max_drawdown: account.maxDrawdown ?? 2000,
       daily_loss_limit: account.dailyLossLimit ?? null,
+      program: account.program ?? null,
+      legacy_fifty_k_target: account.legacyFiftyKTarget ?? false,
     })
     .select()
     .single()
@@ -298,6 +306,8 @@ export async function updateAccount(
     activatedAt?: string | null
     activationStartDate?: string | null
     previousType?: string | null
+    program?: TradeifyProgram | null
+    legacyFiftyKTarget?: boolean
   }
 ): Promise<{ data: Account | null; error: Error | null }> {
   const supabase = createClient()
@@ -323,6 +333,9 @@ export async function updateAccount(
   if (updates.activationStartDate !== undefined)
     updateData.activation_start_date = updates.activationStartDate
   if (updates.previousType !== undefined) updateData.previous_type = updates.previousType
+  if (updates.program !== undefined) updateData.program = updates.program
+  if (updates.legacyFiftyKTarget !== undefined)
+    updateData.legacy_fifty_k_target = updates.legacyFiftyKTarget
 
   const { data, error } = await supabase
     .from("accounts")
