@@ -37,6 +37,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
+import Link from "next/link"
 import { ArrowLeft, LogOut, Loader2, AlertCircle, RefreshCw, MoreHorizontal, Pencil, Trash2 } from "lucide-react"
 import { cn, formatCurrency, formatPnL } from "@/lib/utils"
 import {
@@ -854,6 +855,9 @@ export default function Dashboard() {
                   />
                 )}
                 <AddAccountModal onAddAccount={handleAddAccount} />
+                <Button asChild variant="ghost" size="sm" className="h-9 shrink-0 border border-white/10 bg-slate-900/55 hover:bg-slate-800/80 px-3">
+                  <Link href="/risk-clamp">Risk Clamp</Link>
+                </Button>
                 <Button variant="ghost" size="icon" onClick={handleSignOut} title="Sign out" className="h-9 w-9 shrink-0 border border-white/10 bg-slate-900/55 hover:bg-slate-800/80">
                   <LogOut className="h-4 w-4" />
                 </Button>
@@ -1055,6 +1059,9 @@ export default function Dashboard() {
                       </DropdownMenuItem>
                     </DropdownMenuContent>
                   </DropdownMenu>
+                  <Button asChild variant="ghost" size="sm" className="h-9 shrink-0 border border-white/10 bg-slate-900/55 hover:bg-slate-800/80 px-3">
+                    <Link href="/risk-clamp">Risk Clamp</Link>
+                  </Button>
                   <Button variant="ghost" size="icon" onClick={handleSignOut} title="Sign out" className="border border-white/10 bg-slate-900/55 hover:bg-slate-800/80">
                     <LogOut className="h-4 w-4" />
                   </Button>
