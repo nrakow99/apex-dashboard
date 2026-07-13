@@ -1,7 +1,15 @@
 "use client";
 
 import Link from "next/link";
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect, useCallback, useRef } from "react";
+import {
+  ensureRiskClampSettings,
+  fetchRiskClampTrades,
+  upsertRiskClampSettings,
+  insertRiskClampTrade,
+  deleteRiskClampTrades,
+  resetRiskClampAccount,
+} from "@/lib/supabase/risk-clamp";
 
 /* ---------- constants ---------- */
 
@@ -385,8 +393,17 @@ function ReadoutCard({ symbol, res }) {
 
 /* ---------- main app ---------- */
 
-export default function RiskClamp() {
-  const [buffer, setBuffer] = useState(2000);
+export default function RiskClamp({
+  accountId,
+  initialBuffer,
+  mode = accountId ? "account" : "standalone",
+} = {}) {
+  const useSupabase = Boolean(accountId);
+  const isAccountMode = mode === "account" || useSupabase;
+
+  const [buffer, setBuffer] = useState(
+    typeof initialBuffer === "number" ? initialBuffer : 2000
+  );
   const [stopPoints, setStopPoints] = useState(30);
   const [numAccounts, setNumAccounts] = useState(1);
   const [family, setFamily] = useState("NQ");
@@ -396,26 +413,80 @@ export default function RiskClamp() {
   const [noteInput, setNoteInput] = useState("");
   const [loaded, setLoaded] = useState(false);
   const [saveError, setSaveError] = useState(false);
+  const [loadError, setLoadError] = useState(false);
+  const [busy, setBusy] = useState(false);
+
+  const skipNextPersist = useRef(true);
 
   /* load persisted state */
   useEffect(() => {
-    try {
-      const raw = localStorage.getItem(STORAGE_KEY);
+    let cancelled = false;
 
-      if (raw) {
-        const parsed = JSON.parse(raw);
-        if (typeof parsed.buffer === "number") setBuffer(parsed.buffer);
-        if (Array.isArray(parsed.tradeLog)) setTradeLog(parsed.tradeLog);
-        if (typeof parsed.numAccounts === "number") setNumAccounts(parsed.numAccounts);
+    async function load() {
+      setLoaded(false);
+      setLoadError(false);
+      setSaveError(false);
+      skipNextPersist.current = true;
+
+      if (useSupabase) {
+        try {
+          const settingsResult = await ensureRiskClampSettings(accountId, {
+            buffer: typeof initialBuffer === "number" ? initialBuffer : 2000,
+          });
+          if (cancelled) return;
+
+          if (settingsResult.error || !settingsResult.data) {
+            setLoadError(true);
+            if (typeof initialBuffer === "number") setBuffer(initialBuffer);
+          } else {
+            setBuffer(settingsResult.data.buffer);
+            setStopPoints(settingsResult.data.stopPoints);
+            setNumAccounts(settingsResult.data.numAccounts);
+            setFamily(settingsResult.data.family);
+          }
+
+          const tradesResult = await fetchRiskClampTrades(accountId);
+          if (cancelled) return;
+
+          if (tradesResult.error) {
+            setLoadError(true);
+            setTradeLog([]);
+          } else {
+            setTradeLog(tradesResult.data ?? []);
+          }
+        } catch (e) {
+          if (!cancelled) setLoadError(true);
+        } finally {
+          if (!cancelled) setLoaded(true);
+        }
+        return;
       }
-    } catch (e) {
-      // no saved state yet
-    } finally {
-      setLoaded(true);
-    }
-  }, []);
 
-  const persist = useCallback((nextBuffer, nextLog, nextNumAccounts) => {
+      try {
+        const raw = localStorage.getItem(STORAGE_KEY);
+
+        if (raw) {
+          const parsed = JSON.parse(raw);
+          if (typeof parsed.buffer === "number") setBuffer(parsed.buffer);
+          if (Array.isArray(parsed.tradeLog)) setTradeLog(parsed.tradeLog);
+          if (typeof parsed.numAccounts === "number") setNumAccounts(parsed.numAccounts);
+        } else if (typeof initialBuffer === "number") {
+          setBuffer(initialBuffer);
+        }
+      } catch (e) {
+        // no saved state yet
+      } finally {
+        if (!cancelled) setLoaded(true);
+      }
+    }
+
+    load();
+    return () => {
+      cancelled = true;
+    };
+  }, [accountId, useSupabase]); // initialBuffer only seeds first create; omit to avoid reload loops
+
+  const persistLocal = useCallback((nextBuffer, nextLog, nextNumAccounts) => {
     try {
       localStorage.setItem(
         STORAGE_KEY,
@@ -431,72 +502,205 @@ export default function RiskClamp() {
     }
   }, []);
 
+  /* standalone localStorage persist */
   useEffect(() => {
-    if (loaded) persist(buffer, tradeLog, numAccounts);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [buffer, tradeLog, numAccounts, loaded]);
+    if (!loaded || useSupabase) return;
+    persistLocal(buffer, tradeLog, numAccounts);
+  }, [buffer, tradeLog, numAccounts, loaded, useSupabase, persistLocal]);
+
+  /* account-mode settings upsert */
+  useEffect(() => {
+    if (!loaded || !useSupabase || !accountId) return;
+    if (skipNextPersist.current) {
+      skipNextPersist.current = false;
+      return;
+    }
+
+    let cancelled = false;
+    (async () => {
+      const result = await upsertRiskClampSettings(accountId, {
+        buffer,
+        stopPoints,
+        numAccounts,
+        family,
+      });
+      if (cancelled) return;
+      setSaveError(Boolean(result.error));
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [buffer, stopPoints, numAccounts, family, loaded, useSupabase, accountId]);
 
   const sizing = computeSizing({ buffer, stopPoints, numAccounts, family });
   const fam = FAMILIES[family];
 
-  function logTrade() {
+  async function logTrade() {
     const pnl = Number(pnlInput);
-    if (!pnlInput || Number.isNaN(pnl)) return;
+    if (!pnlInput || Number.isNaN(pnl) || busy) return;
+
+    const balanceAfter = buffer + pnl;
+    const tradeDate = new Date().toISOString().slice(0, 10);
+
+    if (useSupabase) {
+      setBusy(true);
+      try {
+        const insertResult = await insertRiskClampTrade(accountId, {
+          tradeDate,
+          family,
+          stopPoints,
+          pnl,
+          note: noteInput.trim(),
+          balanceAfter,
+        });
+        if (insertResult.error || !insertResult.data) {
+          setSaveError(true);
+          return;
+        }
+
+        const settingsResult = await upsertRiskClampSettings(accountId, {
+          buffer: balanceAfter,
+          stopPoints,
+          numAccounts,
+          family,
+        });
+        if (settingsResult.error) setSaveError(true);
+        else setSaveError(false);
+
+        skipNextPersist.current = true;
+        setTradeLog((prev) => [insertResult.data, ...prev]);
+        setBuffer(balanceAfter);
+        setPnlInput("");
+        setNoteInput("");
+      } catch (e) {
+        setSaveError(true);
+      } finally {
+        setBusy(false);
+      }
+      return;
+    }
+
     const entry = {
       id: Date.now(),
-      date: new Date().toISOString().slice(0, 10),
+      date: tradeDate,
       family,
       stopPoints,
       pnl,
       note: noteInput.trim(),
-      balanceAfter: buffer + pnl,
+      balanceAfter,
     };
-    const nextLog = [entry, ...tradeLog];
-    setTradeLog(nextLog);
-    setBuffer(buffer + pnl);
+    setTradeLog((prev) => [entry, ...prev]);
+    setBuffer(balanceAfter);
     setPnlInput("");
     setNoteInput("");
   }
 
-  function clearLog() {
+  async function clearLog() {
+    if (busy) return;
+
+    if (useSupabase) {
+      setBusy(true);
+      try {
+        const result = await deleteRiskClampTrades(accountId);
+        if (result.error) {
+          setSaveError(true);
+          return;
+        }
+        setSaveError(false);
+        setTradeLog([]);
+      } catch (e) {
+        setSaveError(true);
+      } finally {
+        setBusy(false);
+      }
+      return;
+    }
+
     setTradeLog([]);
   }
 
-  function resetAccount() {
+  async function resetAccount() {
+    if (busy) return;
+
+    if (useSupabase) {
+      setBusy(true);
+      try {
+        const result = await resetRiskClampAccount(accountId);
+        if (result.error) {
+          setSaveError(true);
+          return;
+        }
+        skipNextPersist.current = true;
+        setBuffer(2000);
+        setStopPoints(30);
+        setNumAccounts(1);
+        setFamily("NQ");
+        setTradeLog([]);
+        setSaveError(false);
+      } catch (e) {
+        setSaveError(true);
+      } finally {
+        setBusy(false);
+      }
+      return;
+    }
+
     setBuffer(2000);
     setTradeLog([]);
     setNumAccounts(1);
   }
 
+  if (!loaded) {
+    return (
+      <div
+        style={{
+          minHeight: isAccountMode ? undefined : "100vh",
+          background: palette.bg,
+          color: palette.textMuted,
+          padding: isAccountMode ? "24px 16px" : "32px 20px",
+          fontFamily: sans,
+          fontSize: 14,
+        }}
+      >
+        Loading Risk Clamp…
+      </div>
+    );
+  }
+
   return (
     <div
       style={{
-        minHeight: "100vh",
+        minHeight: isAccountMode ? undefined : "100vh",
         background: palette.bg,
         color: palette.text,
-        padding: "32px 20px 60px",
+        padding: isAccountMode ? "20px 16px 28px" : "32px 20px 60px",
         fontFamily: sans,
+        borderRadius: isAccountMode ? 16 : 0,
+        border: isAccountMode ? `1px solid ${palette.borderSoft}` : "none",
       }}
     >
       <div style={{ maxWidth: 880, margin: "0 auto" }}>
         {/* header */}
-        <div style={{ marginBottom: 12 }}>
-          <Link
-            href="/"
-            style={{
-              color: palette.textMuted,
-              fontSize: 13,
-              textDecoration: "none",
-            }}
-          >
-            ← Dashboard
-          </Link>
-        </div>
+        {!isAccountMode && (
+          <div style={{ marginBottom: 12 }}>
+            <Link
+              href="/"
+              style={{
+                color: palette.textMuted,
+                fontSize: 13,
+                textDecoration: "none",
+              }}
+            >
+              ← Dashboard
+            </Link>
+          </div>
+        )}
         <Eyebrow>PB × TJR RISK ENGINE</Eyebrow>
         <h1
           style={{
             fontFamily: mono,
-            fontSize: 32,
+            fontSize: isAccountMode ? 24 : 32,
             fontWeight: 600,
             margin: "6px 0 4px",
             letterSpacing: "-0.01em",
@@ -508,6 +712,16 @@ export default function RiskClamp() {
           Structure sets the stop. These caps set the size. Contract count is
           always derived — never chosen first.
         </p>
+
+        {(loadError || saveError) && (
+          <div style={{ color: palette.caution, fontSize: 12, marginBottom: 14 }}>
+            {loadError
+              ? "Could not load saved Risk Clamp data — showing defaults."
+              : useSupabase
+                ? "Could not save to Supabase — changes may not persist."
+                : "Storage unavailable — values will not persist between sessions."}
+          </div>
+        )}
 
         {/* inputs */}
         <div style={{ display: "flex", gap: 14, marginBottom: 14, flexWrap: "wrap" }}>
@@ -626,6 +840,7 @@ export default function RiskClamp() {
             <div style={{ display: "flex", alignItems: "flex-end" }}>
               <button
                 onClick={logTrade}
+                disabled={busy}
                 style={{
                   background: palette.info,
                   color: "#04101F",
@@ -634,7 +849,8 @@ export default function RiskClamp() {
                   padding: "10px 18px",
                   fontWeight: 700,
                   fontSize: 13,
-                  cursor: "pointer",
+                  cursor: busy ? "wait" : "pointer",
+                  opacity: busy ? 0.7 : 1,
                 }}
               >
                 Log Trade
@@ -693,6 +909,7 @@ export default function RiskClamp() {
           <div style={{ display: "flex", justifyContent: "space-between", marginTop: 14 }}>
             <button
               onClick={clearLog}
+              disabled={busy}
               style={{
                 background: "transparent",
                 border: `1px solid ${palette.border}`,
@@ -700,13 +917,14 @@ export default function RiskClamp() {
                 borderRadius: 8,
                 padding: "8px 14px",
                 fontSize: 12,
-                cursor: "pointer",
+                cursor: busy ? "wait" : "pointer",
               }}
             >
               Clear log
             </button>
             <button
               onClick={resetAccount}
+              disabled={busy}
               style={{
                 background: "transparent",
                 border: `1px solid ${palette.border}`,
@@ -714,19 +932,13 @@ export default function RiskClamp() {
                 borderRadius: 8,
                 padding: "8px 14px",
                 fontSize: 12,
-                cursor: "pointer",
+                cursor: busy ? "wait" : "pointer",
               }}
             >
               Reset to $2,000 buffer
             </button>
           </div>
         </Panel>
-
-        {saveError && (
-          <div style={{ color: palette.caution, fontSize: 12, marginTop: 12 }}>
-            Storage unavailable — values will not persist between sessions.
-          </div>
-        )}
 
         <div style={{ color: palette.textFaint, fontSize: 11.5, marginTop: 20, lineHeight: 1.6 }}>
           Contracts are always rounded down. If both readouts show NO TRADE,

@@ -78,6 +78,7 @@ import { createClient } from "@/lib/supabase/client"
 import type { Trade, Payout, Account, AccountType, DrawdownType, Firm, DailyPnL, TradeifyProgram } from "@/lib/types"
 import { migrateLocalTradeMetadata, type TradeMeta } from "@/lib/trade-meta"
 import { RiskMetricsCard } from "@/components/risk-metrics-card"
+import RiskClamp from "@/components/risk-clamp"
 
 type ViewMode = "accounts" | "detail"
 
@@ -1184,6 +1185,15 @@ export default function Dashboard() {
                   <RiskMetricsCard trades={accountTrades} />
                 </div>
               )}
+
+              {/* ROW 1.6: Risk Clamp (per-account Supabase) */}
+              <div className="mb-2 sm:mb-4 lg:mb-2">
+                <RiskClamp
+                  key={selectedAccount.id}
+                  accountId={selectedAccount.id}
+                  mode="account"
+                />
+              </div>
 
               {/* ROW 2: Full Width Chart */}
               <div className="mb-3 sm:mb-8 lg:mb-[4.25rem]">
