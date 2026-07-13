@@ -94,16 +94,11 @@ export async function upsertRiskClampSettings(
   },
 ): Promise<{ data: RiskClampSettings | null; error: Error | null }> {
   const supabase = createClient()
-  const {
-    data: { user },
-  } = await supabase.auth.getUser()
-  if (!user) return { data: null, error: new Error("Not authenticated") }
 
   const { data, error } = await supabase
     .from("risk_clamp_settings")
     .upsert(
       {
-        user_id: user.id,
         account_id: accountId,
         buffer: settings.buffer,
         stop_points: settings.stopPoints,
@@ -161,15 +156,10 @@ export async function insertRiskClampTrade(
   },
 ): Promise<{ data: RiskClampTrade | null; error: Error | null }> {
   const supabase = createClient()
-  const {
-    data: { user },
-  } = await supabase.auth.getUser()
-  if (!user) return { data: null, error: new Error("Not authenticated") }
 
   const { data, error } = await supabase
     .from("risk_clamp_trades")
     .insert({
-      user_id: user.id,
       account_id: accountId,
       trade_date: trade.tradeDate,
       family: trade.family,
