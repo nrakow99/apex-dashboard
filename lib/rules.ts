@@ -8,6 +8,7 @@ import {
   tradeifyLockParams,
   toTradeifySizeKey,
 } from "./tradeify-rules"
+import { TOPSTEP_EVAL, toTopstepSizeKey } from "./topstep-rules"
 
 export interface AccountRules {
   // Drawdown
@@ -25,6 +26,10 @@ export interface AccountRules {
   // Consistency rule
   hasConsistency: boolean
   consistencyPercent: number  // e.g. 50 (for 50%)
+  /** What the consistency percent is measured against. "total_profit": Apex/Lucid/Tradeify —
+   *  the cap grows as accumulated profit grows. "profit_target": Topstep — a fixed cap off
+   *  the account's profit target, independent of how much has been earned so far. */
+  consistencyBasis: "total_profit" | "profit_target"
 
   // Payout
   hasPayouts: boolean
@@ -169,6 +174,7 @@ export function getAccountRules(account: {
   program?: TradeifyProgram | null
   legacyFiftyKTarget?: boolean
   profitTarget?: number
+  hasDailyLossLimit?: boolean
 }): AccountRules {
   const firm = account.firm ?? "Apex"
   const size = toSizeKey(account.accountSize ?? 50000)
@@ -182,6 +188,7 @@ export function getAccountRules(account: {
     profitTarget: 0,
     hasConsistency: false,
     consistencyPercent: 0,
+    consistencyBasis: "total_profit",
     hasPayouts: false,
     maxPayouts: 0,
     minTradingDays: 0,
@@ -396,6 +403,30 @@ export function getAccountRules(account: {
         maxContracts: r.maxContracts,
         lucidFlexFloor: lucidFlexFloorForSize(size, r.maxDrawdown),
         payoutPolicyKind: "lucid_cycle",
+      }
+    }
+  }
+
+  // ── Topstep ───────────────────────────────────────────────────────────────
+  // Funded (XFA) not implemented yet — see lib/topstep-rules.ts TOPSTEP_FUNDED_PAYOUT_CAP.
+
+  if (firm === "Topstep") {
+    const tSize = toTopstepSizeKey(account.accountSize)
+
+    if (account.type === "Eval") {
+      const r = TOPSTEP_EVAL[tSize]
+      return {
+        ...base,
+        floorLabel: "EOD Trailing Max Loss Limit",
+        maxDrawdown: r.maxDrawdown,
+        hasDLL: Boolean(account.hasDailyLossLimit),
+        dailyLossLimit: account.hasDailyLossLimit ? r.dailyLossLimit : 0,
+        hasProfitTarget: true,
+        profitTarget: account.profitTarget ?? r.profitTarget,
+        hasConsistency: true,
+        consistencyPercent: 50,
+        consistencyBasis: "profit_target",
+        maxContracts: r.maxContracts,
       }
     }
   }

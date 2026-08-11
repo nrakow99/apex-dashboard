@@ -1,5 +1,6 @@
 import { describe, it, expect } from "vitest"
 import { getAccountRules, resolveTradeifyProgram } from "./rules"
+import { toTopstepSizeKey } from "./topstep-rules"
 import type { Firm, AccountType, DrawdownType } from "./types"
 
 // Golden-file tests for the rule engine.
@@ -12,6 +13,11 @@ import type { Firm, AccountType, DrawdownType } from "./types"
 // Verified against firm site on: 2026-08-11 (Apex EOD PA payout caps / min
 // daily profit per apextraderfunding.com/help-center/eod-trailing-drawdown-accounts/eod-payouts/
 // — other firms/tables not reverified on this date)
+//
+// Verified against help.topstep.com on: 2026-08-11 (Eval profit target / Max
+// Loss Limit / optional Daily Loss Limit / contract count, all sizes).
+// Topstep funded (XFA) payout caps are NOT verified — see
+// lib/topstep-rules.ts TOPSTEP_FUNDED_PAYOUT_CAP, left as TODO.
 
 const acct = (
   firm: Firm,
@@ -164,6 +170,72 @@ describe("Tradeify", () => {
     expect(
       resolveTradeifyProgram({ firm: "Apex", type: "PA", program: null, dailyLossLimit: 0 }),
     ).toBeNull()
+  })
+})
+
+describe("Topstep — Eval", () => {
+  it("50K: $3,000 target / $2,000 MLL / 5 minis, DLL off by default", () => {
+    const r = getAccountRules(acct("Topstep", "Eval", "EOD", 50000))
+    expect(r.profitTarget).toBe(3000)
+    expect(r.maxDrawdown).toBe(2000)
+    expect(r.maxContracts).toBe("5 minis")
+    expect(r.hasProfitTarget).toBe(true)
+    expect(r.floorLabel).toBe("EOD Trailing Max Loss Limit")
+    expect(r.hasDLL).toBe(false)
+    expect(r.dailyLossLimit).toBe(0)
+  })
+
+  it("50K: electing the optional DLL sets it to $1,000", () => {
+    const r = getAccountRules(acct("Topstep", "Eval", "EOD", 50000, { hasDailyLossLimit: true }))
+    expect(r.hasDLL).toBe(true)
+    expect(r.dailyLossLimit).toBe(1000)
+    // Electing DLL doesn't change the MLL or profit target.
+    expect(r.maxDrawdown).toBe(2000)
+    expect(r.profitTarget).toBe(3000)
+  })
+
+  it("100K: $6,000 target / $3,000 MLL / $2,000 DLL / 10 minis", () => {
+    const r = getAccountRules(acct("Topstep", "Eval", "EOD", 100000, { hasDailyLossLimit: true }))
+    expect(r.profitTarget).toBe(6000)
+    expect(r.maxDrawdown).toBe(3000)
+    expect(r.dailyLossLimit).toBe(2000)
+    expect(r.maxContracts).toBe("10 minis")
+  })
+
+  it("150K: $9,000 target / $4,500 MLL / $3,000 DLL / 15 minis", () => {
+    const r = getAccountRules(acct("Topstep", "Eval", "EOD", 150000, { hasDailyLossLimit: true }))
+    expect(r.profitTarget).toBe(9000)
+    expect(r.maxDrawdown).toBe(4500)
+    expect(r.dailyLossLimit).toBe(3000)
+    expect(r.maxContracts).toBe("15 minis")
+  })
+
+  it("consistency is 50% of profit target, not 50% of total profit", () => {
+    for (const size of [50000, 100000, 150000]) {
+      const r = getAccountRules(acct("Topstep", "Eval", "EOD", size))
+      expect(r.hasConsistency).toBe(true)
+      expect(r.consistencyPercent).toBe(50)
+      expect(r.consistencyBasis).toBe("profit_target")
+    }
+  })
+})
+
+describe("Topstep — no 25K tier", () => {
+  it("throws for any size under 50K instead of clamping to 50K", () => {
+    expect(() => toTopstepSizeKey(25000)).toThrow()
+    expect(() => toTopstepSizeKey(49999)).toThrow()
+    expect(() => getAccountRules(acct("Topstep", "Eval", "EOD", 25000))).toThrow()
+  })
+
+  it("accepts the three real tiers without throwing", () => {
+    expect(toTopstepSizeKey(50000)).toBe(50000)
+    expect(toTopstepSizeKey(100000)).toBe(100000)
+    expect(toTopstepSizeKey(150000)).toBe(150000)
+  })
+
+  it("rounds sizes between tiers up to the next tier, same convention as toSizeKey", () => {
+    expect(toTopstepSizeKey(75000)).toBe(100000)
+    expect(toTopstepSizeKey(120000)).toBe(150000)
   })
 })
 

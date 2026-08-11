@@ -1,7 +1,7 @@
 export type AccountType = "Eval" | "PA" | "Live"
 export type AccountStatus = "Active" | "Passed" | "Breached"
 export type DrawdownType = "EOD" | "Intraday"
-export type Firm = "Apex" | "Lucid" | "Tradeify"
+export type Firm = "Apex" | "Lucid" | "Tradeify" | "Topstep"
 
 /** Tradeify Select program (null for Apex/Lucid). */
 export type TradeifyProgram = "select_eval" | "select_flex" | "select_daily"
@@ -39,6 +39,8 @@ export interface Account {
   program?: TradeifyProgram | null
   /** Tradeify 50K Select Eval: use $2,500 legacy profit target */
   legacyFiftyKTarget?: boolean
+  /** Optional Daily Loss Limit, elected at checkout (currently: Topstep). Other firms may add this later. */
+  hasDailyLossLimit?: boolean
 }
 
 export interface Trade {

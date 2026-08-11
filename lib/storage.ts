@@ -191,6 +191,11 @@ export function isTradeifyEvalConsistency(account: Account): boolean {
   )
 }
 
+/** Topstep Eval: largest day ≤ 50% of the (fixed) profit target, not of accumulated profit. */
+export function isTopstepEvalConsistency(account: Account): boolean {
+  return account.firm === "Topstep" && account.type === "Eval"
+}
+
 function roundMoney(n: number): number {
   return Math.round(n * 100) / 100
 }
@@ -239,6 +244,37 @@ function computeNetProfitConsistency(
   const additionalProfitNeeded = roundMoney(Math.max(0, requiredTotalProfit - totalProfit))
   const maxAllowedProfitToday =
     totalProfit > 0 ? Math.max(0, roundMoney(maxAllowedDay - largestWinningDay)) : 0
+
+  return {
+    largestWinningDay,
+    totalProfit,
+    maxAllowedDay,
+    isValid,
+    maxAllowedProfitToday,
+    additionalProfitNeeded,
+  }
+}
+
+/**
+ * Fixed-target consistency (Topstep Eval): best day capped at a percent of
+ * the account's profit target, not a percent of profit earned so far. The
+ * cap does not move as totalProfit accumulates, so "additional profit
+ * needed" has no meaning here — an over-cap day stays over-cap regardless
+ * of what else the trader earns. Left at 0 rather than a computed guess.
+ */
+function computeTargetConsistency(
+  dailyData: DailyPnL[],
+  profitTarget: number,
+  consistencyPercent: number,
+) {
+  const totalProfit = roundMoney(dailyData.reduce((sum, d) => sum + d.pnl, 0))
+  const largestWinningDay = roundMoney(
+    Math.max(0, ...dailyData.map((d) => d.pnl), 0),
+  )
+  const maxAllowedDay = roundMoney(profitTarget * (consistencyPercent / 100))
+  const isValid = largestWinningDay <= maxAllowedDay
+  const maxAllowedProfitToday = Math.max(0, roundMoney(maxAllowedDay - largestWinningDay))
+  const additionalProfitNeeded = 0
 
   return {
     largestWinningDay,
@@ -302,15 +338,25 @@ export function getConsistencyInfo(accountId: string, trades: Trade[], account: 
     ? dailyPnLForConsistencyPeriod(accountId, trades, account, payouts)
     : allDaily
 
-  const metrics =
+  let metrics: ReturnType<typeof computeNetProfitConsistency>
+  if (rules.consistencyBasis === "profit_target") {
+    metrics = computeTargetConsistency(allDaily, rules.profitTarget, rules.consistencyPercent)
+  } else if (
     isApexPaConsistency(account) ||
     isLucidEvalConsistency(account) ||
     isTradeifyEvalConsistency(account)
-      ? computeNetProfitConsistency(
-          isApexPaConsistency(account) ? periodDaily : allDaily,
-          rules.consistencyPercent,
-        )
-      : computePositiveSumConsistency(allDaily, rules.consistencyPercent)
+  ) {
+    metrics = computeNetProfitConsistency(
+      isApexPaConsistency(account) ? periodDaily : allDaily,
+      rules.consistencyPercent,
+    )
+  } else {
+    // Unreachable today: every firm with hasConsistency=true matches either
+    // the profit_target branch above or one of the three predicates. Kept
+    // for a firm that needs "cap vs sum of winning days" — do not delete
+    // without checking callers first.
+    metrics = computePositiveSumConsistency(allDaily, rules.consistencyPercent)
+  }
 
   return {
     ...metrics,
