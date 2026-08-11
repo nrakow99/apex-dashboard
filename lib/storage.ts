@@ -1,4 +1,4 @@
-import type { Account, Trade, Payout, DailyPnL } from "./types"
+import type { Account, Trade, Payout, DailyPnL, TopstepPayoutPath } from "./types"
 import { EOD_CONSTANTS } from "./types"
 import { getAccountRules, resolveTradeifyProgram } from "./rules"
 import { getRuleStartingBalance } from "./account-quantity"
@@ -147,6 +147,16 @@ export function calculateAccountStats(
       maxDrawdown,
       rules.lucidFlexFloor,
     )
+  }
+
+  // Payout-triggered floor lock (Topstep XFA): once ANY payout has landed,
+  // the floor snaps to breakeven permanently, independent of peak balance —
+  // a stricter, earlier lock than the peak-based trail-then-lock above.
+  // Firms that guarantee no payout-triggered reset (Alpha) leave
+  // floorLocksOnPayout false, so this never fires for them.
+  if (rules.floorLocksOnPayout && rules.lucidFlexFloor && accountPayouts.length > 0) {
+    activeEodFloor = rules.lucidFlexFloor.lockedFloor
+    projectedEodFloor = rules.lucidFlexFloor.lockedFloor
   }
 
   const drawdownRemaining = currentBalance - activeEodFloor
@@ -407,6 +417,13 @@ export function getConsistencyInfo(accountId: string, trades: Trade[], account: 
 
 // ─── Payout eligibility ───────────────────────────────────────────────────────
 
+// Calendar-month count (same YYYY-MM as asOfDate), not a trailing 30-day
+// window — see the maxPayoutsPerMonth comment in lib/rules.ts for why.
+function payoutsInCalendarMonth(accountPayouts: Payout[], asOfDate: string): number {
+  const yearMonth = asOfDate.slice(0, 7)
+  return accountPayouts.filter((p) => p.date.slice(0, 7) === yearMonth).length
+}
+
 // Returns pnl for each day since last payout (or all days if no payouts)
 function getCycleData(
   accountId: string,
@@ -661,6 +678,187 @@ export function getPayoutEligibility(
       currentPayoutTier: payoutCount + 1,
       safetyNet: 0,
       consistencyInfo: getConsistencyInfo(accountId, trades, account, payouts),
+    }
+  }
+
+  // ── Topstep XFA — single-ceiling, balance-based payout ────────────────────
+
+  if (account.firm === "Topstep" && rules.payoutPolicyKind === "topstep_xfa") {
+    const path: TopstepPayoutPath = account.topstepPayoutPath === "consistency" ? "consistency" : "standard"
+    const { cycleProfit, dailyRows } = getCycleData(accountId, trades, account, payouts)
+    const topstepConsistencyInfo = getConsistencyInfo(accountId, trades, account, payouts)
+
+    // Balance-based, not cycle-profit-based (unlike Lucid/Tradeify's 50%).
+    const rawPayout = stats.currentBalance * rules.payoutMaxPercent
+    const maxPayoutAllowed = rules.payoutAbsoluteCap
+    const maxWithdrawable = Math.max(0, Math.min(rawPayout, maxPayoutAllowed))
+    const traderReceives = maxWithdrawable * rules.payoutSplit
+    const firmSplit = maxWithdrawable * (1 - rules.payoutSplit)
+
+    // Both counts are naturally "since last payout" via getCycleData's
+    // last-payout cutoff — this is what makes the day/win count restart on
+    // an approved payout.
+    const winningDays = dailyRows.filter((d) => d.pnl >= rules.winningDayThreshold).length
+    const tradingDaysSincePayout = dailyRows.length
+
+    const conditions: Record<string, boolean> =
+      path === "standard"
+        ? {
+            hasEnoughWinningDays: winningDays >= rules.minProfitDays,
+            // "Profitable since last payout" — exempt for the first payout,
+            // since there is no prior payout to measure against.
+            isProfitableSinceLastPayout: payoutCount === 0 || cycleProfit > 0,
+            hasMinWithdrawable: maxWithdrawable >= rules.minPayoutAmount,
+            hasPayoutsRemaining: payoutCount < rules.maxPayouts,
+          }
+        : {
+            hasEnoughTradingDays: tradingDaysSincePayout >= rules.minTradingDays,
+            isConsistent: topstepConsistencyInfo.isValid,
+            hasMinWithdrawable: maxWithdrawable >= rules.minPayoutAmount,
+            hasPayoutsRemaining: payoutCount < rules.maxPayouts,
+          }
+    const isEligible = Object.values(conditions).every(Boolean)
+
+    const missingConditions: string[] = []
+    if (path === "standard") {
+      const c = conditions as { hasEnoughWinningDays: boolean; isProfitableSinceLastPayout: boolean }
+      if (!c.hasEnoughWinningDays) {
+        const needed = rules.minProfitDays - winningDays
+        missingConditions.push(`${needed} more $${rules.winningDayThreshold}+ winning day${needed > 1 ? "s" : ""}`)
+      }
+      if (!c.isProfitableSinceLastPayout) {
+        missingConditions.push("Not profitable since last payout")
+      }
+    } else {
+      const c = conditions as { hasEnoughTradingDays: boolean; isConsistent: boolean }
+      if (!c.hasEnoughTradingDays) {
+        const needed = rules.minTradingDays - tradingDaysSincePayout
+        missingConditions.push(`${needed} more trading day${needed > 1 ? "s" : ""} since last payout`)
+      }
+      if (!c.isConsistent) {
+        missingConditions.push(
+          topstepConsistencyInfo.totalProfit <= 0
+            ? "No net profit"
+            : "Largest day exceeds 40% of total profit",
+        )
+      }
+    }
+    if (!conditions.hasMinWithdrawable) {
+      missingConditions.push(`Below minimum payout ($${rules.minPayoutAmount})`)
+    }
+    if (!conditions.hasPayoutsRemaining) {
+      missingConditions.push(`All ${rules.maxPayouts} payouts used`)
+    }
+
+    return {
+      isEligible,
+      firm: "Topstep" as const,
+      topstepPayoutPath: path,
+      conditions,
+      missingConditions,
+      availableToWithdraw: maxWithdrawable,
+      maxWithdrawable,
+      payoutCount,
+      maxPayouts: rules.maxPayouts,
+      cycleProfit,
+      cycleProfitDays: path === "standard" ? winningDays : tradingDaysSincePayout,
+      winningDays,
+      minProfitDays: path === "standard" ? rules.minProfitDays : rules.minTradingDays,
+      minDailyProfit: rules.winningDayThreshold,
+      payoutMaxPercent: rules.payoutMaxPercent,
+      payoutAbsoluteCap: rules.payoutAbsoluteCap,
+      payoutSplit: rules.payoutSplit,
+      traderReceives,
+      lucidSplit: firmSplit,
+      minPayoutAmount: rules.minPayoutAmount,
+      stats,
+      maxPayoutAllowed,
+      currentPayoutTier: payoutCount + 1,
+      safetyNet: 0,
+      consistencyInfo: topstepConsistencyInfo,
+    }
+  }
+
+  // ── Alpha Futures Qualified — cycle-profit payout + monthly request cap ───
+
+  if (account.firm === "Alpha" && rules.payoutPolicyKind === "alpha_qualified") {
+    const { cycleProfit, dailyRows } = getCycleData(accountId, trades, account, payouts)
+    const alphaConsistencyInfo = getConsistencyInfo(accountId, trades, account, payouts)
+
+    const rawPayout = Math.max(0, cycleProfit) * rules.payoutMaxPercent
+    const maxPayoutAllowed = rules.payoutAbsoluteCap
+    const maxWithdrawable = Math.max(0, Math.min(rawPayout, maxPayoutAllowed))
+    const traderReceives = maxWithdrawable * rules.payoutSplit
+    const firmSplit = maxWithdrawable * (1 - rules.payoutSplit)
+
+    // Winning-day count is naturally "since last payout" via getCycleData's
+    // last-payout cutoff, matching how the consistency window already resets
+    // between withdrawal requests (isAlphaQualifiedConsistency).
+    const winningDays = dailyRows.filter((d) => d.pnl >= rules.winningDayThreshold).length
+    const payoutsThisMonth = payoutsInCalendarMonth(accountPayouts, getTodayDateStr())
+
+    const conditions = {
+      hasEnoughWinningDays: winningDays >= rules.minProfitDays,
+      hasPositiveCycleProfit: cycleProfit > 0,
+      isConsistent: !rules.hasConsistency || alphaConsistencyInfo.isValid,
+      hasMinWithdrawable: maxWithdrawable >= rules.minPayoutAmount,
+      hasPayoutsRemaining: payoutCount < rules.maxPayouts,
+      hasPayoutsRemainingThisMonth: payoutsThisMonth < rules.maxPayoutsPerMonth,
+    }
+    const isEligible = Object.values(conditions).every(Boolean)
+
+    const missingConditions: string[] = []
+    if (!conditions.hasEnoughWinningDays) {
+      const needed = rules.minProfitDays - winningDays
+      missingConditions.push(`${needed} more $${rules.winningDayThreshold}+ winning day${needed > 1 ? "s" : ""}`)
+    }
+    if (!conditions.hasPositiveCycleProfit) {
+      missingConditions.push("Cycle profit must be positive")
+    }
+    if (!conditions.isConsistent) {
+      missingConditions.push(
+        alphaConsistencyInfo.totalProfit <= 0
+          ? "No net profit since last payout"
+          : `Largest day exceeds ${rules.consistencyPercent}% of total profit`,
+      )
+    }
+    if (!conditions.hasMinWithdrawable) {
+      missingConditions.push(`Below minimum payout ($${rules.minPayoutAmount})`)
+    }
+    if (!conditions.hasPayoutsRemaining) {
+      missingConditions.push(`All ${rules.maxPayouts} payouts used`)
+    }
+    if (!conditions.hasPayoutsRemainingThisMonth) {
+      missingConditions.push(`All ${rules.maxPayoutsPerMonth} payouts this month used`)
+    }
+
+    return {
+      isEligible,
+      firm: "Alpha" as const,
+      conditions,
+      missingConditions,
+      availableToWithdraw: maxWithdrawable,
+      maxWithdrawable,
+      payoutCount,
+      maxPayouts: rules.maxPayouts,
+      payoutsThisMonth,
+      maxPayoutsPerMonth: rules.maxPayoutsPerMonth,
+      cycleProfit,
+      cycleProfitDays: winningDays,
+      winningDays,
+      minProfitDays: rules.minProfitDays,
+      minDailyProfit: rules.winningDayThreshold,
+      payoutMaxPercent: rules.payoutMaxPercent,
+      payoutAbsoluteCap: rules.payoutAbsoluteCap,
+      payoutSplit: rules.payoutSplit,
+      traderReceives,
+      lucidSplit: firmSplit,
+      minPayoutAmount: rules.minPayoutAmount,
+      stats,
+      maxPayoutAllowed,
+      currentPayoutTier: payoutCount + 1,
+      safetyNet: 0,
+      consistencyInfo: alphaConsistencyInfo,
     }
   }
 

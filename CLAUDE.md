@@ -81,3 +81,14 @@ No gradients, no glow, no blur. The background is flat `#000`.
   it. Delete the dead line.
 - `middleware.ts` gates every route except `/auth/*`. There is no public
   surface for a landing page or per-firm marketing pages.
+- `components/payout-status-panel.tsx` dispatches on `eligibility.firm`, but
+  only special-cases `"Tradeify"` and `"Lucid"` — everything else (Apex,
+  Topstep, and soon Alpha) falls into `ApexPayoutPanel`, which reads
+  Apex-shaped condition keys (`isConsistent`, `hasMinBalance`,
+  `isAboveSafetyNet`) and a "qualifying days" count sourced from
+  `consistencyInfo.daysWithMinProfit`, which is lifetime-windowed, not
+  since-last-payout-windowed. Topstep's XFA branch (`lib/storage.ts`) computes
+  its own correctly-windowed day counts, but the panel doesn't display them —
+  it'll show a lifetime count instead. Deferred until the panel gets rebuilt
+  as part of the visual rebrand; don't build a Topstep- or Alpha-specific
+  panel branch before then.

@@ -33,8 +33,9 @@ import { localTodayKey, parseLocalDate } from "@/lib/date-utils"
 
 interface PayoutEligibility {
   isEligible: boolean
-  firm: "Apex" | "Lucid" | "Tradeify"
+  firm: "Apex" | "Lucid" | "Tradeify" | "Topstep" | "Alpha"
   tradeifyProgram?: "select_flex" | "select_daily"
+  topstepPayoutPath?: "standard" | "consistency"
   missingConditions: string[]
   availableToWithdraw: number
   maxWithdrawable: number

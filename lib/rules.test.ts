@@ -449,10 +449,17 @@ describe("Topstep — XFA (funded) structure", () => {
     expect(withDll.payoutAbsoluteCap).toBe(8000)
   })
 
-  it("hasPayouts stays off — no getPayoutEligibility branch exists for this firm yet, so flipping it would fall through to Apex's safety-net formula", () => {
+  it("hasPayouts is on — getPayoutEligibility has a dedicated topstep_xfa branch now", () => {
     for (const path of ["standard", "consistency"] as const) {
       const r = getAccountRules(acct("Topstep", "PA", "EOD", 50000, { topstepPayoutPath: path }))
-      expect(r.hasPayouts).toBe(false)
+      expect(r.hasPayouts).toBe(true)
+    }
+  })
+
+  it("floorLocksOnPayout is on — MLL locks at breakeven immediately on any approved payout", () => {
+    for (const path of ["standard", "consistency"] as const) {
+      const r = getAccountRules(acct("Topstep", "PA", "EOD", 50000, { topstepPayoutPath: path }))
+      expect(r.floorLocksOnPayout).toBe(true)
     }
   })
 

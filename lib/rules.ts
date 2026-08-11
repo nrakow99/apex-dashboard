@@ -46,6 +46,16 @@ export interface AccountRules {
   // Payout
   hasPayouts: boolean
   maxPayouts: number
+  /**
+   * Rolling request-frequency cap, separate from maxPayouts (a lifetime
+   * count everywhere else in this file). 0 = not applicable. Counted by
+   * calendar month (same YYYY-MM as today), not a trailing 30-day window —
+   * confirmed as the intended reading for Alpha Futures, the only firm that
+   * sets this today ("up to 4 times a month" per the Payout Policy article;
+   * the article doesn't specify calendar vs rolling, so this was a judgment
+   * call, not a verified fact — revisit if Alpha's docs ever clarify).
+   */
+  maxPayoutsPerMonth: number
   minTradingDays: number
   minDailyProfit: number   // daily PnL threshold to count as a qualifying day
   minProfitDays: number    // how many qualifying days are required
@@ -219,6 +229,7 @@ export function getAccountRules(account: {
     consistencyBasis: "total_profit",
     hasPayouts: false,
     maxPayouts: 0,
+    maxPayoutsPerMonth: 0,
     minTradingDays: 0,
     minDailyProfit: 0,
     minProfitDays: 0,
@@ -474,10 +485,11 @@ export function getAccountRules(account: {
         hasConsistency: onConsistencyPath,
         consistencyPercent: onConsistencyPath ? 40 : 0,
         consistencyBasis: "total_profit",
-        // Standard: 5 winning days of $150+ (non-consecutive, and "profitable
-        // since last payout, first exempt" — neither the day-spacing nor the
-        // exemption is enforced anywhere; there's no eligibility-computation
-        // branch for this firm yet, see hasPayouts note below).
+        // Standard: 5 winning days of $150+ (non-consecutive — no day-spacing
+        // gate needed since getPayoutEligibility counts qualifying days since
+        // the last payout, not consecutive ones) and "profitable since last
+        // payout, first exempt" (getPayoutEligibility skips that check when
+        // payoutCount === 0).
         // Consistency: 3 trading days instead of a winning-day count.
         minProfitDays: onConsistencyPath ? 0 : 5,
         minDailyProfit: onConsistencyPath ? 0 : 150,
@@ -486,8 +498,8 @@ export function getAccountRules(account: {
         payoutSplit: 0.9,
         minPayoutAmount: 125,
         // Formula base is BALANCE, not cycle profit — unlike Lucid/Tradeify's
-        // profit-based 50%. payoutMaxPercent alone doesn't encode that
-        // distinction; not enforced anywhere yet (no eligibility branch).
+        // profit-based 50%. getPayoutEligibility's Topstep branch multiplies
+        // stats.currentBalance (not cycle profit) by payoutMaxPercent.
         payoutMaxPercent: 0.5,
         payoutAbsoluteCap: topstepXfaPayoutCap(tSize, path, hasDLL),
         payoutPolicyKind: "topstep_xfa",
@@ -495,12 +507,14 @@ export function getAccountRules(account: {
         // no stated lifetime limit, so this doesn't gate anything in
         // practice (mirrors Tradeify Flex/Daily's 99 "effectively unlimited").
         maxPayouts: 99,
-        // hasPayouts intentionally left at the base default (false).
-        // getPayoutEligibility (lib/storage.ts) has no Topstep branch yet —
-        // without one, enabling this would silently fall through to Apex's
-        // safety-net formula (tiered payoutCaps array + safety-net balance
-        // gate), which is the wrong shape entirely for XFA's single-ceiling
-        // + winning-days/consistency gate. Flip this once that branch exists.
+        hasPayouts: true,
+        // "Resets to $0 after every payout": the MLL locks at breakeven
+        // (accountSize) immediately upon ANY approved payout, independent of
+        // peak balance — not just when peak crosses lockPeakThreshold like
+        // the base trail-then-lock shape below. calculateAccountStats reads
+        // this flag to force the floor to lucidFlexFloor.lockedFloor once the
+        // account has at least one payout on record.
+        floorLocksOnPayout: true,
         lucidFlexFloor: topstepXfaMllFloor(tSize, r.maxDrawdown),
         maxContracts: r.maxContracts,
       }
@@ -586,18 +600,16 @@ export function getAccountRules(account: {
           minDailyProfit: 200,
           winningDayThreshold: 200,
           payoutPolicyKind: "alpha_qualified",
-          // "Up to 4 requests/month" is a rolling monthly cap — a different
-          // shape than maxPayouts (a lifetime count everywhere else in this
-          // file). 99 is an inert placeholder, same convention as Tradeify
-          // Flex/Daily and Topstep XFA; needs new state (a monthly counter)
-          // once an eligibility branch exists for this firm.
+          // Each XFA-style request draws off the current cycle, not a
+          // ladder — no stated lifetime limit, so maxPayouts stays the
+          // inert "effectively unlimited" 99 (same convention as Tradeify
+          // Flex/Daily and Topstep XFA). The real constraint is "up to 4
+          // times a month" — a rolling request-frequency cap, structurally
+          // different from a lifetime count, so it lives in its own field
+          // (maxPayoutsPerMonth) rather than overloading maxPayouts.
           maxPayouts: 99,
-          // hasPayouts stays at the base default (false): no Alpha branch
-          // in getPayoutEligibility yet, so enabling this would fall
-          // through to Apex's safety-net formula — wrong shape for Alpha's
-          // winning-days + consistency gate. payoutAbsoluteCap above is
-          // still the real, fully-determined number; just not consumed by
-          // anything live yet.
+          maxPayoutsPerMonth: 4,
+          hasPayouts: true,
           floorLocksOnPayout: false, // positive guard — Alpha does not reset MLL on withdrawal
           lucidFlexFloor: alphaMllFloor(zSize, r.maxDrawdown),
           maxContracts: r.maxContracts,
@@ -626,6 +638,8 @@ export function getAccountRules(account: {
           winningDayThreshold: 200,
           payoutPolicyKind: "alpha_qualified",
           maxPayouts: 99,
+          maxPayoutsPerMonth: 4,
+          hasPayouts: true,
           floorLocksOnPayout: false, // positive guard — Alpha does not reset MLL on withdrawal
           lucidFlexFloor: alphaMllFloor(mSize, r.maxDrawdown),
           maxContracts: r.maxContracts,
@@ -652,6 +666,8 @@ export function getAccountRules(account: {
         winningDayThreshold: 200,
         payoutPolicyKind: "alpha_qualified",
         maxPayouts: 99,
+        maxPayoutsPerMonth: 4,
+        hasPayouts: true,
         floorLocksOnPayout: false, // positive guard — Alpha does not reset MLL on withdrawal
         lucidFlexFloor: alphaMllFloor(mSize, r.maxDrawdown),
         hasScaling: false, // "no scaling plan" — confirmed
