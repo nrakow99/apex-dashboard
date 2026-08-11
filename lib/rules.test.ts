@@ -9,7 +9,9 @@ import type { Firm, AccountType, DrawdownType } from "./types"
 // page BEFORE trusting a green run — a stale value that passes is worse than
 // a failing test, because it looks correct forever.
 //
-// Verified against firm site on: ____________  (fill this in)
+// Verified against firm site on: 2026-08-11 (Apex EOD PA payout caps / min
+// daily profit per apextraderfunding.com/help-center/eod-trailing-drawdown-accounts/eod-payouts/
+// — other firms/tables not reverified on this date)
 
 const acct = (
   firm: Firm,
@@ -68,6 +70,23 @@ describe("Apex — PA", () => {
     expect(r.dailyLossLimit).toBe(1000)
     expect(r.minDailyProfit).toBe(250)
     expect(r.safetyNet).toBe(52100)
+  })
+
+  it("EOD 25K payout caps are flat at 1000, not the tiered intraday ladder", () => {
+    const r = getAccountRules(acct("Apex", "PA", "EOD", 25000))
+    expect(r.payoutCaps).toEqual([1000, 1000, 1000, 1000, 1000, 1000])
+  })
+
+  it("EOD 100K min daily profit is 300, payout #3 caps at 2500", () => {
+    const r = getAccountRules(acct("Apex", "PA", "EOD", 100000))
+    expect(r.minDailyProfit).toBe(300)
+    expect(r.payoutCaps).toEqual([2000, 2500, 2500, 3000, 4000, 4000])
+  })
+
+  it("EOD 150K min daily profit is 350, payout #4 caps at 3000", () => {
+    const r = getAccountRules(acct("Apex", "PA", "EOD", 150000))
+    expect(r.minDailyProfit).toBe(350)
+    expect(r.payoutCaps).toEqual([2500, 3000, 3000, 3000, 4000, 5000])
   })
 
   it("every PA size has caps matching maxPayouts", () => {

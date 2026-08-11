@@ -111,10 +111,10 @@ const APEX_EOD_PA: Record<SizeKey, {
   minBalanceToRequest: number
   payoutCaps: readonly number[]
 }> = {
-  25000:  { maxDrawdown: 1000, dailyLossLimit: 500,  minDailyProfit: 100, safetyNet: 26100,  minBalanceToRequest: 26600,  payoutCaps: [750,  750,  1000, 1000, 1250, 1500] },
+  25000:  { maxDrawdown: 1000, dailyLossLimit: 500,  minDailyProfit: 100, safetyNet: 26100,  minBalanceToRequest: 26600,  payoutCaps: [1000, 1000, 1000, 1000, 1000, 1000] },
   50000:  { maxDrawdown: 2000, dailyLossLimit: 1000, minDailyProfit: 250, safetyNet: 52100,  minBalanceToRequest: 52600,  payoutCaps: [1500, 1500, 2000, 2500, 2500, 3000] },
-  100000: { maxDrawdown: 3000, dailyLossLimit: 2000, minDailyProfit: 250, safetyNet: 103100, minBalanceToRequest: 103600, payoutCaps: [2000, 2500, 3000, 3000, 4000, 4000] },
-  150000: { maxDrawdown: 4000, dailyLossLimit: 3000, minDailyProfit: 300, safetyNet: 154100, minBalanceToRequest: 154600, payoutCaps: [2500, 3000, 3000, 4000, 4000, 5000] },
+  100000: { maxDrawdown: 3000, dailyLossLimit: 2000, minDailyProfit: 300, safetyNet: 103100, minBalanceToRequest: 103600, payoutCaps: [2000, 2500, 2500, 3000, 4000, 4000] },
+  150000: { maxDrawdown: 4000, dailyLossLimit: 3000, minDailyProfit: 350, safetyNet: 154100, minBalanceToRequest: 154600, payoutCaps: [2500, 3000, 3000, 3000, 4000, 5000] },
 }
 
 // ─── Lucid rules ─────────────────────────────────────────────────────────────
