@@ -11,9 +11,38 @@ import type { Firm, AccountType, DrawdownType } from "./types"
 // page BEFORE trusting a green run — a stale value that passes is worse than
 // a failing test, because it looks correct forever.
 //
-// Verified against firm site on: 2026-08-11 (Apex EOD PA payout caps / min
-// daily profit per apextraderfunding.com/help-center/eod-trailing-drawdown-accounts/eod-payouts/
-// — other firms/tables not reverified on this date)
+// Verified against firm site on 2026-08-11:
+// - Apex EOD PA payout caps / min daily profit per
+//   apextraderfunding.com/help-center/eod-trailing-drawdown-accounts/eod-payouts/
+// - Apex EOD Eval daily loss limits per
+//   apextraderfunding.com/help-center/eod-trailing-drawdown-accounts/eod-evaluations/
+//   — 100K/150K DLL corrected to 1500/2000, was wrongly 2000/3000
+// - Apex Intraday Eval (profit target / drawdown / contracts, feeds the
+//   Intraday PA maxDrawdown/maxContracts fields) and Apex Intraday PA payout
+//   ladder per apextraderfunding.com/help-center — all four ladder sizes
+//   diffed against the official table and matched exactly, no correction needed
+// - Lucid LucidFlex Payouts per
+//   support.lucidtrading.com/en/articles/12945796-lucidflex-payouts —
+//   25K minDailyProfit corrected 150→100 and payoutAbsoluteCap corrected
+//   0→1000 (was effectively uncapped; should be flat $1000 like every other
+//   size, not a scaling ladder). 50K/100K/150K already matched.
+// - Lucid Eval profit target and drawdown — all four sizes matched, no
+//   correction needed
+// - Tradeify Select Evaluation Accounts per
+//   help.tradeify.co/en/articles/12853921-select-evaluation-accounts —
+//   Select Eval profit target/drawdown/contracts (4 sizes) and Select Flex
+//   payout caps (4 sizes) and Select Daily payout caps/DLL/buffer (4 sizes
+//   × 3 fields) all matched exactly, no correction needed. One bug found:
+//   TRADEIFY_FLEX 25K lockPeakThreshold was 26600 (implied a $1500
+//   drawdown that doesn't exist anywhere), corrected to 26100 (25000 start
+//   + 1000 drawdown + 100, per "locks $100 above start once EOD balance
+//   exceeds drawdown+100" — the other 11 lock thresholds across Flex/Daily
+//   already satisfied that formula). NOT reverified this pass: Select
+//   Daily's own maxDrawdown (2500/3500 at 100K/150K, differs from Eval's
+//   3000/4500) — wasn't part of the verified numbers given, and the source
+//   page today was Evaluation Accounts, not the funded/Daily page.
+//
+// — other firms/tables not reverified on this date
 //
 // Verified against help.topstep.com on: 2026-08-11, including
 // help.topstep.com/en/articles/8284233 for XFA payout policy (Eval profit
@@ -56,6 +85,25 @@ describe("Apex — Eval", () => {
     expect(eod.dailyLossLimit).toBe(1000)
     expect(eod.maxDrawdown).toBe(2000)
     expect(eod.profitTarget).toBe(3000)
+  })
+
+  it("EOD daily loss limit does NOT scale 1:1 with drawdown at 100K/150K", () => {
+    // 100K/150K DLL is 1500/2000, not the naively-scaled 2000/3000 — the
+    // ratio to maxDrawdown/profitTarget breaks at these two sizes, unlike
+    // 25K/50K where DLL happens to equal maxDrawdown ÷ 2.
+    const eod25 = getAccountRules(acct("Apex", "Eval", "EOD", 25000))
+    const eod50 = getAccountRules(acct("Apex", "Eval", "EOD", 50000))
+    const eod100 = getAccountRules(acct("Apex", "Eval", "EOD", 100000))
+    const eod150 = getAccountRules(acct("Apex", "Eval", "EOD", 150000))
+    expect(eod25.dailyLossLimit).toBe(500)
+    expect(eod50.dailyLossLimit).toBe(1000)
+    expect(eod100.dailyLossLimit).toBe(1500)
+    expect(eod150.dailyLossLimit).toBe(2000)
+    // Drawdown and profit target are untouched by this fix.
+    expect(eod100.maxDrawdown).toBe(3000)
+    expect(eod100.profitTarget).toBe(6000)
+    expect(eod150.maxDrawdown).toBe(4000)
+    expect(eod150.profitTarget).toBe(9000)
   })
 
   it("scales across sizes", () => {
@@ -108,6 +156,16 @@ describe("Apex — PA", () => {
     expect(r.payoutCaps).toEqual([2500, 3000, 3000, 3000, 4000, 5000])
   })
 
+  it("intraday PA payout ladder matches the verified table at every size", () => {
+    // Diffed against Apex's official Intraday Payouts table 2026-08-11 —
+    // all four sizes matched exactly, no correction needed. Locking that in.
+    const a = (size: number) => getAccountRules(acct("Apex", "PA", "Intraday", size)).payoutCaps
+    expect(a(25000)).toEqual([1000, 1000, 1000, 1000, 1000, 1000])
+    expect(a(50000)).toEqual([1500, 2000, 2500, 2500, 3000, 3000])
+    expect(a(100000)).toEqual([2000, 2500, 3000, 3000, 4000, 4000])
+    expect(a(150000)).toEqual([2500, 3000, 3000, 4000, 4000, 5000])
+  })
+
   it("every PA size has caps matching maxPayouts", () => {
     for (const size of [25000, 50000, 100000, 150000]) {
       for (const dd of ["EOD", "Intraday"] as DrawdownType[]) {
@@ -143,8 +201,42 @@ describe("Lucid", () => {
     expect(r.lucidFlexFloor).not.toBeNull()
   })
 
-  it("25K PA has no absolute payout cap", () => {
-    expect(getAccountRules(acct("Lucid", "PA", "EOD", 25000)).payoutAbsoluteCap).toBe(0)
+  it("LucidFlex PA payout ladder matches the verified table at every size", () => {
+    // Diffed against support.lucidtrading.com/en/articles/12945796 on
+    // 2026-08-11. 25K was wrong on both fields — minDailyProfit was 150
+    // (should be 100) and payoutAbsoluteCap was 0/uncapped (should be
+    // 1000, flat, same as every other size — not a scaling ladder).
+    // 50K/100K/150K already matched exactly.
+    const a = (size: number) => getAccountRules(acct("Lucid", "PA", "EOD", size))
+    expect(a(25000).minDailyProfit).toBe(100)
+    expect(a(25000).payoutAbsoluteCap).toBe(1000)
+    expect(a(50000).minDailyProfit).toBe(150)
+    expect(a(50000).payoutAbsoluteCap).toBe(2000)
+    expect(a(100000).minDailyProfit).toBe(200)
+    expect(a(100000).payoutAbsoluteCap).toBe(2500)
+    expect(a(150000).minDailyProfit).toBe(250)
+    expect(a(150000).payoutAbsoluteCap).toBe(3000)
+    for (const size of [25000, 50000, 100000, 150000]) {
+      const r = getAccountRules(acct("Lucid", "PA", "EOD", size))
+      expect(r.maxPayouts).toBe(5)
+      expect(r.minPayoutAmount).toBe(500)
+      expect(r.payoutSplit).toBe(0.9)
+      expect(r.payoutMaxPercent).toBe(0.5)
+    }
+  })
+
+  it("Lucid Eval profit target and drawdown match the verified table at every size", () => {
+    // Diffed against the same verification pass — all four sizes already
+    // matched, no correction needed.
+    const a = (size: number) => getAccountRules(acct("Lucid", "Eval", "EOD", size))
+    expect(a(25000).profitTarget).toBe(1250)
+    expect(a(25000).maxDrawdown).toBe(1000)
+    expect(a(50000).profitTarget).toBe(3000)
+    expect(a(50000).maxDrawdown).toBe(2000)
+    expect(a(100000).profitTarget).toBe(6000)
+    expect(a(100000).maxDrawdown).toBe(3000)
+    expect(a(150000).profitTarget).toBe(9000)
+    expect(a(150000).maxDrawdown).toBe(4500)
   })
 })
 
@@ -157,6 +249,28 @@ describe("Tradeify", () => {
     expect(r.payoutPolicyKind).toBe("none")
   })
 
+  it("Select Eval profit target / drawdown / contracts match the verified table at every size", () => {
+    // Diffed against help.tradeify.co/en/articles/12853921 on 2026-08-11.
+    // All four sizes already matched exactly, no correction needed.
+    const a = (size: number) => getAccountRules(acct("Tradeify", "Eval", "EOD", size))
+    expect(a(25000).profitTarget).toBe(1500)
+    expect(a(25000).maxDrawdown).toBe(1000)
+    expect(a(25000).maxContracts).toBe("1 mini / 10 micros")
+    expect(a(50000).profitTarget).toBe(3000)
+    expect(a(50000).maxDrawdown).toBe(2000)
+    expect(a(50000).maxContracts).toBe("4 minis / 40 micros")
+    expect(a(100000).profitTarget).toBe(6000)
+    expect(a(100000).maxDrawdown).toBe(3000)
+    expect(a(100000).maxContracts).toBe("8 minis / 80 micros")
+    expect(a(150000).profitTarget).toBe(9000)
+    expect(a(150000).maxDrawdown).toBe(4500)
+    expect(a(150000).maxContracts).toBe("12 minis / 120 micros")
+    for (const size of [25000, 50000, 100000, 150000]) {
+      const r = getAccountRules(acct("Tradeify", "Eval", "EOD", size))
+      expect(r.hasDLL).toBe(false)
+    }
+  })
+
   it("flex funded has a lock floor and no daily loss limit", () => {
     const r = getAccountRules(acct("Tradeify", "PA", "EOD", 50000, { program: "select_flex" }))
     expect(r.payoutPolicyKind).toBe("tradeify_flex")
@@ -165,12 +279,77 @@ describe("Tradeify", () => {
     expect(r.lucidFlexFloor).not.toBeNull()
   })
 
+  it("Select Flex payout caps match the verified table; no DLL, no funded consistency", () => {
+    // Diffed against help.tradeify.co/en/articles/12853921 on 2026-08-11.
+    // All four payout caps already matched. No changes to those.
+    const a = (size: number) => getAccountRules(acct("Tradeify", "PA", "EOD", size, { program: "select_flex" }))
+    expect(a(25000).payoutAbsoluteCap).toBe(1250)
+    expect(a(50000).payoutAbsoluteCap).toBe(3000)
+    expect(a(100000).payoutAbsoluteCap).toBe(4000)
+    expect(a(150000).payoutAbsoluteCap).toBe(5000)
+    for (const size of [25000, 50000, 100000, 150000]) {
+      const r = getAccountRules(acct("Tradeify", "PA", "EOD", size, { program: "select_flex" }))
+      expect(r.hasDLL).toBe(false)
+      expect(r.bufferAmount).toBe(0)
+      expect(r.hasConsistency).toBe(false)
+      expect(r.payoutSplit).toBe(0.9)
+    }
+  })
+
+  it("Flex 25K lock threshold was wrong — locks at $100 above starting balance once EOD balance exceeds drawdown+100", () => {
+    // Bug found this pass: lockPeakThreshold was 26600 (implied a $1500
+    // drawdown), corrected to 26100 (25000 start + 1000 drawdown + 100).
+    // 50K/100K/150K already satisfied this formula exactly.
+    const r = getAccountRules(acct("Tradeify", "PA", "EOD", 25000, { program: "select_flex" }))
+    expect(r.lucidFlexFloor?.lockedFloor).toBe(25100)
+    expect(r.lucidFlexFloor?.lockPeakThreshold).toBe(26100)
+  })
+
   it("daily funded has a daily loss limit and a buffer", () => {
     const r = getAccountRules(acct("Tradeify", "PA", "EOD", 50000, { program: "select_daily" }))
     expect(r.payoutPolicyKind).toBe("tradeify_daily")
     expect(r.hasDLL).toBe(true)
     expect(r.dailyLossLimit).toBeGreaterThan(0)
     expect(r.bufferAmount).toBeGreaterThan(0)
+  })
+
+  it("Select Daily payout caps / DLL / buffer match the verified table at every size", () => {
+    // Diffed against help.tradeify.co/en/articles/12853921 on 2026-08-11.
+    // All twelve values (4 sizes × 3 fields) already matched exactly.
+    const a = (size: number) => getAccountRules(acct("Tradeify", "PA", "EOD", size, { program: "select_daily" }))
+    expect(a(25000).payoutAbsoluteCap).toBe(600)
+    expect(a(25000).dailyLossLimit).toBe(500)
+    expect(a(25000).bufferAmount).toBe(1100)
+    expect(a(50000).payoutAbsoluteCap).toBe(1000)
+    expect(a(50000).dailyLossLimit).toBe(1000)
+    expect(a(50000).bufferAmount).toBe(2100)
+    expect(a(100000).payoutAbsoluteCap).toBe(1500)
+    expect(a(100000).dailyLossLimit).toBe(1250)
+    expect(a(100000).bufferAmount).toBe(2600)
+    expect(a(150000).payoutAbsoluteCap).toBe(2500)
+    expect(a(150000).dailyLossLimit).toBe(1750)
+    expect(a(150000).bufferAmount).toBe(3600)
+    for (const size of [25000, 50000, 100000, 150000]) {
+      const r = getAccountRules(acct("Tradeify", "PA", "EOD", size, { program: "select_daily" }))
+      expect(r.hasConsistency).toBe(false)
+      expect(r.payoutSplit).toBe(0.9)
+    }
+  })
+
+  it("Daily lock thresholds all satisfy: locks $100 above start once EOD balance exceeds drawdown+100", () => {
+    // Daily's own maxDrawdown differs from Eval's at 100K/150K (2500/3500
+    // vs 3000/4500) — that wasn't part of this pass's verified numbers, not
+    // touched, but flagging: worth checking against the funded/Daily-specific
+    // help page directly, since today's source was the Evaluation page.
+    const a = (size: number) => getAccountRules(acct("Tradeify", "PA", "EOD", size, { program: "select_daily" }))
+    expect(a(25000).lucidFlexFloor?.lockedFloor).toBe(25100)
+    expect(a(25000).lucidFlexFloor?.lockPeakThreshold).toBe(26100)
+    expect(a(50000).lucidFlexFloor?.lockedFloor).toBe(50100)
+    expect(a(50000).lucidFlexFloor?.lockPeakThreshold).toBe(52100)
+    expect(a(100000).lucidFlexFloor?.lockedFloor).toBe(100100)
+    expect(a(100000).lucidFlexFloor?.lockPeakThreshold).toBe(102600)
+    expect(a(150000).lucidFlexFloor?.lockedFloor).toBe(150100)
+    expect(a(150000).lucidFlexFloor?.lockPeakThreshold).toBe(153600)
   })
 
   it("legacy funded rows infer their program from the daily loss limit", () => {

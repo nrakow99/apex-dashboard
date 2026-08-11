@@ -118,8 +118,8 @@ const APEX_INTRADAY_EVAL: Record<SizeKey, Pick<AccountRules, "profitTarget" | "m
 const APEX_EOD_EVAL: Record<SizeKey, Pick<AccountRules, "profitTarget" | "maxDrawdown" | "dailyLossLimit">> = {
   25000:  { profitTarget: 1500, maxDrawdown: 1000, dailyLossLimit: 500 },
   50000:  { profitTarget: 3000, maxDrawdown: 2000, dailyLossLimit: 1000 },
-  100000: { profitTarget: 6000, maxDrawdown: 3000, dailyLossLimit: 2000 },
-  150000: { profitTarget: 9000, maxDrawdown: 4000, dailyLossLimit: 3000 },
+  100000: { profitTarget: 6000, maxDrawdown: 3000, dailyLossLimit: 1500 },
+  150000: { profitTarget: 9000, maxDrawdown: 4000, dailyLossLimit: 2000 },
 }
 
 const APEX_INTRADAY_PA: Record<SizeKey, {
@@ -168,7 +168,7 @@ const LUCID_FLEX_PA: Record<SizeKey, {
   minDailyProfit: number
   payoutAbsoluteCap: number
 }> = {
-  25000:  { maxDrawdown: 1000, maxContracts: "2 mini / 20 micros",   minDailyProfit: 150, payoutAbsoluteCap: 0 },
+  25000:  { maxDrawdown: 1000, maxContracts: "2 mini / 20 micros",   minDailyProfit: 100, payoutAbsoluteCap: 1000 },
   50000:  { maxDrawdown: 2000, maxContracts: "4 mini / 40 micros",   minDailyProfit: 150, payoutAbsoluteCap: 2000 },
   100000: { maxDrawdown: 3000, maxContracts: "6 mini / 60 micros",   minDailyProfit: 200, payoutAbsoluteCap: 2500 },
   150000: { maxDrawdown: 4500, maxContracts: "10 mini / 100 micros", minDailyProfit: 250, payoutAbsoluteCap: 3000 },

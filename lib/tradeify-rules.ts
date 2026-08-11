@@ -42,7 +42,7 @@ export const TRADEIFY_FLEX: Record<
     payoutCap: 1250,
     maxContracts: "2 minis / 20 micros",
     lockFloor: 25100,
-    lockPeakThreshold: 26600,
+    lockPeakThreshold: 26100,
   },
   50000: {
     maxDrawdown: 2000,
