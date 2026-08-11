@@ -1,3 +1,6 @@
+import type { TopstepPayoutPath } from "@/lib/types"
+import type { LucidFlexFloorParams } from "@/lib/lucid-flex-floor"
+
 export type TopstepSizeKey = 50000 | 100000 | 150000
 
 /**
@@ -35,16 +38,49 @@ export const TOPSTEP_EVAL: Record<
   150000: { profitTarget: 9000, maxDrawdown: 4500, dailyLossLimit: 3000, maxContracts: "15 minis" },
 }
 
-/** Whether the optional Daily Loss Limit was elected at checkout. */
-export type TopstepDllElection = "with_dll" | "without_dll"
+/**
+ * Verified against help.topstep.com/en/articles/8284233 on 2026-08-11.
+ * Base ceiling per (size, path), no DLL elected — a single fixed ceiling
+ * per cell, NOT a per-payout ladder like Apex's payoutCaps array. The real
+ * rule is "50% of balance up to this ceiling," computed fresh each request,
+ * not tiered across successive payouts.
+ *
+ * Electing the optional Daily Loss Limit (Account.hasDailyLossLimit) exactly
+ * doubles the ceiling in every cell — encoded as a multiplier rule via
+ * topstepXfaPayoutCap() below, not as 8 separately hardcoded numbers, so a
+ * future re-verification only has to touch the 6 base values.
+ */
+export const TOPSTEP_XFA_BASE_PAYOUT_CAP: Record<TopstepSizeKey, Record<TopstepPayoutPath, number>> = {
+  50000: { standard: 2000, consistency: 3000 },
+  100000: { standard: 3000, consistency: 4000 },
+  150000: { standard: 5000, consistency: 6000 },
+}
+
+/** Resolves the real payout ceiling for a given size/path/DLL-election combination. */
+export function topstepXfaPayoutCap(
+  size: TopstepSizeKey,
+  path: TopstepPayoutPath,
+  hasDailyLossLimit: boolean,
+): number {
+  const base = TOPSTEP_XFA_BASE_PAYOUT_CAP[size][path]
+  return hasDailyLossLimit ? base * 2 : base
+}
 
 /**
- * Funded (XFA) payout caps by size and DLL election. NOT WIRED into
- * getAccountRules yet — structure only. Values are TODO pending
- * verification against help.topstep.com; do not fill from any other source.
+ * XFA Trailing Max Loss Limit: starts at accountSize − maxDrawdown, trails
+ * 1:1 with peak balance same as Eval, but locks permanently at breakeven
+ * (accountSize) once peak reaches accountSize + maxDrawdown — it never
+ * trails above breakeven. This reuses the LucidFlex "trail then lock" shape;
+ * it does NOT yet express "also locks at breakeven immediately upon first
+ * payout, independent of peak" — that needs payout history threaded into
+ * the floor calc, which lucidFlexActiveFloor doesn't accept. Not implemented
+ * pending the payout feature landing (hasPayouts is false for Topstep PA
+ * until then).
  */
-export const TOPSTEP_FUNDED_PAYOUT_CAP: Record<TopstepSizeKey, Record<TopstepDllElection, number | null>> = {
-  50000: { with_dll: null /* TODO: verify */, without_dll: null /* TODO: verify */ },
-  100000: { with_dll: null /* TODO: verify */, without_dll: null /* TODO: verify */ },
-  150000: { with_dll: null /* TODO: verify */, without_dll: null /* TODO: verify */ },
+export function topstepXfaMllFloor(accountSize: number, maxDrawdown: number): LucidFlexFloorParams {
+  return {
+    minimumFloor: accountSize - maxDrawdown,
+    lockPeakThreshold: accountSize + maxDrawdown,
+    lockedFloor: accountSize,
+  }
 }

@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest"
 import { getAccountRules, resolveTradeifyProgram } from "./rules"
-import { toTopstepSizeKey } from "./topstep-rules"
+import { toTopstepSizeKey, TOPSTEP_XFA_BASE_PAYOUT_CAP, topstepXfaPayoutCap } from "./topstep-rules"
 import type { Firm, AccountType, DrawdownType } from "./types"
 
 // Golden-file tests for the rule engine.
@@ -14,10 +14,13 @@ import type { Firm, AccountType, DrawdownType } from "./types"
 // daily profit per apextraderfunding.com/help-center/eod-trailing-drawdown-accounts/eod-payouts/
 // — other firms/tables not reverified on this date)
 //
-// Verified against help.topstep.com on: 2026-08-11 (Eval profit target / Max
-// Loss Limit / optional Daily Loss Limit / contract count, all sizes).
-// Topstep funded (XFA) payout caps are NOT verified — see
-// lib/topstep-rules.ts TOPSTEP_FUNDED_PAYOUT_CAP, left as TODO.
+// Verified against help.topstep.com on: 2026-08-11, including
+// help.topstep.com/en/articles/8284233 for XFA payout policy (Eval profit
+// target / Max Loss Limit / optional Daily Loss Limit / contract count, all
+// sizes; XFA base payout ceilings per size+path, the 2x-on-DLL rule, 90/10
+// split, $125 min payout, MLL start/lock shape). Topstep changed the payout
+// grid 2026-04-28 — reverify TOPSTEP_XFA_BASE_PAYOUT_CAP if it's been a
+// while since this date.
 
 const acct = (
   firm: Firm,
@@ -220,11 +223,117 @@ describe("Topstep — Eval", () => {
   })
 })
 
+describe("Topstep — XFA (funded) structure", () => {
+  it("cap table is a single ceiling per (size, path), not a per-payout array", () => {
+    for (const size of [50000, 100000, 150000] as const) {
+      for (const path of ["standard", "consistency"] as const) {
+        expect(Array.isArray(TOPSTEP_XFA_BASE_PAYOUT_CAP[size][path])).toBe(false)
+        expect(typeof TOPSTEP_XFA_BASE_PAYOUT_CAP[size][path]).toBe("number")
+      }
+    }
+  })
+
+  it("all 6 base ceilings match help.topstep.com/en/articles/8284233", () => {
+    expect(TOPSTEP_XFA_BASE_PAYOUT_CAP[50000].standard).toBe(2000)
+    expect(TOPSTEP_XFA_BASE_PAYOUT_CAP[50000].consistency).toBe(3000)
+    expect(TOPSTEP_XFA_BASE_PAYOUT_CAP[100000].standard).toBe(3000)
+    expect(TOPSTEP_XFA_BASE_PAYOUT_CAP[100000].consistency).toBe(4000)
+    expect(TOPSTEP_XFA_BASE_PAYOUT_CAP[150000].standard).toBe(5000)
+    expect(TOPSTEP_XFA_BASE_PAYOUT_CAP[150000].consistency).toBe(6000)
+  })
+
+  it("electing the DLL exactly doubles the ceiling", () => {
+    expect(topstepXfaPayoutCap(50000, "standard", false)).toBe(2000)
+    expect(topstepXfaPayoutCap(50000, "standard", true)).toBe(4000)
+    expect(topstepXfaPayoutCap(150000, "consistency", false)).toBe(6000)
+    expect(topstepXfaPayoutCap(150000, "consistency", true)).toBe(12000)
+  })
+
+  it("getAccountRules resolves the doubled cap into payoutAbsoluteCap when DLL is elected", () => {
+    const withoutDll = getAccountRules(
+      acct("Topstep", "PA", "EOD", 100000, { topstepPayoutPath: "consistency" }),
+    )
+    const withDll = getAccountRules(
+      acct("Topstep", "PA", "EOD", 100000, { topstepPayoutPath: "consistency", hasDailyLossLimit: true }),
+    )
+    expect(withoutDll.payoutAbsoluteCap).toBe(4000)
+    expect(withDll.payoutAbsoluteCap).toBe(8000)
+  })
+
+  it("hasPayouts stays off — no getPayoutEligibility branch exists for this firm yet, so flipping it would fall through to Apex's safety-net formula", () => {
+    for (const path of ["standard", "consistency"] as const) {
+      const r = getAccountRules(acct("Topstep", "PA", "EOD", 50000, { topstepPayoutPath: path }))
+      expect(r.hasPayouts).toBe(false)
+    }
+  })
+
+  it("90/10 split and $125 minimum payout are wired regardless of path", () => {
+    const r = getAccountRules(acct("Topstep", "PA", "EOD", 100000, { topstepPayoutPath: "standard" }))
+    expect(r.payoutSplit).toBe(0.9)
+    expect(r.minPayoutAmount).toBe(125)
+    expect(r.payoutPolicyKind).toBe("topstep_xfa")
+  })
+
+  it("Standard path: 5 winning days of $150+; Consistency path: 3 trading days instead", () => {
+    const standard = getAccountRules(acct("Topstep", "PA", "EOD", 50000, { topstepPayoutPath: "standard" }))
+    expect(standard.minProfitDays).toBe(5)
+    expect(standard.minDailyProfit).toBe(150)
+
+    const consistency = getAccountRules(acct("Topstep", "PA", "EOD", 50000, { topstepPayoutPath: "consistency" }))
+    expect(consistency.minTradingDays).toBe(3)
+  })
+
+  it("MLL starts at size − maxDrawdown and locks at breakeven (size), same shape as LucidFlex", () => {
+    const r = getAccountRules(acct("Topstep", "PA", "EOD", 150000, { topstepPayoutPath: "standard" }))
+    expect(r.maxDrawdown).toBe(4500)
+    expect(r.lucidFlexFloor).not.toBeNull()
+    expect(r.lucidFlexFloor?.minimumFloor).toBe(150000 - 4500)
+    expect(r.lucidFlexFloor?.lockPeakThreshold).toBe(150000 + 4500)
+    expect(r.lucidFlexFloor?.lockedFloor).toBe(150000)
+  })
+
+  it("funded MLL reuses the same $ figures as Eval for each size", () => {
+    expect(getAccountRules(acct("Topstep", "PA", "EOD", 50000)).maxDrawdown).toBe(2000)
+    expect(getAccountRules(acct("Topstep", "PA", "EOD", 100000)).maxDrawdown).toBe(3000)
+    expect(getAccountRules(acct("Topstep", "PA", "EOD", 150000)).maxDrawdown).toBe(4500)
+  })
+})
+
+describe("Topstep — XFA dual consistencyBasis (differs from Eval)", () => {
+  it("Consistency path: 40% of total net profit, not 50% of a fixed target", () => {
+    const r = getAccountRules(acct("Topstep", "PA", "EOD", 50000, { topstepPayoutPath: "consistency" }))
+    expect(r.hasConsistency).toBe(true)
+    expect(r.consistencyPercent).toBe(40)
+    expect(r.consistencyBasis).toBe("total_profit")
+  })
+
+  it("Standard path: no consistency rule at all", () => {
+    const r = getAccountRules(acct("Topstep", "PA", "EOD", 50000, { topstepPayoutPath: "standard" }))
+    expect(r.hasConsistency).toBe(false)
+    expect(r.consistencyPercent).toBe(0)
+  })
+
+  it("unset path defaults to Standard (no consistency claim without an explicit election)", () => {
+    const r = getAccountRules(acct("Topstep", "PA", "EOD", 50000))
+    expect(r.hasConsistency).toBe(false)
+  })
+
+  it("Eval and XFA-Consistency use different bases on the same firm: profit_target vs total_profit", () => {
+    const eval_ = getAccountRules(acct("Topstep", "Eval", "EOD", 50000))
+    const xfa = getAccountRules(acct("Topstep", "PA", "EOD", 50000, { topstepPayoutPath: "consistency" }))
+    expect(eval_.consistencyBasis).toBe("profit_target")
+    expect(xfa.consistencyBasis).toBe("total_profit")
+    expect(eval_.consistencyPercent).toBe(50)
+    expect(xfa.consistencyPercent).toBe(40)
+  })
+})
+
 describe("Topstep — no 25K tier", () => {
   it("throws for any size under 50K instead of clamping to 50K", () => {
     expect(() => toTopstepSizeKey(25000)).toThrow()
     expect(() => toTopstepSizeKey(49999)).toThrow()
     expect(() => getAccountRules(acct("Topstep", "Eval", "EOD", 25000))).toThrow()
+    expect(() => getAccountRules(acct("Topstep", "PA", "EOD", 25000))).toThrow()
   })
 
   it("accepts the three real tiers without throwing", () => {

@@ -6,6 +6,9 @@ export type Firm = "Apex" | "Lucid" | "Tradeify" | "Topstep"
 /** Tradeify Select program (null for Apex/Lucid). */
 export type TradeifyProgram = "select_eval" | "select_flex" | "select_daily"
 
+/** Topstep XFA payout path, chosen at funded stage (not at Eval checkout). */
+export type TopstepPayoutPath = "standard" | "consistency"
+
 export interface Account {
   id: string
   name: string
@@ -41,6 +44,8 @@ export interface Account {
   legacyFiftyKTarget?: boolean
   /** Optional Daily Loss Limit, elected at checkout (currently: Topstep). Other firms may add this later. */
   hasDailyLossLimit?: boolean
+  /** Topstep XFA only: Standard vs Consistency payout path. Determines the payout ceiling and whether the 40%-of-total-profit consistency rule applies. */
+  topstepPayoutPath?: TopstepPayoutPath | null
 }
 
 export interface Trade {

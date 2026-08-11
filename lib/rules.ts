@@ -1,4 +1,4 @@
-import type { Firm, AccountType, DrawdownType, TradeifyProgram } from "./types"
+import type { Firm, AccountType, DrawdownType, TradeifyProgram, TopstepPayoutPath } from "./types"
 import { lucidFlexFloorForSize, type LucidFlexFloorParams } from "./lucid-flex-floor"
 import {
   TRADEIFY_EVAL,
@@ -8,7 +8,7 @@ import {
   tradeifyLockParams,
   toTradeifySizeKey,
 } from "./tradeify-rules"
-import { TOPSTEP_EVAL, toTopstepSizeKey } from "./topstep-rules"
+import { TOPSTEP_EVAL, toTopstepSizeKey, topstepXfaMllFloor, topstepXfaPayoutCap } from "./topstep-rules"
 
 export interface AccountRules {
   // Drawdown
@@ -66,6 +66,7 @@ export interface AccountRules {
     | "lucid_cycle"
     | "tradeify_flex"
     | "tradeify_daily"
+    | "topstep_xfa"
     | "none"
 }
 
@@ -175,6 +176,7 @@ export function getAccountRules(account: {
   legacyFiftyKTarget?: boolean
   profitTarget?: number
   hasDailyLossLimit?: boolean
+  topstepPayoutPath?: TopstepPayoutPath | null
 }): AccountRules {
   const firm = account.firm ?? "Apex"
   const size = toSizeKey(account.accountSize ?? 50000)
@@ -408,13 +410,12 @@ export function getAccountRules(account: {
   }
 
   // ── Topstep ───────────────────────────────────────────────────────────────
-  // Funded (XFA) not implemented yet — see lib/topstep-rules.ts TOPSTEP_FUNDED_PAYOUT_CAP.
 
   if (firm === "Topstep") {
     const tSize = toTopstepSizeKey(account.accountSize)
+    const r = TOPSTEP_EVAL[tSize]
 
     if (account.type === "Eval") {
-      const r = TOPSTEP_EVAL[tSize]
       return {
         ...base,
         floorLabel: "EOD Trailing Max Loss Limit",
@@ -426,6 +427,54 @@ export function getAccountRules(account: {
         hasConsistency: true,
         consistencyPercent: 50,
         consistencyBasis: "profit_target",
+        maxContracts: r.maxContracts,
+      }
+    }
+
+    if (account.type === "PA") {
+      // XFA. maxDrawdown/dailyLossLimit reuse the Eval $ figures for this
+      // size — Topstep carries the same trailing MLL/DLL dollar amounts into
+      // funded, no separate funded table was given.
+      const onConsistencyPath = account.topstepPayoutPath === "consistency"
+      const path: TopstepPayoutPath = onConsistencyPath ? "consistency" : "standard"
+      const hasDLL = Boolean(account.hasDailyLossLimit)
+      return {
+        ...base,
+        floorLabel: "XFA Trailing Max Loss Limit (locks at breakeven)",
+        maxDrawdown: r.maxDrawdown,
+        hasDLL,
+        dailyLossLimit: hasDLL ? r.dailyLossLimit : 0,
+        hasConsistency: onConsistencyPath,
+        consistencyPercent: onConsistencyPath ? 40 : 0,
+        consistencyBasis: "total_profit",
+        // Standard: 5 winning days of $150+ (non-consecutive, and "profitable
+        // since last payout, first exempt" — neither the day-spacing nor the
+        // exemption is enforced anywhere; there's no eligibility-computation
+        // branch for this firm yet, see hasPayouts note below).
+        // Consistency: 3 trading days instead of a winning-day count.
+        minProfitDays: onConsistencyPath ? 0 : 5,
+        minDailyProfit: onConsistencyPath ? 0 : 150,
+        winningDayThreshold: onConsistencyPath ? 0 : 150,
+        minTradingDays: onConsistencyPath ? 3 : 0,
+        payoutSplit: 0.9,
+        minPayoutAmount: 125,
+        // Formula base is BALANCE, not cycle profit — unlike Lucid/Tradeify's
+        // profit-based 50%. payoutMaxPercent alone doesn't encode that
+        // distinction; not enforced anywhere yet (no eligibility branch).
+        payoutMaxPercent: 0.5,
+        payoutAbsoluteCap: topstepXfaPayoutCap(tSize, path, hasDLL),
+        payoutPolicyKind: "topstep_xfa",
+        // Each XFA request is a fresh single-ceiling payout, not a ladder —
+        // no stated lifetime limit, so this doesn't gate anything in
+        // practice (mirrors Tradeify Flex/Daily's 99 "effectively unlimited").
+        maxPayouts: 99,
+        // hasPayouts intentionally left at the base default (false).
+        // getPayoutEligibility (lib/storage.ts) has no Topstep branch yet —
+        // without one, enabling this would silently fall through to Apex's
+        // safety-net formula (tiered payoutCaps array + safety-net balance
+        // gate), which is the wrong shape entirely for XFA's single-ceiling
+        // + winning-days/consistency gate. Flip this once that branch exists.
+        lucidFlexFloor: topstepXfaMllFloor(tSize, r.maxDrawdown),
         maxContracts: r.maxContracts,
       }
     }

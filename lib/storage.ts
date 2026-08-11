@@ -132,7 +132,11 @@ export function calculateAccountStats(
   const projectedHighest = Math.max(highestCompletedEodBalance, currentBalance)
   let projectedEodFloor = projectedHighest - maxDrawdown
 
-  if (rules.lucidFlexFloor && account.type === "PA" && (account.firm === "Lucid" || account.firm === "Tradeify")) {
+  if (
+    rules.lucidFlexFloor &&
+    account.type === "PA" &&
+    (account.firm === "Lucid" || account.firm === "Tradeify" || account.firm === "Topstep")
+  ) {
     activeEodFloor = lucidFlexActiveFloor(
       peakBalance,
       maxDrawdown,
@@ -194,6 +198,17 @@ export function isTradeifyEvalConsistency(account: Account): boolean {
 /** Topstep Eval: largest day ≤ 50% of the (fixed) profit target, not of accumulated profit. */
 export function isTopstepEvalConsistency(account: Account): boolean {
   return account.firm === "Topstep" && account.type === "Eval"
+}
+
+/**
+ * Topstep XFA, Consistency payout path only: largest day ≤ 40% of total net
+ * profit for the window — total_profit basis, like Apex PA, but unlike Apex
+ * PA the window is NOT known to reset at last payout (that behavior is
+ * Apex-specific in dailyPnLForConsistencyPeriod). Uses lifetime daily data
+ * until confirmed otherwise. The Standard path has no consistency rule.
+ */
+export function isTopstepXfaConsistency(account: Account): boolean {
+  return account.firm === "Topstep" && account.type === "PA" && account.topstepPayoutPath === "consistency"
 }
 
 function roundMoney(n: number): number {
@@ -344,7 +359,8 @@ export function getConsistencyInfo(accountId: string, trades: Trade[], account: 
   } else if (
     isApexPaConsistency(account) ||
     isLucidEvalConsistency(account) ||
-    isTradeifyEvalConsistency(account)
+    isTradeifyEvalConsistency(account) ||
+    isTopstepXfaConsistency(account)
   ) {
     metrics = computeNetProfitConsistency(
       isApexPaConsistency(account) ? periodDaily : allDaily,
