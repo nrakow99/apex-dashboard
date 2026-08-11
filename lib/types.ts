@@ -1,13 +1,16 @@
 export type AccountType = "Eval" | "PA" | "Live"
 export type AccountStatus = "Active" | "Passed" | "Breached"
 export type DrawdownType = "EOD" | "Intraday"
-export type Firm = "Apex" | "Lucid" | "Tradeify" | "Topstep"
+export type Firm = "Apex" | "Lucid" | "Tradeify" | "Topstep" | "Alpha"
 
 /** Tradeify Select program (null for Apex/Lucid). */
 export type TradeifyProgram = "select_eval" | "select_flex" | "select_daily"
 
 /** Topstep XFA payout path, chosen at funded stage (not at Eval checkout). */
 export type TopstepPayoutPath = "standard" | "consistency"
+
+/** Alpha Futures tier — a rule-variant choice (different targets/consistency/DLG), not a size variant. */
+export type AlphaTier = "zero" | "standard" | "advanced"
 
 export interface Account {
   id: string
@@ -46,6 +49,8 @@ export interface Account {
   hasDailyLossLimit?: boolean
   /** Topstep XFA only: Standard vs Consistency payout path. Determines the payout ceiling and whether the 40%-of-total-profit consistency rule applies. */
   topstepPayoutPath?: TopstepPayoutPath | null
+  /** Alpha Futures only: zero | standard | advanced. Required for firm === "Alpha" — getAccountRules throws if unset, no safe default exists across tiers. */
+  alphaTier?: AlphaTier | null
 }
 
 export interface Trade {

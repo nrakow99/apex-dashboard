@@ -135,7 +135,7 @@ export function calculateAccountStats(
   if (
     rules.lucidFlexFloor &&
     account.type === "PA" &&
-    (account.firm === "Lucid" || account.firm === "Tradeify" || account.firm === "Topstep")
+    (account.firm === "Lucid" || account.firm === "Tradeify" || account.firm === "Topstep" || account.firm === "Alpha")
   ) {
     activeEodFloor = lucidFlexActiveFloor(
       peakBalance,
@@ -211,6 +211,29 @@ export function isTopstepXfaConsistency(account: Account): boolean {
   return account.firm === "Topstep" && account.type === "PA" && account.topstepPayoutPath === "consistency"
 }
 
+/**
+ * Alpha Futures Eval: Standard (50%) and Advanced (40%) both use total_profit
+ * basis, confirmed against the Consistency Rule article ("profits from one
+ * single trading day cannot be larger than X% of your net profits made").
+ * Zero Eval has no consistency rule at all (hasConsistency false already
+ * handles that — this predicate doesn't need to exclude it).
+ */
+export function isAlphaEvalConsistency(account: Account): boolean {
+  return account.firm === "Alpha" && account.type === "Eval" && account.alphaTier !== "zero"
+}
+
+/**
+ * Alpha Futures Qualified: Zero and Standard (both 40%) use total_profit
+ * basis, confirmed via the same article, AND the window resets since the
+ * last withdrawal request — confirmed explicitly ("This rule resets in
+ * between each account withdrawal request"), unlike Topstep XFA where that
+ * windowing is still an open question. Advanced Qualified has no consistency
+ * rule (hasConsistency false already excludes it).
+ */
+export function isAlphaQualifiedConsistency(account: Account): boolean {
+  return account.firm === "Alpha" && account.type === "PA" && account.alphaTier !== "advanced"
+}
+
 function roundMoney(n: number): number {
   return Math.round(n * 100) / 100
 }
@@ -234,7 +257,7 @@ function dailyPnLForConsistencyPeriod(
   payouts: Payout[],
 ): DailyPnL[] {
   const allDaily = calculateDailyPnLData(accountId, trades, account, payouts)
-  if (!isApexPaConsistency(account)) return allDaily
+  if (!isApexPaConsistency(account) && !isAlphaQualifiedConsistency(account)) return allDaily
 
   const lastPayoutDate = getLastPayoutDate(account, payouts)
   if (!lastPayoutDate) return allDaily
@@ -349,7 +372,7 @@ export function getConsistencyInfo(accountId: string, trades: Trade[], account: 
     }
   }
 
-  const periodDaily = isApexPaConsistency(account)
+  const periodDaily = isApexPaConsistency(account) || isAlphaQualifiedConsistency(account)
     ? dailyPnLForConsistencyPeriod(accountId, trades, account, payouts)
     : allDaily
 
@@ -360,10 +383,12 @@ export function getConsistencyInfo(accountId: string, trades: Trade[], account: 
     isApexPaConsistency(account) ||
     isLucidEvalConsistency(account) ||
     isTradeifyEvalConsistency(account) ||
-    isTopstepXfaConsistency(account)
+    isTopstepXfaConsistency(account) ||
+    isAlphaEvalConsistency(account) ||
+    isAlphaQualifiedConsistency(account)
   ) {
     metrics = computeNetProfitConsistency(
-      isApexPaConsistency(account) ? periodDaily : allDaily,
+      isApexPaConsistency(account) || isAlphaQualifiedConsistency(account) ? periodDaily : allDaily,
       rules.consistencyPercent,
     )
   } else {

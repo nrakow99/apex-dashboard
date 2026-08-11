@@ -1,4 +1,4 @@
-import type { Firm, AccountType, DrawdownType, TradeifyProgram, TopstepPayoutPath } from "./types"
+import type { Firm, AccountType, DrawdownType, TradeifyProgram, TopstepPayoutPath, AlphaTier } from "./types"
 import { lucidFlexFloorForSize, type LucidFlexFloorParams } from "./lucid-flex-floor"
 import {
   TRADEIFY_EVAL,
@@ -9,6 +9,18 @@ import {
   toTradeifySizeKey,
 } from "./tradeify-rules"
 import { TOPSTEP_EVAL, toTopstepSizeKey, topstepXfaMllFloor, topstepXfaPayoutCap } from "./topstep-rules"
+import {
+  ALPHA_ZERO_EVAL,
+  ALPHA_ZERO_QUALIFIED,
+  ALPHA_STANDARD_EVAL,
+  ALPHA_STANDARD_QUALIFIED,
+  ALPHA_ADVANCED_EVAL,
+  ALPHA_ADVANCED_QUALIFIED,
+  ALPHA_HAS_DLG,
+  toAlphaZeroSizeKey,
+  toAlphaMidSizeKey,
+  alphaMllFloor,
+} from "./alpha-futures-rules"
 
 export interface AccountRules {
   // Drawdown
@@ -58,6 +70,18 @@ export interface AccountRules {
   /** LucidFlex / Tradeify funded: EOD lock floor schedule */
   lucidFlexFloor: LucidFlexFloorParams | null
 
+  /**
+   * Whether the trailing floor snaps to a fixed value upon a completed
+   * payout, independent of peak balance (e.g. Topstep XFA's advertised
+   * "resets to $0 after every payout" — not yet implemented for any firm,
+   * see topstepXfaMllFloor's comment). Firms that explicitly guarantee this
+   * never happens (Alpha Futures markets "MLL does not reset on withdrawal"
+   * as a benefit) must set this to false in their OWN branch rather than
+   * rely on the base default, so the guarantee holds even if the base
+   * default ever changes for firms that do implement a reset.
+   */
+  floorLocksOnPayout: boolean
+
   bufferAmount: number
   winningDayThreshold: number
 
@@ -67,6 +91,7 @@ export interface AccountRules {
     | "tradeify_flex"
     | "tradeify_daily"
     | "topstep_xfa"
+    | "alpha_qualified"
     | "none"
 }
 
@@ -177,6 +202,7 @@ export function getAccountRules(account: {
   profitTarget?: number
   hasDailyLossLimit?: boolean
   topstepPayoutPath?: TopstepPayoutPath | null
+  alphaTier?: AlphaTier | null
 }): AccountRules {
   const firm = account.firm ?? "Apex"
   const size = toSizeKey(account.accountSize ?? 50000)
@@ -206,6 +232,7 @@ export function getAccountRules(account: {
     hasScaling: false,
     maxContracts: "",
     lucidFlexFloor: null,
+    floorLocksOnPayout: false,
     bufferAmount: 0,
     winningDayThreshold: 0,
     payoutPolicyKind: "none",
@@ -475,6 +502,159 @@ export function getAccountRules(account: {
         // gate), which is the wrong shape entirely for XFA's single-ceiling
         // + winning-days/consistency gate. Flip this once that branch exists.
         lucidFlexFloor: topstepXfaMllFloor(tSize, r.maxDrawdown),
+        maxContracts: r.maxContracts,
+      }
+    }
+  }
+
+  // ── Alpha Futures ────────────────────────────────────────────────────────
+  // Verified against help.alpha-futures.com on 2026-08-11 — see
+  // lib/alpha-futures-rules.ts for the specific articles.
+
+  if (firm === "Alpha") {
+    const tier = account.alphaTier
+    if (!tier) {
+      throw new Error(
+        "Alpha Futures accounts require alphaTier (zero | standard | advanced) — no safe default exists across tiers.",
+      )
+    }
+    const dlg = ALPHA_HAS_DLG[tier]
+
+    if (account.type === "Eval") {
+      if (tier === "zero") {
+        const zSize = toAlphaZeroSizeKey(account.accountSize)
+        const r = ALPHA_ZERO_EVAL[zSize]
+        return {
+          ...base,
+          floorLabel: "EOD Trailing Max Loss Limit",
+          maxDrawdown: r.maxDrawdown,
+          hasDLL: dlg.eval,
+          dailyLossLimit: dlg.eval ? r.dailyLossGuard : 0,
+          hasProfitTarget: true,
+          profitTarget: account.profitTarget ?? r.profitTarget,
+          hasConsistency: false,
+          consistencyPercent: 0,
+          consistencyBasis: "total_profit",
+          maxContracts: r.maxContracts,
+          // The MLL article says the breakeven lock applies "on all
+          // accounts" without distinguishing Eval vs Qualified, but
+          // calculateAccountStats's lock gate is hardcoded to type ===
+          // "PA". Not broadening that gate on an unconfirmed assumption —
+          // left on unlimited trailing here, which errs tighter than
+          // reality (never looser), same direction of error as leaving it
+          // off entirely.
+          lucidFlexFloor: null,
+        }
+      }
+
+      const mSize = toAlphaMidSizeKey(tier, account.accountSize)
+      const r = tier === "standard" ? ALPHA_STANDARD_EVAL[mSize] : ALPHA_ADVANCED_EVAL[mSize]
+      return {
+        ...base,
+        floorLabel: "EOD Trailing Max Loss Limit",
+        maxDrawdown: r.maxDrawdown,
+        hasDLL: dlg.eval,
+        dailyLossLimit: 0, // Standard and Advanced both have DLG off at Eval
+        hasProfitTarget: true,
+        profitTarget: account.profitTarget ?? r.profitTarget,
+        hasConsistency: true,
+        consistencyPercent: tier === "standard" ? 50 : 40,
+        consistencyBasis: "total_profit",
+        maxContracts: r.maxContracts,
+        lucidFlexFloor: null, // see zero-eval comment above
+      }
+    }
+
+    if (account.type === "PA") {
+      if (tier === "zero") {
+        const zSize = toAlphaZeroSizeKey(account.accountSize)
+        const r = ALPHA_ZERO_QUALIFIED[zSize]
+        return {
+          ...base,
+          floorLabel: "Qualified Trailing MLL (locks at breakeven)",
+          maxDrawdown: r.maxDrawdown,
+          hasDLL: dlg.qualified,
+          dailyLossLimit: dlg.qualified ? r.dailyLossGuard : 0,
+          hasConsistency: true,
+          consistencyPercent: 40,
+          consistencyBasis: "total_profit",
+          payoutSplit: 0.9,
+          minPayoutAmount: r.minPayoutAmount,
+          payoutMaxPercent: 0.5,
+          payoutAbsoluteCap: r.payoutAbsoluteCap,
+          minProfitDays: 5,
+          minDailyProfit: 200,
+          winningDayThreshold: 200,
+          payoutPolicyKind: "alpha_qualified",
+          // "Up to 4 requests/month" is a rolling monthly cap — a different
+          // shape than maxPayouts (a lifetime count everywhere else in this
+          // file). 99 is an inert placeholder, same convention as Tradeify
+          // Flex/Daily and Topstep XFA; needs new state (a monthly counter)
+          // once an eligibility branch exists for this firm.
+          maxPayouts: 99,
+          // hasPayouts stays at the base default (false): no Alpha branch
+          // in getPayoutEligibility yet, so enabling this would fall
+          // through to Apex's safety-net formula — wrong shape for Alpha's
+          // winning-days + consistency gate. payoutAbsoluteCap above is
+          // still the real, fully-determined number; just not consumed by
+          // anything live yet.
+          floorLocksOnPayout: false, // positive guard — Alpha does not reset MLL on withdrawal
+          lucidFlexFloor: alphaMllFloor(zSize, r.maxDrawdown),
+          maxContracts: r.maxContracts,
+        }
+      }
+
+      const mSize = toAlphaMidSizeKey(tier, account.accountSize)
+
+      if (tier === "standard") {
+        const r = ALPHA_STANDARD_QUALIFIED[mSize]
+        return {
+          ...base,
+          floorLabel: "Qualified Trailing MLL (locks at breakeven)",
+          maxDrawdown: r.maxDrawdown,
+          hasDLL: dlg.qualified,
+          dailyLossLimit: dlg.qualified ? r.dailyLossGuard : 0,
+          hasConsistency: true,
+          consistencyPercent: 40,
+          consistencyBasis: "total_profit",
+          payoutSplit: 0.9,
+          minPayoutAmount: r.minPayoutAmount,
+          payoutMaxPercent: 0.5,
+          payoutAbsoluteCap: r.payoutAbsoluteCap,
+          minProfitDays: 5,
+          minDailyProfit: 200,
+          winningDayThreshold: 200,
+          payoutPolicyKind: "alpha_qualified",
+          maxPayouts: 99,
+          floorLocksOnPayout: false, // positive guard — Alpha does not reset MLL on withdrawal
+          lucidFlexFloor: alphaMllFloor(mSize, r.maxDrawdown),
+          maxContracts: r.maxContracts,
+        }
+      }
+
+      // advanced
+      const r = ALPHA_ADVANCED_QUALIFIED[mSize]
+      return {
+        ...base,
+        floorLabel: "Qualified Trailing MLL (locks at breakeven)",
+        maxDrawdown: r.maxDrawdown,
+        hasDLL: false,
+        dailyLossLimit: 0,
+        hasConsistency: false,
+        consistencyPercent: 0,
+        consistencyBasis: "total_profit",
+        payoutSplit: 0.9,
+        minPayoutAmount: r.minPayoutAmount,
+        payoutMaxPercent: 0.5,
+        payoutAbsoluteCap: r.payoutAbsoluteCap,
+        minProfitDays: 5,
+        minDailyProfit: 200,
+        winningDayThreshold: 200,
+        payoutPolicyKind: "alpha_qualified",
+        maxPayouts: 99,
+        floorLocksOnPayout: false, // positive guard — Alpha does not reset MLL on withdrawal
+        lucidFlexFloor: alphaMllFloor(mSize, r.maxDrawdown),
+        hasScaling: false, // "no scaling plan" — confirmed
         maxContracts: r.maxContracts,
       }
     }

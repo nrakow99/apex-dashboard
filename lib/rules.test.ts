@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest"
 import { getAccountRules, resolveTradeifyProgram } from "./rules"
 import { toTopstepSizeKey, TOPSTEP_XFA_BASE_PAYOUT_CAP, topstepXfaPayoutCap } from "./topstep-rules"
+import { toAlphaZeroSizeKey, toAlphaMidSizeKey } from "./alpha-futures-rules"
 import type { Firm, AccountType, DrawdownType } from "./types"
 
 // Golden-file tests for the rule engine.
@@ -21,6 +22,15 @@ import type { Firm, AccountType, DrawdownType } from "./types"
 // split, $125 min payout, MLL start/lock shape). Topstep changed the payout
 // grid 2026-04-28 — reverify TOPSTEP_XFA_BASE_PAYOUT_CAP if it's been a
 // while since this date.
+//
+// Verified against help.alpha-futures.com on: 2026-08-11 (Zero/Standard/
+// Advanced Account Overview, Maximum Loss Limit, Daily Loss Guard,
+// Consistency Rule, Payout Policy articles — see lib/alpha-futures-rules.ts
+// for per-article links). One exception: Standard-qualified DLG dollar
+// figures ($1,000/$2,000/$3,000) were pulled directly off the Standard
+// Account Overview page during this verification pass rather than supplied
+// pre-verified like the rest of this block — flagged in
+// lib/alpha-futures-rules.ts, worth an independent second look.
 
 const acct = (
   firm: Firm,
@@ -345,6 +355,178 @@ describe("Topstep — no 25K tier", () => {
   it("rounds sizes between tiers up to the next tier, same convention as toSizeKey", () => {
     expect(toTopstepSizeKey(75000)).toBe(100000)
     expect(toTopstepSizeKey(120000)).toBe(150000)
+  })
+})
+
+describe("Alpha Futures — tier tables (rule variants, not size variants)", () => {
+  it("Zero (25K/50K/100K): target/MLL/DLG match the verified table", () => {
+    const a = (size: number) => getAccountRules(acct("Alpha", "Eval", "EOD", size, { alphaTier: "zero" }))
+    expect(a(25000).profitTarget).toBe(1500)
+    expect(a(25000).maxDrawdown).toBe(1000)
+    expect(a(25000).dailyLossLimit).toBe(500)
+    expect(a(50000).profitTarget).toBe(3000)
+    expect(a(50000).maxDrawdown).toBe(2000)
+    expect(a(50000).dailyLossLimit).toBe(1000)
+    expect(a(100000).profitTarget).toBe(6000)
+    expect(a(100000).maxDrawdown).toBe(3000)
+    expect(a(100000).dailyLossLimit).toBe(2000)
+    // DLG active on eval for every Zero size
+    expect(a(25000).hasDLL).toBe(true)
+    expect(a(50000).hasDLL).toBe(true)
+    expect(a(100000).hasDLL).toBe(true)
+  })
+
+  it("Standard (50K/100K/150K): target/MLL match the verified table, no DLG on eval", () => {
+    const a = (size: number) => getAccountRules(acct("Alpha", "Eval", "EOD", size, { alphaTier: "standard" }))
+    expect(a(50000).profitTarget).toBe(3000)
+    expect(a(50000).maxDrawdown).toBe(2000)
+    expect(a(100000).profitTarget).toBe(6000)
+    expect(a(100000).maxDrawdown).toBe(3000)
+    expect(a(150000).profitTarget).toBe(9000)
+    expect(a(150000).maxDrawdown).toBe(4500)
+    expect(a(50000).hasDLL).toBe(false)
+    expect(a(100000).hasDLL).toBe(false)
+    expect(a(150000).hasDLL).toBe(false)
+  })
+
+  it("Advanced (50K/100K/150K): target/MLL match the verified table, no DLG anywhere", () => {
+    const a = (size: number) => getAccountRules(acct("Alpha", "Eval", "EOD", size, { alphaTier: "advanced" }))
+    expect(a(50000).profitTarget).toBe(4000)
+    expect(a(50000).maxDrawdown).toBe(1750)
+    expect(a(100000).profitTarget).toBe(8000)
+    expect(a(100000).maxDrawdown).toBe(3500)
+    expect(a(150000).profitTarget).toBe(12000)
+    expect(a(150000).maxDrawdown).toBe(5250)
+    expect(a(50000).hasDLL).toBe(false)
+
+    const q = getAccountRules(acct("Alpha", "PA", "EOD", 50000, { alphaTier: "advanced" }))
+    expect(q.hasDLL).toBe(false)
+    expect(q.hasScaling).toBe(false)
+  })
+
+  it("Qualified payout ceilings and min withdrawal amounts match the verified table", () => {
+    const zero = (size: number) => getAccountRules(acct("Alpha", "PA", "EOD", size, { alphaTier: "zero" }))
+    expect(zero(25000).payoutAbsoluteCap).toBe(1000)
+    expect(zero(50000).payoutAbsoluteCap).toBe(1500)
+    expect(zero(100000).payoutAbsoluteCap).toBe(2500)
+    expect(zero(25000).minPayoutAmount).toBe(200)
+
+    const standard = (size: number) => getAccountRules(acct("Alpha", "PA", "EOD", size, { alphaTier: "standard" }))
+    expect(standard(50000).payoutAbsoluteCap).toBe(3000)
+    expect(standard(100000).payoutAbsoluteCap).toBe(4000)
+    expect(standard(150000).payoutAbsoluteCap).toBe(5000)
+    expect(standard(50000).minPayoutAmount).toBe(500)
+
+    const advanced = (size: number) => getAccountRules(acct("Alpha", "PA", "EOD", size, { alphaTier: "advanced" }))
+    expect(advanced(50000).payoutAbsoluteCap).toBe(15000)
+    expect(advanced(100000).payoutAbsoluteCap).toBe(15000)
+    expect(advanced(150000).payoutAbsoluteCap).toBe(15000)
+    expect(advanced(50000).minPayoutAmount).toBe(1000)
+  })
+
+  it("90/10 split is flat across every tier and size, not tiered", () => {
+    for (const tier of ["zero", "standard", "advanced"] as const) {
+      const size = tier === "zero" ? 50000 : 100000
+      expect(getAccountRules(acct("Alpha", "PA", "EOD", size, { alphaTier: tier })).payoutSplit).toBe(0.9)
+    }
+  })
+})
+
+describe("Alpha Futures — per-tier size keys throw on impossible combos", () => {
+  it("25K throws on Standard and Advanced (Zero-only size)", () => {
+    expect(() => toAlphaMidSizeKey("standard", 25000)).toThrow()
+    expect(() => toAlphaMidSizeKey("advanced", 25000)).toThrow()
+    expect(() => getAccountRules(acct("Alpha", "Eval", "EOD", 25000, { alphaTier: "standard" }))).toThrow()
+    expect(() => getAccountRules(acct("Alpha", "Eval", "EOD", 25000, { alphaTier: "advanced" }))).toThrow()
+  })
+
+  it("150K throws on Zero (Zero has no 150K tier)", () => {
+    expect(() => toAlphaZeroSizeKey(150000)).toThrow()
+    expect(() => getAccountRules(acct("Alpha", "Eval", "EOD", 150000, { alphaTier: "zero" }))).toThrow()
+    expect(() => getAccountRules(acct("Alpha", "PA", "EOD", 150000, { alphaTier: "zero" }))).toThrow()
+  })
+
+  it("no rounding/clamping between tiers — an in-between size throws rather than snapping to a neighbor", () => {
+    expect(() => toAlphaZeroSizeKey(75000)).toThrow()
+    expect(() => toAlphaMidSizeKey("standard", 75000)).toThrow()
+  })
+
+  it("each tier accepts exactly its own three sizes", () => {
+    expect(toAlphaZeroSizeKey(25000)).toBe(25000)
+    expect(toAlphaZeroSizeKey(50000)).toBe(50000)
+    expect(toAlphaZeroSizeKey(100000)).toBe(100000)
+    expect(toAlphaMidSizeKey("standard", 50000)).toBe(50000)
+    expect(toAlphaMidSizeKey("standard", 150000)).toBe(150000)
+    expect(toAlphaMidSizeKey("advanced", 150000)).toBe(150000)
+  })
+
+  it("throws if alphaTier is unset for an Alpha account — no safe default across tiers", () => {
+    expect(() => getAccountRules(acct("Alpha", "Eval", "EOD", 50000))).toThrow()
+  })
+})
+
+describe("Alpha Futures — consistency varies by tier AND stage", () => {
+  it("Zero: none on eval, 40% on qualified", () => {
+    const evalRules = getAccountRules(acct("Alpha", "Eval", "EOD", 50000, { alphaTier: "zero" }))
+    expect(evalRules.hasConsistency).toBe(false)
+
+    const qualifiedRules = getAccountRules(acct("Alpha", "PA", "EOD", 50000, { alphaTier: "zero" }))
+    expect(qualifiedRules.hasConsistency).toBe(true)
+    expect(qualifiedRules.consistencyPercent).toBe(40)
+    expect(qualifiedRules.consistencyBasis).toBe("total_profit")
+  })
+
+  it("Standard: 50% on eval, 40% on qualified — both total_profit, not profit_target", () => {
+    const evalRules = getAccountRules(acct("Alpha", "Eval", "EOD", 50000, { alphaTier: "standard" }))
+    expect(evalRules.hasConsistency).toBe(true)
+    expect(evalRules.consistencyPercent).toBe(50)
+    expect(evalRules.consistencyBasis).toBe("total_profit")
+
+    const qualifiedRules = getAccountRules(acct("Alpha", "PA", "EOD", 50000, { alphaTier: "standard" }))
+    expect(qualifiedRules.hasConsistency).toBe(true)
+    expect(qualifiedRules.consistencyPercent).toBe(40)
+    expect(qualifiedRules.consistencyBasis).toBe("total_profit")
+  })
+
+  it("Advanced: 40% on eval, none on qualified", () => {
+    const evalRules = getAccountRules(acct("Alpha", "Eval", "EOD", 50000, { alphaTier: "advanced" }))
+    expect(evalRules.hasConsistency).toBe(true)
+    expect(evalRules.consistencyPercent).toBe(40)
+    expect(evalRules.consistencyBasis).toBe("total_profit")
+
+    const qualifiedRules = getAccountRules(acct("Alpha", "PA", "EOD", 50000, { alphaTier: "advanced" }))
+    expect(qualifiedRules.hasConsistency).toBe(false)
+  })
+
+  it("no cell uses profit_target basis — confirmed against the Consistency Rule article, not assumed", () => {
+    const combos: Array<[Parameters<typeof getAccountRules>[0]["alphaTier"], AccountType]> = [
+      ["zero", "PA"],
+      ["standard", "Eval"],
+      ["standard", "PA"],
+      ["advanced", "Eval"],
+    ]
+    for (const [alphaTier, type] of combos) {
+      const r = getAccountRules(acct("Alpha", type, "EOD", 50000, { alphaTier }))
+      expect(r.hasConsistency, `${alphaTier}/${type}`).toBe(true)
+      expect(r.consistencyBasis, `${alphaTier}/${type}`).toBe("total_profit")
+    }
+  })
+})
+
+describe("Alpha Futures — MLL does not reset on payout (positive guard)", () => {
+  it("floorLocksOnPayout is explicitly false on every qualified tier, not just inherited from the default", () => {
+    for (const tier of ["zero", "standard", "advanced"] as const) {
+      const r = getAccountRules(acct("Alpha", "PA", "EOD", 50000, { alphaTier: tier }))
+      expect(r.floorLocksOnPayout).toBe(false)
+    }
+  })
+
+  it("MLL still locks at breakeven via peak growth (a different mechanism) — trail/lock shape is present", () => {
+    const r = getAccountRules(acct("Alpha", "PA", "EOD", 100000, { alphaTier: "standard" }))
+    expect(r.lucidFlexFloor).not.toBeNull()
+    expect(r.lucidFlexFloor?.lockedFloor).toBe(100000) // breakeven = account size
+    expect(r.lucidFlexFloor?.lockPeakThreshold).toBe(100000 + 3000)
+    expect(r.lucidFlexFloor?.minimumFloor).toBe(100000 - 3000)
   })
 })
 
