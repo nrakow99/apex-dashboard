@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useMemo } from "react"
 import {
   Dialog,
   DialogContent,
@@ -10,8 +10,8 @@ import {
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { Loader2 } from "lucide-react"
-import type { Account } from "@/lib/types"
+import { AlertTriangle, Loader2 } from "lucide-react"
+import type { Account, TopstepPayoutPath } from "@/lib/types"
 import {
   defaultPaAccountName,
   getPaActivationRuleSummary,
@@ -28,6 +28,7 @@ interface ActivatePaModalProps {
     activatedAtIso: string
     activationStartDate: string
     tradeifyProgram?: "select_flex" | "select_daily"
+    topstepPayoutPath?: TopstepPayoutPath
   }) => Promise<void>
   isSubmitting?: boolean
 }
@@ -42,12 +43,15 @@ export function ActivatePaModal({
   const [name, setName] = useState("")
   const [activationDate, setActivationDate] = useState("")
   const [tradeifyPolicy, setTradeifyPolicy] = useState<"select_flex" | "select_daily">("select_flex")
+  const [topstepPayoutPath, setTopstepPayoutPath] = useState<TopstepPayoutPath>("standard")
 
   const isTradeify = evalAccount?.firm === "Tradeify"
+  const isTopstep = evalAccount?.firm === "Topstep"
 
   useEffect(() => {
     if (evalAccount && open) {
       setTradeifyPolicy("select_flex")
+      setTopstepPayoutPath("standard")
       setName(
         isTradeify
           ? defaultPaAccountName(evalAccount, "select_flex")
@@ -63,12 +67,33 @@ export function ActivatePaModal({
     }
   }, [tradeifyPolicy, evalAccount, open, isTradeify])
 
+  // getPaActivationRuleSummary calls getAccountRules, which throws for an
+  // Alpha account with no alphaTier — a case that should be impossible today
+  // (alphaTier is required at Eval creation) but this modal shouldn't crash
+  // on click if that invariant is ever violated upstream. Guarded + memoized
+  // so a bad input degrades to an inline error state instead of a white
+  // screen.
+  const summary = useMemo(() => {
+    if (!evalAccount) return { lines: [] as string[], error: null as string | null }
+    try {
+      return {
+        lines: getPaActivationRuleSummary(
+          evalAccount,
+          isTradeify ? tradeifyPolicy : undefined,
+          isTopstep ? topstepPayoutPath : undefined,
+        ),
+        error: null,
+      }
+    } catch (err) {
+      return {
+        lines: [] as string[],
+        error: err instanceof Error ? err.message : "Could not load rules for this account.",
+      }
+    }
+  }, [evalAccount, isTradeify, tradeifyPolicy, isTopstep, topstepPayoutPath])
+
   if (!evalAccount) return null
 
-  const summaryLines = getPaActivationRuleSummary(
-    evalAccount,
-    isTradeify ? tradeifyPolicy : undefined,
-  )
   const ddLabel =
     evalAccount.drawdownType === "Intraday"
       ? "Intraday trailing"
@@ -76,6 +101,7 @@ export function ActivatePaModal({
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
+    if (summary.error) return
     const finalName =
       name.trim() ||
       defaultPaAccountName(evalAccount, isTradeify ? tradeifyPolicy : undefined)
@@ -87,6 +113,7 @@ export function ActivatePaModal({
       activatedAtIso,
       activationStartDate,
       tradeifyProgram: isTradeify ? tradeifyPolicy : undefined,
+      topstepPayoutPath: isTopstep ? topstepPayoutPath : undefined,
     })
   }
 
@@ -148,7 +175,7 @@ export function ActivatePaModal({
                   </button>
                 ))}
               </div>
-              <p className="text-[11px] text-amber-500/90 font-medium">
+              <p className="text-[11px] font-medium text-[var(--text)]">
                 This choice is permanent for this funded account.
               </p>
               <p className="text-[11px] text-muted-foreground">
@@ -157,16 +184,59 @@ export function ActivatePaModal({
             </div>
           )}
 
-          <div className="space-y-2">
-            <div className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
-              {isTradeify ? "Funded rule summary" : "PA rule summary"}
+          {isTopstep && (
+            <div className="space-y-2">
+              <Label>Payout Path (permanent)</Label>
+              <div className="flex gap-0 p-1 bg-[#0F1115]/80 border border-white/[0.08] rounded-xl">
+                {(
+                  [
+                    { value: "standard" as const, label: "Standard" },
+                    { value: "consistency" as const, label: "Consistency" },
+                  ] as const
+                ).map((opt) => (
+                  <button
+                    key={opt.value}
+                    type="button"
+                    onClick={() => setTopstepPayoutPath(opt.value)}
+                    className={cn(
+                      "flex-1 py-2 px-2 rounded-lg text-sm font-medium transition-all",
+                      topstepPayoutPath === opt.value
+                        ? "bg-[#1E2229] text-[#E5E4E2] shadow-[inset_0_0_0_1px_rgba(83,104,120,0.40)]"
+                        : "text-slate-500 hover:text-[#E5E4E2]",
+                    )}
+                  >
+                    {opt.label}
+                  </button>
+                ))}
+              </div>
+              <p className="text-[11px] font-medium text-[var(--text)]">
+                This choice is permanent for this funded account.
+              </p>
+              <p className="text-[11px] text-muted-foreground">
+                {topstepPayoutPath === "consistency"
+                  ? "Higher payout ceiling. 40% consistency rule applies; 3 trading days required, no winning-day count."
+                  : "5 winning days of $150+ required. No consistency rule."}
+              </p>
             </div>
-            <ul className="rounded-xl border border-white/[0.07] bg-[#0F1115]/50 px-3 py-2.5 text-xs text-slate-400 space-y-1.5 list-disc list-inside">
-              {summaryLines.map((line) => (
-                <li key={line}>{line}</li>
-              ))}
-            </ul>
-          </div>
+          )}
+
+          {summary.error ? (
+            <p className="flex items-start gap-2 text-sm font-medium text-[var(--text)] bg-[var(--raised)] px-3 py-2 rounded-[2px] border-l-2 border-[var(--text)]">
+              <AlertTriangle className="h-4 w-4 shrink-0 mt-0.5" aria-hidden />
+              Couldn&apos;t load funded rules for this account: {summary.error}
+            </p>
+          ) : (
+            <div className="space-y-2">
+              <div className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
+                {isTradeify || isTopstep ? "Funded rule summary" : "PA rule summary"}
+              </div>
+              <ul className="rounded-xl border border-white/[0.07] bg-[#0F1115]/50 px-3 py-2.5 text-xs text-slate-400 space-y-1.5 list-disc list-inside">
+                {summary.lines.map((line) => (
+                  <li key={line}>{line}</li>
+                ))}
+              </ul>
+            </div>
+          )}
 
           <div className="space-y-2">
             <Label htmlFor="pa-name">New account name</Label>
@@ -201,7 +271,7 @@ export function ActivatePaModal({
             <Button type="button" variant="ghost" onClick={() => onOpenChange(false)}>
               Cancel
             </Button>
-            <Button type="submit" disabled={isSubmitting} className="bg-emerald-600 hover:bg-emerald-700">
+            <Button type="submit" disabled={isSubmitting || Boolean(summary.error)}>
               {isSubmitting ? (
                 <>
                   <Loader2 className="h-4 w-4 animate-spin mr-2" />

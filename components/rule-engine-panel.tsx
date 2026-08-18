@@ -15,7 +15,7 @@ import {
   getRuleEngineFloorRowLabel,
 } from "@/lib/floor-display-labels"
 import { getApexPaScalingTier } from "@/lib/apex-pa-scaling"
-import { CheckCircle2, AlertTriangle, XCircle } from "lucide-react"
+import { CheckCircle2, AlertTriangle } from "lucide-react"
 
 interface AccountStats {
   currentBalance: number
@@ -47,10 +47,17 @@ interface RuleEnginePanelProps {
   lucidCycleQualifyingDays?: number
 }
 
+/**
+ * ── Structural severity system (same tiers as account-card.tsx) ─────────
+ * "danger"/"warning" never tint the card background or border by hue.
+ * Severity reads through the left-edge accent width, icon fill, and label
+ * weight only — every RuleCard sits on the same flat --raised surface.
+ * ─────────────────────────────────────────────────────────────────────────
+ */
 function StatusIcon({ status }: { status: "good" | "warning" | "danger" }) {
-  if (status === "good")    return <CheckCircle2 className="h-4 w-4 text-emerald-500" />
-  if (status === "warning") return <AlertTriangle className="h-4 w-4 text-amber-500" />
-  return <XCircle className="h-4 w-4 text-red-500" />
+  if (status === "good") return <CheckCircle2 className="h-4 w-4 text-[var(--text)]" aria-hidden />
+  if (status === "warning") return <AlertTriangle className="h-4 w-4 text-[var(--text)] opacity-60" aria-hidden />
+  return <AlertTriangle className="h-4 w-4 text-[var(--text)]" aria-hidden />
 }
 
 function RuleCard({
@@ -66,14 +73,18 @@ function RuleCard({
 }) {
   return (
     <div className={cn(
-      "p-2.5 sm:p-4 rounded-xl sm:rounded-2xl border transition-all",
-      status === "danger"  ? "bg-red-500/10 border-red-500/30" :
-      status === "warning" ? "bg-amber-500/10 border-amber-500/30" :
-      "bg-slate-900/45 border-white/10",
+      "p-2.5 sm:p-4 rounded-xl sm:rounded-2xl border transition-all border-[var(--hairline)] bg-[var(--raised)]",
+      status === "danger" && "border-l-4 border-l-[var(--text)]",
+      status === "warning" && "border-l-2 border-l-[var(--text)]",
       className
     )}>
       <div className="flex items-center justify-between mb-2 sm:mb-3">
-        <span className="text-sm font-semibold">{title}</span>
+        <span className={cn(
+          "text-sm",
+          status === "danger" ? "font-bold" : "font-semibold",
+        )}>
+          {title}
+        </span>
         {status && <StatusIcon status={status} />}
       </div>
       {children}
@@ -196,22 +207,12 @@ export function RuleEnginePanel({
           <h2 className="text-base sm:text-lg font-semibold">Rule Status</h2>
           <p className="text-[11px] text-muted-foreground mt-0.5 max-w-md">{ruleStatusSubtitle(account, rules)}</p>
         </div>
+        {/* Firm / type — neutral surface, no per-firm or per-type hue */}
         <div className="flex items-center gap-2 shrink-0">
-          <span className={cn(
-            "text-xs font-medium px-2.5 py-1 rounded-full border",
-            account.firm === "Lucid" && "bg-[#536878]/[0.12] text-[#A0B4BF] border-[#536878]/30",
-            account.firm === "Tradeify" && "bg-violet-500/10 text-violet-300 border-violet-500/30",
-            account.firm === "Apex" && "bg-orange-500/10 text-orange-400 border-orange-500/30",
-            !account.firm && "bg-orange-500/10 text-orange-400 border-orange-500/30"
-          )}>
+          <span className="text-xs font-medium px-2.5 py-1 rounded-full border border-[var(--hairline)] bg-[var(--raised)] text-[var(--muted-foreground)]">
             {firmLabel}
           </span>
-          <span className={cn(
-            "text-xs font-medium px-2.5 py-1 rounded-full border",
-            account.type === "Eval" && "bg-amber-500/10 text-amber-500 border-amber-500/30",
-            account.type === "PA"   && "bg-emerald-500/10 text-emerald-500 border-emerald-500/30",
-            account.type === "Live" && "bg-[#536878]/10 text-[#94AAB8] border-[#536878]/25",
-          )}>
+          <span className="text-xs font-medium px-2.5 py-1 rounded-full border border-[var(--hairline)] bg-[var(--raised)] text-[var(--muted-foreground)]">
             {account.type}
           </span>
         </div>
@@ -235,30 +236,18 @@ export function RuleEnginePanel({
                   {getRuleEngineFloorRowHint(account)}
                 </div>
               </div>
-              <span className="font-mono text-red-500">
+              <span className="font-mono">
                 ${stats.minBalance.toLocaleString(undefined, { minimumFractionDigits: 2 })}
               </span>
             </div>
             <div className="pt-1.5 border-t border-border/50">
               <div className="flex justify-between">
                 <span className="font-medium">Remaining</span>
-                <span className={cn(
-                  "font-mono font-bold",
-                  drawdownStatus === "danger"  ? "text-red-500" :
-                  drawdownStatus === "warning" ? "text-amber-500" : "text-emerald-500"
-                )}>
+                <span className="font-mono font-bold">
                   ${Math.max(0, stats.drawdownRemaining).toLocaleString(undefined, { minimumFractionDigits: 2 })}
                 </span>
               </div>
-              <Progress
-                value={Math.max(0, drawdownPercent)}
-                className={cn(
-                  "h-1.5 mt-1.5",
-                  drawdownStatus === "danger"  && "[&>div]:bg-red-500",
-                  drawdownStatus === "warning" && "[&>div]:bg-amber-500",
-                  drawdownStatus === "good"    && "[&>div]:bg-emerald-500"
-                )}
-              />
+              <Progress value={Math.max(0, drawdownPercent)} className="h-1.5 mt-1.5" />
             </div>
             {account.firm === "Apex" && account.type === "PA" && account.drawdownType === "EOD" && (
               <p className="text-[10px] text-muted-foreground/70 pt-1 border-t border-border/40">
@@ -274,11 +263,7 @@ export function RuleEnginePanel({
             <div className="space-y-1.5 text-sm">
               <div className="flex justify-between">
                 <span className="text-muted-foreground">Remaining Today</span>
-                <span className={cn(
-                  "font-mono font-bold",
-                  dailyLossStatus === "danger"  ? "text-red-500" :
-                  dailyLossStatus === "warning" ? "text-amber-500" : "text-emerald-500"
-                )}>
+                <span className="font-mono font-bold">
                   ${Math.max(0, dailyLossRemaining).toLocaleString(undefined, { minimumFractionDigits: 2 })}
                 </span>
               </div>
@@ -322,7 +307,7 @@ export function RuleEnginePanel({
             <div className="space-y-2 text-sm">
               <div className="flex justify-between gap-3">
                 <span className="text-muted-foreground">Current Tier</span>
-                <span className="font-mono font-semibold text-[#E5E4E2]">Level {apexPaScaling.level}</span>
+                <span className="font-mono font-semibold">Level {apexPaScaling.level}</span>
               </div>
               <div className="flex justify-between gap-3">
                 <span className="text-muted-foreground">Max Contracts</span>
@@ -340,7 +325,7 @@ export function RuleEnginePanel({
               )}
               <div className="flex justify-between gap-3 border-t border-border/40 pt-2">
                 <span className="text-muted-foreground">Current Profit</span>
-                <span className="font-mono font-medium text-emerald-400/95">
+                <span className="font-mono font-medium">
                   ${apexPaScaling.currentProfit.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                 </span>
               </div>
@@ -348,15 +333,15 @@ export function RuleEnginePanel({
                 <div className="space-y-1.5 pt-2">
                   <div className="flex justify-between text-xs">
                     <span className="text-muted-foreground">Tier status</span>
-                    <span className="font-medium text-emerald-500/95">Max Tier Reached</span>
+                    <span className="font-semibold">Max Tier Reached</span>
                   </div>
-                  <Progress value={100} className="h-1 [&>div]:bg-emerald-500/80" />
+                  <Progress value={100} className="h-1" />
                 </div>
               ) : (
                 <div className="space-y-2 pt-2">
                   <div className="flex justify-between gap-2 text-xs">
                     <span className="text-muted-foreground">Next tier</span>
-                    <span className="text-right font-mono text-slate-200">
+                    <span className="text-right font-mono">
                       Level {apexPaScaling.nextLevel}
                       <span className="block text-[11px] font-normal text-muted-foreground">
                         $
@@ -368,10 +353,7 @@ export function RuleEnginePanel({
                       </span>
                     </span>
                   </div>
-                  <Progress
-                    value={apexPaScaling.progressToNextTierPercent}
-                    className="h-1 [&>div]:bg-gradient-to-r from-[#536878]/90 to-emerald-500/90"
-                  />
+                  <Progress value={apexPaScaling.progressToNextTierPercent} className="h-1" />
                 </div>
               )}
             </div>
@@ -385,7 +367,7 @@ export function RuleEnginePanel({
               </div>
               <div className="flex justify-between">
                 <span className="text-muted-foreground">Account Profit</span>
-                <span className="font-mono text-emerald-400/95">
+                <span className="font-mono">
                   ${tradeifyScaling.profit.toLocaleString(undefined, { minimumFractionDigits: 2 })}
                 </span>
               </div>
@@ -396,7 +378,7 @@ export function RuleEnginePanel({
                   ${tradeifyScaling.profitToNext.toLocaleString()} to go)
                 </div>
               ) : (
-                <div className="text-xs text-emerald-500/90 pt-1">Max tier reached</div>
+                <div className="text-xs font-semibold pt-1">Max tier reached</div>
               )}
             </div>
           </RuleCard>
@@ -422,7 +404,7 @@ export function RuleEnginePanel({
             <div className="space-y-1 text-sm">
               <div className="flex justify-between">
                 <span className="text-muted-foreground">Largest Day</span>
-                <span className={cn("font-mono", !consistencyInfo.isValid && "text-red-400")}>
+                <span className={cn("font-mono", !consistencyInfo.isValid && "font-semibold")}>
                   ${consistencyInfo.largestWinningDay.toLocaleString(undefined, { minimumFractionDigits: 2 })}
                 </span>
               </div>
@@ -442,27 +424,27 @@ export function RuleEnginePanel({
               </div>
               <div className="flex justify-between pt-1.5 border-t border-border/50 mt-1.5">
                 <span className="text-muted-foreground">Status</span>
-                <span className={cn("font-medium", consistencyInfo.isValid ? "text-emerald-500" : "text-red-400")}>
+                <span className={cn("font-medium", !consistencyInfo.isValid && "font-bold uppercase tracking-wide text-[10px]")}>
                   {consistencyInfo.isValid ? "Passed" : "Failed"}
                 </span>
               </div>
               {!consistencyInfo.isValid && consistencyInfo.additionalProfitNeeded > 0 && (
-                <div className={cn("text-xs pt-1", (isApexPaConsistency(account) || isLucidEvalConsistency(account)) ? "text-red-400/90" : "text-amber-500")}>
+                <div className="text-xs pt-1 text-[var(--muted-foreground)]">
                   Need ${consistencyInfo.additionalProfitNeeded.toLocaleString(undefined, { minimumFractionDigits: 2 })} more profit to restore compliance
                 </div>
               )}
               {!consistencyInfo.isValid && consistencyInfo.totalProfit <= 0 && isApexPaConsistency(account) && (
-                <div className="text-xs text-red-400/90 pt-1">
+                <div className="text-xs text-[var(--muted-foreground)] pt-1">
                   No net profits since last payout
                 </div>
               )}
               {!consistencyInfo.isValid && consistencyInfo.totalProfit <= 0 && isLucidEvalConsistency(account) && (
-                <div className="text-xs text-red-400/90 pt-1">
+                <div className="text-xs text-[var(--muted-foreground)] pt-1">
                   Account profit must be positive for consistency
                 </div>
               )}
               {!consistencyInfo.isValid && consistencyInfo.totalProfit <= 0 && isTradeifyEvalConsistency(account) && (
-                <div className="text-xs text-red-400/90 pt-1">
+                <div className="text-xs text-[var(--muted-foreground)] pt-1">
                   Total net profit must be positive for consistency
                 </div>
               )}
@@ -476,17 +458,11 @@ export function RuleEnginePanel({
             <div className="space-y-1.5">
               <div className="flex justify-between text-sm">
                 <span className="text-muted-foreground">Days Traded</span>
-                <span className={cn(
-                  "font-mono font-bold",
-                  stats.tradingDays >= rules.minTradingDays ? "text-emerald-500" : "text-amber-500"
-                )}>
+                <span className="font-mono font-bold">
                   {stats.tradingDays} / {rules.minTradingDays}
                 </span>
               </div>
-              <Progress
-                value={(stats.tradingDays / rules.minTradingDays) * 100}
-                className={cn("h-1.5", stats.tradingDays >= rules.minTradingDays && "[&>div]:bg-emerald-500")}
-              />
+              <Progress value={(stats.tradingDays / rules.minTradingDays) * 100} className="h-1.5" />
             </div>
           </RuleCard>
         )}
@@ -497,17 +473,11 @@ export function RuleEnginePanel({
             <div className="space-y-1.5">
               <div className="flex justify-between text-sm">
                 <span className="text-muted-foreground">Days Traded</span>
-                <span className={cn(
-                  "font-mono font-bold",
-                  stats.tradingDays >= rules.minTradingDays ? "text-emerald-500" : "text-amber-500"
-                )}>
+                <span className="font-mono font-bold">
                   {stats.tradingDays} / {rules.minTradingDays}
                 </span>
               </div>
-              <Progress
-                value={(stats.tradingDays / rules.minTradingDays) * 100}
-                className={cn("h-1.5", stats.tradingDays >= rules.minTradingDays && "[&>div]:bg-emerald-500")}
-              />
+              <Progress value={(stats.tradingDays / rules.minTradingDays) * 100} className="h-1.5" />
             </div>
           </RuleCard>
         )}
@@ -521,17 +491,11 @@ export function RuleEnginePanel({
             <div className="space-y-1.5">
               <div className="flex justify-between text-sm">
                 <span className="text-muted-foreground">Qualifying Days</span>
-                <span className={cn(
-                  "font-mono font-bold",
-                  consistencyInfo.daysWithMinProfit >= rules.minProfitDays ? "text-emerald-500" : "text-amber-500"
-                )}>
+                <span className="font-mono font-bold">
                   {consistencyInfo.daysWithMinProfit} / {rules.minProfitDays}
                 </span>
               </div>
-              <Progress
-                value={(consistencyInfo.daysWithMinProfit / rules.minProfitDays) * 100}
-                className={cn("h-1.5", consistencyInfo.daysWithMinProfit >= rules.minProfitDays && "[&>div]:bg-emerald-500")}
-              />
+              <Progress value={(consistencyInfo.daysWithMinProfit / rules.minProfitDays) * 100} className="h-1.5" />
             </div>
           </RuleCard>
         )}
@@ -545,17 +509,11 @@ export function RuleEnginePanel({
             <div className="space-y-1.5">
               <div className="flex justify-between text-sm">
                 <span className="text-muted-foreground">Winning Days</span>
-                <span className={cn(
-                  "font-mono font-bold",
-                  lucidQualifyingDaysInCycle >= rules.minProfitDays ? "text-emerald-500" : "text-amber-500"
-                )}>
+                <span className="font-mono font-bold">
                   {lucidQualifyingDaysInCycle} / {rules.minProfitDays}
                 </span>
               </div>
-              <Progress
-                value={(lucidQualifyingDaysInCycle / rules.minProfitDays) * 100}
-                className={cn("h-1.5", lucidQualifyingDaysInCycle >= rules.minProfitDays && "[&>div]:bg-emerald-500")}
-              />
+              <Progress value={(lucidQualifyingDaysInCycle / rules.minProfitDays) * 100} className="h-1.5" />
             </div>
           </RuleCard>
         )}
@@ -568,17 +526,11 @@ export function RuleEnginePanel({
               </p>
               <div className="flex justify-between text-sm">
                 <span className="text-muted-foreground">Payout Days</span>
-                <span className={cn(
-                  "font-mono font-bold",
-                  lucidQualifyingDaysInCycle >= rules.minProfitDays ? "text-emerald-500" : "text-amber-500"
-                )}>
+                <span className="font-mono font-bold">
                   {lucidQualifyingDaysInCycle} / {rules.minProfitDays}
                 </span>
               </div>
-              <Progress
-                value={(lucidQualifyingDaysInCycle / rules.minProfitDays) * 100}
-                className={cn("h-1.5", lucidQualifyingDaysInCycle >= rules.minProfitDays && "[&>div]:bg-emerald-500")}
-              />
+              <Progress value={(lucidQualifyingDaysInCycle / rules.minProfitDays) * 100} className="h-1.5" />
             </div>
           </RuleCard>
         )}
@@ -592,10 +544,7 @@ export function RuleEnginePanel({
             <div className="space-y-1.5 text-sm">
               <div className="flex justify-between">
                 <span className="text-muted-foreground">Minimum Balance</span>
-                <span className={cn(
-                  "font-mono font-bold",
-                  stats.currentBalance >= rules.minBalanceToRequest ? "text-emerald-500" : "text-amber-500"
-                )}>
+                <span className="font-mono font-bold">
                   ${rules.minBalanceToRequest.toLocaleString(undefined, { minimumFractionDigits: 2 })}
                 </span>
               </div>
@@ -605,10 +554,7 @@ export function RuleEnginePanel({
                   ${Math.max(0, rules.minBalanceToRequest - stats.currentBalance).toLocaleString(undefined, { minimumFractionDigits: 2 })}
                 </span>
               </div>
-              <Progress
-                value={Math.min(100, (stats.currentBalance / rules.minBalanceToRequest) * 100)}
-                className={cn("h-1.5", stats.currentBalance >= rules.minBalanceToRequest && "[&>div]:bg-emerald-500")}
-              />
+              <Progress value={Math.min(100, (stats.currentBalance / rules.minBalanceToRequest) * 100)} className="h-1.5" />
             </div>
           </RuleCard>
         )}

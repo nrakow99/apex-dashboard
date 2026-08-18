@@ -1,4 +1,4 @@
-import type { Account, Trade, Payout, TradeifyProgram } from "@/lib/types"
+import type { Account, Trade, Payout, TradeifyProgram, TopstepPayoutPath } from "@/lib/types"
 import { getAccountRules } from "@/lib/rules"
 import { defaultTradeifyAccountName } from "@/lib/tradeify-rules"
 import { calculateAccountStats, getConsistencyInfo } from "@/lib/storage"
@@ -65,6 +65,41 @@ export function defaultPaAccountName(
 }
 
 /**
+ * Single place that builds the PA-stage getAccountRules() input for
+ * activation. Both buildEvalToPaConversionUpdates and
+ * getPaActivationRuleSummary used to construct this by hand, each omitting
+ * alphaTier/hasDailyLossLimit/topstepPayoutPath — Alpha activation threw
+ * (getAccountRules requires alphaTier, no safe default exists) and Topstep
+ * activation silently computed a DLL-less, standard-path summary regardless
+ * of what the trader actually had. Not hand-building this a third time.
+ */
+function paActivationRulesInput(
+  evalAccount: Account,
+  tradeifyProgram?: "select_flex" | "select_daily",
+  topstepPayoutPath?: TopstepPayoutPath,
+) {
+  const program: TradeifyProgram | undefined =
+    evalAccount.firm === "Tradeify"
+      ? tradeifyProgram ?? "select_flex"
+      : undefined
+
+  return {
+    firm: evalAccount.firm,
+    type: "PA" as const,
+    drawdownType: evalAccount.drawdownType,
+    accountSize: evalAccount.accountSize,
+    program,
+    // alphaTier and hasDailyLossLimit are elected at Eval creation and carry
+    // forward unchanged. topstepPayoutPath is a funded-stage-only decision
+    // (add-account-modal only asks for it once type === "PA"), so it comes
+    // from the activation step itself, not the eval account.
+    alphaTier: evalAccount.alphaTier ?? undefined,
+    hasDailyLossLimit: evalAccount.hasDailyLossLimit ?? undefined,
+    topstepPayoutPath: topstepPayoutPath ?? evalAccount.topstepPayoutPath ?? undefined,
+  }
+}
+
+/**
  * In-place Eval → PA conversion: same row, PA rules, reset balance to size.
  * Eval trades remain stored but are ignored for PA metrics when activation_start_date is set.
  */
@@ -74,19 +109,10 @@ export function buildEvalToPaConversionUpdates(
   activatedAtIso: string,
   activationStartDate: string,
   tradeifyProgram?: "select_flex" | "select_daily",
+  topstepPayoutPath?: TopstepPayoutPath,
 ) {
-  const program: TradeifyProgram | undefined =
-    evalAccount.firm === "Tradeify"
-      ? tradeifyProgram ?? "select_flex"
-      : undefined
-
-  const paRules = getAccountRules({
-    firm: evalAccount.firm,
-    type: "PA",
-    drawdownType: evalAccount.drawdownType,
-    accountSize: evalAccount.accountSize,
-    program,
-  })
+  const rulesInput = paActivationRulesInput(evalAccount, tradeifyProgram, topstepPayoutPath)
+  const paRules = getAccountRules(rulesInput)
   const size = evalAccount.accountSize
   const quantity = getAccountQuantity(evalAccount)
   return {
@@ -107,7 +133,12 @@ export function buildEvalToPaConversionUpdates(
     activatedAt: activatedAtIso,
     activationStartDate,
     previousType: "Eval",
-    program: program ?? null,
+    program: rulesInput.program ?? null,
+    // Carried forward explicitly rather than omitted — see
+    // paActivationRulesInput's comment for why each one is sourced where it is.
+    alphaTier: evalAccount.alphaTier ?? null,
+    hasDailyLossLimit: evalAccount.hasDailyLossLimit ?? false,
+    topstepPayoutPath: rulesInput.topstepPayoutPath ?? null,
   }
 }
 
@@ -115,19 +146,11 @@ export function buildEvalToPaConversionUpdates(
 export function getPaActivationRuleSummary(
   evalAccount: Account,
   tradeifyProgram?: "select_flex" | "select_daily",
+  topstepPayoutPath?: TopstepPayoutPath,
 ): string[] {
-  const program: TradeifyProgram | undefined =
-    evalAccount.firm === "Tradeify"
-      ? tradeifyProgram ?? "select_flex"
-      : undefined
-
-  const paRules = getAccountRules({
-    firm: evalAccount.firm,
-    type: "PA",
-    drawdownType: evalAccount.drawdownType,
-    accountSize: evalAccount.accountSize,
-    program,
-  })
+  const rulesInput = paActivationRulesInput(evalAccount, tradeifyProgram, topstepPayoutPath)
+  const program = rulesInput.program
+  const paRules = getAccountRules(rulesInput)
   const lines: string[] = [
     `Max drawdown: $${paRules.maxDrawdown.toLocaleString()}`,
   ]
@@ -155,6 +178,27 @@ export function getPaActivationRuleSummary(
         `Daily payout · buffer $${paRules.bufferAmount.toLocaleString()} · cap $${paRules.payoutAbsoluteCap.toLocaleString()}`,
       )
       lines.push(`Daily loss limit: $${paRules.dailyLossLimit.toLocaleString()}`)
+    }
+    if (evalAccount.firm === "Topstep" && rulesInput.topstepPayoutPath === "consistency") {
+      lines.push(
+        `Consistency path: ${paRules.minTradingDays} trading days · ${paRules.consistencyPercent}% consistency rule · up to 50% of balance (cap $${paRules.payoutAbsoluteCap.toLocaleString()})`,
+      )
+    }
+    if (evalAccount.firm === "Topstep" && rulesInput.topstepPayoutPath !== "consistency") {
+      lines.push(
+        `Standard path: ${paRules.minProfitDays} winning days ($${paRules.winningDayThreshold}+) · up to 50% of balance (cap $${paRules.payoutAbsoluteCap.toLocaleString()})`,
+      )
+    }
+    if (evalAccount.firm === "Alpha") {
+      lines.push(
+        `${paRules.minProfitDays} winning days ($${paRules.minDailyProfit}+) · up to ${Math.round(paRules.payoutMaxPercent * 100)}% of cycle profit (cap $${paRules.payoutAbsoluteCap.toLocaleString()})`,
+      )
+      if (paRules.hasConsistency) {
+        lines.push(`Consistency rule: ${paRules.consistencyPercent}%`)
+      }
+      if (paRules.maxPayoutsPerMonth > 0) {
+        lines.push(`Up to ${paRules.maxPayoutsPerMonth} payout requests per calendar month`)
+      }
     }
   }
   if (paRules.maxContracts) lines.push(`Contracts: ${paRules.maxContracts}`)

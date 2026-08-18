@@ -10,7 +10,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog"
-import { Loader2 } from "lucide-react"
+import { AlertTriangle, Loader2, Trash2 } from "lucide-react"
 
 interface DeleteConfirmationModalProps {
   open: boolean
@@ -56,7 +56,8 @@ export function DeleteConfirmationModal({
         )}
 
         {warningText && (
-          <p className="text-sm text-amber-500 bg-amber-500/10 px-3 py-2 rounded-md border border-amber-500/20">
+          <p className="flex items-start gap-2 text-sm font-medium text-[var(--text)] bg-[var(--raised)] px-3 py-2 rounded-[2px] border border-[var(--hairline)]">
+            <AlertTriangle className="h-4 w-4 shrink-0 mt-0.5" aria-hidden />
             {warningText}
           </p>
         )}
@@ -64,9 +65,9 @@ export function DeleteConfirmationModal({
         <AlertDialogFooter>
           <AlertDialogCancel disabled={isDeleting}>Cancel</AlertDialogCancel>
           <AlertDialogAction
+            variant="destructive"
             onClick={handleConfirm}
             disabled={isDeleting}
-            className="bg-red-600 hover:bg-red-700 text-white"
           >
             {isDeleting ? (
               <>
@@ -74,7 +75,10 @@ export function DeleteConfirmationModal({
                 Deleting...
               </>
             ) : (
-              confirmText
+              <>
+                <Trash2 className="h-4 w-4 mr-2" />
+                {confirmText}
+              </>
             )}
           </AlertDialogAction>
         </AlertDialogFooter>

@@ -214,27 +214,31 @@ export function AccountRangeCard({ account, stats }: AccountRangeCardProps) {
         </h2>
       </div>
 
-      {/* Range bar: floor (left) → target (right) */}
+      {/* Range bar: floor (left) → target (right). Flat track, no traffic-light
+          gradient — the fill's WIDTH (floor → current balance) is the risk
+          signal, same "position/size, not hue" pattern as the Progress
+          primitive. Start/Balance markers keep their own colors for now,
+          flagged separately (not part of this fill fix). */}
       <div className="relative mb-2 lg:mb-1.5">
         <div
           className={cn(
-            "relative h-2.5 overflow-visible rounded-full ring-1 ring-white/10 sm:h-3",
-            "bg-gradient-to-r from-red-500/55 via-amber-400/20 to-emerald-500/50",
+            "relative h-2.5 overflow-visible rounded-full ring-1 ring-[var(--hairline)] sm:h-3",
+            "bg-[var(--raised)]",
             "shadow-[inset_0_1px_2px_rgba(0,0,0,0.35)]",
           )}
           aria-hidden
         >
-          {/* Danger buffer (floor → start) */}
+          {/* Ground covered: floor → current balance */}
           <div
-            className="pointer-events-none absolute inset-y-0 left-0 rounded-l-full bg-gradient-to-r from-red-600/40 to-transparent"
-            style={{ width: `${Math.min(100, startPct)}%` }}
+            className="pointer-events-none absolute inset-y-0 left-0 rounded-l-full bg-[var(--text)]/15"
+            style={{ width: `${Math.min(100, balancePct)}%` }}
           />
 
           {/* Floor (left edge) */}
-          <div className="absolute left-0 top-1/2 z-10 h-3 w-px -translate-y-1/2 rounded-full bg-red-400/95 shadow-[0_0_10px_rgba(248,113,113,0.55)] sm:h-3.5" />
+          <div className="absolute left-0 top-1/2 z-10 h-3 w-px -translate-y-1/2 rounded-full bg-[var(--text)] sm:h-3.5" />
 
           {/* Target (right edge) */}
-          <div className="absolute right-0 top-1/2 z-10 h-3 w-px -translate-y-1/2 rounded-full bg-emerald-400/95 shadow-[0_0_10px_rgba(52,211,153,0.45)] sm:h-3.5" />
+          <div className="absolute right-0 top-1/2 z-10 h-3 w-px -translate-y-1/2 rounded-full bg-[var(--text)] sm:h-3.5" />
 
           {/* START */}
           <div

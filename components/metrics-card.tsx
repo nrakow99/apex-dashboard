@@ -39,11 +39,12 @@ export function MetricsCard({ className, title, value, change, status, subValue,
         )}>
           {value}
         </p>
+        {/* change.isPositive still drives no visual — every caller passes
+            descriptive/status text here ("of $X goal", "3/5 required"), never
+            a signed figure, so red/green was color without a sign in front
+            of it. Plain --muted-foreground, same as subValue below. */}
         {change && (
-          <p className={cn(
-            "text-[10px] sm:text-xs font-mono",
-            change.isPositive ? "text-emerald-500/80" : "text-red-500/80"
-          )}>
+          <p className="text-[10px] sm:text-xs font-mono text-muted-foreground">
             {change.value}
             {change.percentage && ` (${change.percentage})`}
           </p>

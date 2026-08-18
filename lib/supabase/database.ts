@@ -1,14 +1,16 @@
 "use client"
 
 import { createClient } from "@/lib/supabase/client"
-import type { Account, Trade, Payout, Firm, DrawdownType, TradeifyProgram } from "@/lib/types"
+import type { Account, Trade, Payout, Firm, DrawdownType, TradeifyProgram, TopstepPayoutPath, AlphaTier } from "@/lib/types"
 import { metaToDbPayload, type TradeMeta } from "@/lib/trade-meta"
+
+const VALID_FIRMS: readonly Firm[] = ["Apex", "Lucid", "Tradeify", "Topstep", "Alpha"]
 
 interface AccountRow {
   id: string
   user_id: string
   name: string
-  firm: Firm
+  firm: string
   type: "Eval" | "PA" | "Live"
   status: "Active" | "Inactive" | "Breached" | "Passed"
   drawdown_type: DrawdownType
@@ -26,6 +28,9 @@ interface AccountRow {
   previous_type?: string | null
   program?: string | null
   legacy_fifty_k_target?: boolean | null
+  has_daily_loss_limit?: boolean | null
+  topstep_payout_path?: string | null
+  alpha_tier?: string | null
   created_at: string
   updated_at: string
 }
@@ -67,7 +72,12 @@ function rowToAccount(row: AccountRow): Account {
   return {
     id: row.id,
     name: row.name,
-    firm: (row.firm === "Lucid" || row.firm === "Tradeify" ? row.firm : "Apex") as Firm,
+    // Every valid Firm passes through unchanged. Anything else (legacy rows,
+    // corrupt data) falls back to "Apex" — but that fallback must never
+    // silently masquerade as a real Topstep/Alpha account, which is why this
+    // list is exhaustive rather than special-casing Lucid/Tradeify only (the
+    // bug that used to reclassify every non-Lucid/Tradeify firm as Apex).
+    firm: (VALID_FIRMS.includes(row.firm as Firm) ? row.firm : "Apex") as Firm,
     type: row.type,
     status: row.status === "Inactive" ? "Active" : (row.status as "Active" | "Passed" | "Breached"),
     drawdownType: (row.drawdown_type ?? "EOD") as DrawdownType,
@@ -90,6 +100,9 @@ function rowToAccount(row: AccountRow): Account {
     createdAt: row.created_at ?? null,
     program: (row.program as TradeifyProgram | null) ?? null,
     legacyFiftyKTarget: row.legacy_fifty_k_target ?? false,
+    hasDailyLossLimit: row.has_daily_loss_limit ?? false,
+    topstepPayoutPath: (row.topstep_payout_path as TopstepPayoutPath | null) ?? null,
+    alphaTier: (row.alpha_tier as AlphaTier | null) ?? null,
   }
 }
 
@@ -169,6 +182,9 @@ export async function createAccount(account: {
   dailyLossLimit?: number
   program?: TradeifyProgram | null
   legacyFiftyKTarget?: boolean
+  hasDailyLossLimit?: boolean
+  topstepPayoutPath?: TopstepPayoutPath | null
+  alphaTier?: AlphaTier | null
 }): Promise<{ data: Account | null; error: Error | null }> {
   const supabase = createClient()
   const { data: { user } } = await supabase.auth.getUser()
@@ -191,6 +207,9 @@ export async function createAccount(account: {
       daily_loss_limit: account.dailyLossLimit ?? null,
       program: account.program ?? null,
       legacy_fifty_k_target: account.legacyFiftyKTarget ?? false,
+      has_daily_loss_limit: account.hasDailyLossLimit ?? false,
+      topstep_payout_path: account.topstepPayoutPath ?? null,
+      alpha_tier: account.alphaTier ?? null,
     })
     .select()
     .single()
@@ -308,6 +327,9 @@ export async function updateAccount(
     previousType?: string | null
     program?: TradeifyProgram | null
     legacyFiftyKTarget?: boolean
+    hasDailyLossLimit?: boolean
+    topstepPayoutPath?: TopstepPayoutPath | null
+    alphaTier?: AlphaTier | null
   }
 ): Promise<{ data: Account | null; error: Error | null }> {
   const supabase = createClient()
@@ -336,6 +358,11 @@ export async function updateAccount(
   if (updates.program !== undefined) updateData.program = updates.program
   if (updates.legacyFiftyKTarget !== undefined)
     updateData.legacy_fifty_k_target = updates.legacyFiftyKTarget
+  if (updates.hasDailyLossLimit !== undefined)
+    updateData.has_daily_loss_limit = updates.hasDailyLossLimit
+  if (updates.topstepPayoutPath !== undefined)
+    updateData.topstep_payout_path = updates.topstepPayoutPath
+  if (updates.alphaTier !== undefined) updateData.alpha_tier = updates.alphaTier
 
   const { data, error } = await supabase
     .from("accounts")

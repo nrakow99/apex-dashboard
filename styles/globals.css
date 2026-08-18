@@ -4,31 +4,50 @@
 
 @layer base {
   :root {
-    /* ── Obsidian Chrome ──────────────────────────────────────────────────
-     * Onyx:         #0A0A0A
-     * Blue Slate:   #536878  (HSL 206 18% 40%)
-     * Alabaster:    #E5E4E2  (HSL 30  4% 89%)
+    /* ── CLAUDE.md palette — midnight black, two color families only ──────
+     * Canonical hex tokens, named exactly as CLAUDE.md specifies. --muted
+     * (labels/units) is realized below via --muted-foreground, the slot
+     * every existing `text-muted-foreground` class already reads — shadcn's
+     * tailwind.config.ts also expects a *background* var literally named
+     * --muted, so a bare hex --muted here would collide with and break
+     * that slot. Flagged for a possible tailwind.config.ts rename later.
      * ───────────────────────────────────────────────────────────────────── */
-    --background: 210 6% 4%;          /* near-Onyx, faint cool tint      */
-    --foreground: 30 4% 89%;          /* Alabaster Grey #E5E4E2           */
-    --card: 220 10% 7%;               /* #0F1115                          */
-    --card-foreground: 30 4% 89%;
-    --popover: 220 10% 7%;
-    --popover-foreground: 30 4% 89%;
-    --primary: 142 72% 42%;           /* emerald — semantic only          */
-    --primary-foreground: 0 0% 100%;
-    --secondary: 218 10% 11%;
-    --secondary-foreground: 30 4% 89%;
-    --muted: 218 10% 11%;
-    --muted-foreground: 30 3% 46%;    /* warm alabaster muted ~55% opacity */
-    --accent: 218 10% 13%;
-    --accent-foreground: 30 4% 89%;
-    --destructive: 0 72% 51%;
-    --destructive-foreground: 30 4% 89%;
-    --border: 206 8% 14%;             /* subtle Blue Slate-tinted border  */
-    --input: 206 8% 14%;
-    --ring: 206 18% 40%;              /* Blue Slate #536878               */
-    --radius: 0.5rem;
+    --ground: #000000;    /* page */
+    --surface: #0C0C0D;   /* card */
+    --raised: #141415;    /* input, nested */
+    --hairline: #1F1F21;  /* every border */
+    --text: #FFFFFF;
+    --faint: #3F3F45;     /* axis, disabled */
+    --gain: #3ECF8E;
+    --loss: #E5484D;
+
+    /* ── shadcn/Tailwind slots, repointed at the palette above ────────────
+     * Every existing bg-background / text-foreground / border-border /
+     * bg-card / etc. class already resolves through these — no component
+     * edits needed to see the palette shift. */
+    --background: 0 0% 0%;               /* ground */
+    --foreground: 0 0% 100%;             /* text */
+    --card: 240 4% 5%;                   /* surface */
+    --card-foreground: 0 0% 100%;        /* text */
+    --popover: 240 2% 8%;                /* raised */
+    --popover-foreground: 0 0% 100%;     /* text */
+    --primary: 0 0% 100%;                /* text — white fill per spec */
+    --primary-foreground: 0 0% 0%;       /* ground — black text on primary */
+    --secondary: 240 2% 8%;              /* raised */
+    --secondary-foreground: 0 0% 100%;   /* text */
+    --muted: 240 2% 8%;                  /* raised — muted backgrounds */
+    --muted-foreground: 240 2% 44%;      /* #6E6E73 — labels, units */
+    --accent: 240 2% 8%;                 /* raised */
+    --accent-foreground: 0 0% 100%;      /* text */
+    /* loss — no longer used by Button (destructive variant is structural
+     * now, see components/ui/button.tsx). Still backs the error Toast
+     * variant, which is flagged as the same open violation, not yet fixed. */
+    --destructive: 358 75% 59%;
+    --destructive-foreground: 0 0% 100%; /* text */
+    --border: 240 3% 13%;                /* hairline */
+    --input: 240 2% 8%;                  /* raised */
+    --ring: 240 3% 20%;                  /* hairline, lifted for focus visibility */
+    --radius: 2px;
   }
 }
 
@@ -94,39 +113,34 @@
   }
 
   /*
-   * glass-card — translucent chrome-slab surface.
-   * Opacity kept at 0.68 so the Obsidian Chrome background gradient bleeds
-   * through, especially at card edges. Alabaster top rim + Blue Slate border
-   * give the metal trim from the reference.
+   * glass-card — card surface. Rewired to CLAUDE.md tokens: flat --surface
+   * fill, flat --hairline border. No blur, no box-shadow glow, no gradient,
+   * per spec. (Card's own rounded-3xl is untouched — that's the step 2
+   * structural rebuild, not this fix.)
    */
   .glass-card {
-    @apply border backdrop-blur-xl transition-all duration-300;
-    border-color: rgba(83, 104, 120, 0.22);
-    background-color: rgba(10, 12, 16, 0.68);
-    box-shadow:
-      inset 0 1px 0 rgba(229, 228, 226, 0.10),
-      0 1px 0 rgba(229, 228, 226, 0.03),
-      0 24px 56px -28px rgba(0, 0, 0, 0.85);
+    @apply border transition-colors duration-300;
+    border-color: var(--hairline);
+    background-color: var(--surface);
   }
 
-  /* Hover: Blue Slate edge brightens, Alabaster rim gets crisper */
+  /* Hover: hairline brightens slightly. No glow — left as a flagged
+   * leftover for step 2 to decide how hover should read structurally. */
   .glass-card-hover {
-    transition: border-color 200ms, box-shadow 200ms;
+    transition: border-color 200ms;
   }
   .glass-card-hover:hover {
-    border-color: rgba(83, 104, 120, 0.35);
-    box-shadow:
-      inset 0 1px 0 rgba(229, 228, 226, 0.14),
-      0 24px 58px -26px rgba(0, 0, 0, 0.90),
-      0 0 0 0.5px rgba(83, 104, 120, 0.18);
+    border-color: var(--faint);
   }
 
-  /* Badge / pill — slim chip on dark surfaces */
+  /* Badge / pill — slim chip on dark surfaces. Rewired to CLAUDE.md tokens
+   * alongside .glass-card: flat --raised fill, flat --hairline border, no
+   * blur. Callers differentiate by label/weight only, never by hue. */
   .premium-pill {
-    @apply border backdrop-blur-md;
-    border-color: rgba(83, 104, 120, 0.24);
-    background-color: rgba(12, 14, 18, 0.78);
-    color: #E5E4E2;
+    @apply border transition-colors duration-150;
+    border-color: var(--hairline);
+    background-color: var(--raised);
+    color: hsl(var(--muted-foreground));
   }
 }
 
@@ -186,15 +200,13 @@ html {
  * All reduced-motion aware.
  * ─────────────────────────────────────────────────────────────────────────── */
 
-/* Account card hover lift */
+/* Account card hover lift — position only (translateY). Border brighten to
+ * --faint on hover already comes from .glass-card-hover; no shadow glow. */
 .account-card-hover {
-  transition: transform 200ms cubic-bezier(0.22, 1, 0.36, 1), box-shadow 200ms ease;
+  transition: transform 200ms cubic-bezier(0.22, 1, 0.36, 1);
 }
 .account-card-hover:hover {
   transform: translateY(-2px);
-  box-shadow:
-    0 8px 28px -8px rgba(0, 0, 0, 0.55),
-    0 0 0 0.5px rgba(83, 104, 120, 0.22);
 }
 .account-card-hover:active {
   transform: translateY(0);

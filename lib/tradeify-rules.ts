@@ -137,7 +137,13 @@ export function tradeifyLockParams(
   const size = toTradeifySizeKey(accountSize)
   const row = program === "select_daily" ? TRADEIFY_DAILY[size] : TRADEIFY_FLEX[size]
   return {
-    minimumFloor: row.lockFloor,
+    // Pre-lock trailing floor's lower bound — same "size minus max drawdown"
+    // shape as lucidFlexFloorForSize/topstepXfaMllFloor/alphaMllFloor. This
+    // was wrongly set to row.lockFloor (the POST-lock value), which clamped
+    // the floor up to breakeven+$100 from day one — before the peak ever
+    // reached lockPeakThreshold — making a brand-new, untouched account
+    // read as already breached (floor above starting balance).
+    minimumFloor: accountSize - row.maxDrawdown,
     lockPeakThreshold: row.lockPeakThreshold,
     lockedFloor: row.lockFloor,
   }

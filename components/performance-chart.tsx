@@ -181,9 +181,11 @@ export function PerformanceChart({ data, account, stats }: PerformanceChartProps
       return (
         <div className="rounded-xl border border-border/50 bg-card/95 backdrop-blur-sm p-4 shadow-2xl min-w-[180px]">
           <p className="text-[13px] font-medium text-foreground mb-3">{formattedDate}</p>
-          <div className="flex items-center gap-2">
-            <div className={cn("w-2 h-2 rounded-full", isPositive ? "bg-emerald-500" : "bg-red-500")} />
-            <span className="text-[12px] text-muted-foreground">Daily PnL:</span>
+              <div className="flex items-center gap-2">
+              {/* Legitimate use of signed color — this dot mirrors an actual
+                  +/- P&L figure, unlike the floor line below. */}
+              <div className={cn("w-2 h-2 rounded-full", isPositive ? "bg-emerald-500" : "bg-red-500")} />
+              <span className="text-[12px] text-muted-foreground">Daily PnL:</span>
             <span className={cn("font-mono font-semibold text-[13px]", isPositive ? "text-emerald-500" : "text-red-500")}>
               {formatValue(point.dailyPnl, true)}
             </span>
@@ -205,12 +207,14 @@ export function PerformanceChart({ data, account, stats }: PerformanceChartProps
           </div>
           <div className="flex items-center justify-between gap-3">
             <div className="flex items-center gap-2">
-              <div className="w-2 h-2 rounded-full bg-red-500" />
+              {/* Floor is a fixed boundary, not a signed P&L figure — same
+                  neutral gray as the Starting Balance reference line, not red. */}
+              <div className="w-2 h-2 rounded-full bg-muted-foreground" />
               <span className="text-[11px] text-muted-foreground uppercase tracking-wider">
                 {getChartFloorLineLabel(account)}
               </span>
             </div>
-            <span className="font-mono font-semibold text-[13px] text-red-400">{formatValue(point.minBalance)}</span>
+            <span className="font-mono font-semibold text-[13px] text-muted-foreground">{formatValue(point.minBalance)}</span>
           </div>
           {point.isIncompleteDay && account.drawdownType !== "Intraday" && (
             <div className="text-xs text-amber-500 mt-1">
@@ -296,12 +300,14 @@ export function PerformanceChart({ data, account, stats }: PerformanceChartProps
                 domain={[getRuleStartingBalance(account) - 3000, getRuleStartingBalance(account) + 3000]}
                 width={60}
               />
+              {/* Floor is a fixed boundary, not a signed figure — neutral gray,
+                  distinguished from the balance series by dash style only. */}
               <ReferenceLine
                 y={getRuleStartingBalance(account) - account.maxDrawdown}
-                stroke="#ef4444"
+                stroke="#64748b"
                 strokeDasharray="6 4"
                 strokeWidth={2}
-                strokeOpacity={0.5}
+                strokeOpacity={0.7}
               />
               <Area
                 type="monotone"
@@ -331,7 +337,7 @@ export function PerformanceChart({ data, account, stats }: PerformanceChartProps
             <span>Account Balance</span>
           </div>
           <div className="flex items-center gap-2">
-            <div className="w-5 h-0.5 border-t-2 border-dashed border-red-500/50" />
+            <div className="w-5 h-0.5 border-t-2 border-dashed border-muted-foreground/60" />
             <span>{getChartFloorLineLabel(account)}</span>
           </div>
         </div>
@@ -447,14 +453,19 @@ export function PerformanceChart({ data, account, stats }: PerformanceChartProps
                   }}
                 />
               )}
-              {/* Active floor line — steps for EOD, trails smoothly for Intraday */}
+              {/* Active floor line — steps for EOD, trails smoothly for Intraday.
+                  Neutral gray, not red: the floor is a fixed calculated boundary,
+                  not a signed P&L figure, so tinting it would read as a live
+                  "loss" signal it isn't. Distinguished from the balance series
+                  by dash style + no fill, same convention as the Starting
+                  Balance reference line below. */}
               <Area
                 type={account.drawdownType === "Intraday" ? "monotone" : "stepAfter"}
                 dataKey="minBalance"
-                stroke="#f87171"
+                stroke="#64748b"
                 strokeWidth={2}
                 strokeDasharray="6 4"
-                strokeOpacity={0.88}
+                strokeOpacity={0.85}
                 fill="none"
                 dot={false}
                 activeDot={false}
@@ -574,7 +585,7 @@ export function PerformanceChart({ data, account, stats }: PerformanceChartProps
             <span>Balance</span>
           </div>
           <div className="flex items-center gap-1.5">
-            <div className="w-4 sm:w-5 h-0.5 border-t-2 border-dashed border-red-500" />
+            <div className="w-4 sm:w-5 h-0.5 border-t-2 border-dashed border-muted-foreground" />
             <span>{getChartFloorLineLabel(account)}</span>
           </div>
           <div className="hidden sm:flex items-center gap-1.5">

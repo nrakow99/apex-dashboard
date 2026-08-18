@@ -218,7 +218,7 @@ export function TradeHistoryTable({ trades, onEditTrade, onDeleteTrade }: TradeH
           winRate: nonFlat > 0 ? Math.round((wins.length / nonFlat) * 100) : 0,
           symbols: [...new Set(dayTrades.map((t) => t.symbol))],
         }
-      })
+    })
   }, [trades])
 
   const hasActions = !!(onEditTrade || onDeleteTrade)
@@ -276,7 +276,7 @@ export function TradeHistoryTable({ trades, onEditTrade, onDeleteTrade }: TradeH
 
               // ── Day summary row ──────────────────────────────────────────────
               rows.push(
-                <TableRow
+              <TableRow
                   key={group.date}
                   className={cn(
                     "border-white/[0.07] transition-colors group cursor-pointer",
@@ -329,7 +329,7 @@ export function TradeHistoryTable({ trades, onEditTrade, onDeleteTrade }: TradeH
                         </span>
                       )}
                     </div>
-                  </TableCell>
+                </TableCell>
 
                   {/* Symbol chips */}
                   <TableCell className="px-2 sm:px-3 hidden sm:table-cell">
@@ -345,11 +345,11 @@ export function TradeHistoryTable({ trades, onEditTrade, onDeleteTrade }: TradeH
                         <GradePill grade={allMeta[singleTrade.id].grade} />
                       )}
                     </div>
-                  </TableCell>
+                </TableCell>
 
                   {/* Daily PnL */}
                   <TableCell className="text-right py-1.5 sm:py-3.5 px-2 sm:px-3">
-                    <span className={cn(
+                  <span className={cn(
                       "font-mono font-bold text-sm sm:text-[15px] tabular-nums",
                       isProfit ? "text-emerald-500" : isLoss ? "text-red-500" : "text-muted-foreground",
                     )}>
@@ -448,10 +448,10 @@ export function TradeHistoryTable({ trades, onEditTrade, onDeleteTrade }: TradeH
                       <TableCell className="text-right py-1.5 sm:py-2.5 px-2 sm:px-3">
                         <span className={cn("font-mono text-xs font-semibold tabular-nums",
                           trade.pnl > 0 ? "text-emerald-500/80" : trade.pnl < 0 ? "text-red-500/80" : "text-muted-foreground",
-                        )}>
-                          {trade.pnl > 0 ? "+" : ""}${trade.pnl.toFixed(2)}
-                        </span>
-                      </TableCell>
+                  )}>
+                    {trade.pnl > 0 ? "+" : ""}${trade.pnl.toFixed(2)}
+                  </span>
+                </TableCell>
 
                       <TableCell className="hidden sm:table-cell" />
                       <TableCell className="hidden md:table-cell" />
@@ -459,21 +459,21 @@ export function TradeHistoryTable({ trades, onEditTrade, onDeleteTrade }: TradeH
                       {/* Actions */}
                       {hasActions && (
                         <TableCell className="px-2 sm:px-3" onClick={(e) => e.stopPropagation()}>
-                          <DropdownMenu>
-                            <DropdownMenuTrigger asChild>
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
                               <Button variant="ghost" size="icon" className="h-7 w-7 opacity-0 group-hover:opacity-100 focus-visible:opacity-100 transition-opacity">
                                 <MoreHorizontal className="h-3.5 w-3.5" />
                                 <span className="sr-only">Trade options</span>
-                              </Button>
-                            </DropdownMenuTrigger>
-                            <DropdownMenuContent align="end" className="w-40">
+                        </Button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="end" className="w-40">
                               {onEditTrade && <DropdownMenuItem onClick={() => onEditTrade(trade)}><Pencil className="h-4 w-4 mr-2" />Edit Trade</DropdownMenuItem>}
                               {onDeleteTrade && <DropdownMenuItem onClick={() => onDeleteTrade(trade)} className="text-red-500 focus:text-red-500"><Trash2 className="h-4 w-4 mr-2" />Delete Trade</DropdownMenuItem>}
-                            </DropdownMenuContent>
-                          </DropdownMenu>
-                        </TableCell>
-                      )}
-                    </TableRow>
+                      </DropdownMenuContent>
+                    </DropdownMenu>
+                  </TableCell>
+                )}
+              </TableRow>
                   )
 
                   // Individual trade detail panel

@@ -5,22 +5,25 @@ import { cva, type VariantProps } from 'class-variance-authority'
 import { cn } from '@/lib/utils'
 
 const buttonVariants = cva(
-  'inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-xl text-sm font-medium ring-offset-background transition-all duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#536878]/40 focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0',
+  'inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-xl text-sm font-medium ring-offset-background transition-all duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0',
   {
     variants: {
       variant: {
-        /* Default CTA — emerald, with restrained glow (no neon spread) */
-        default:
-          'bg-gradient-to-r from-emerald-500 to-teal-500 text-primary-foreground shadow-[0_0_0_1px_rgba(255,255,255,0.07)_inset,0_10px_22px_-16px_rgba(16,185,129,0.35)] hover:brightness-105 hover:shadow-[0_0_0_1px_rgba(255,255,255,0.10)_inset,0_12px_24px_-16px_rgba(20,184,166,0.40)]',
+        /* Primary CTA per CLAUDE.md — flat white fill, black text. No gradient, no glow. */
+        default: 'bg-primary text-primary-foreground hover:bg-primary/90',
+        /* Destructive — same rule as everywhere else: --loss is reserved for
+         * signed P&L, never a button. Structural signal only: bold label +
+         * a border a shade brighter than outline's, no hue at all. Callers
+         * (e.g. delete confirmations) pair this with an icon for weight. */
         destructive:
-          'bg-destructive/90 text-destructive-foreground hover:bg-destructive',
-        /* Outline — dark surface, subtle Blue Slate hover edge */
+          'font-bold border border-[var(--faint)] bg-[var(--raised)] text-[var(--text)] hover:border-[var(--text)] hover:bg-[var(--raised)]/80',
+        /* Outline — flat --raised surface, --hairline border */
         outline:
-          'border border-white/[0.10] bg-[#0F1115]/80 text-[#E5E4E2] hover:border-[#536878]/35 hover:bg-[#111318]/90',
-        /* Secondary / toggle — quiet dark fill */
+          'border border-[var(--hairline)] bg-[var(--raised)] text-[var(--text)] hover:border-[var(--faint)] hover:bg-[var(--raised)]/80',
+        /* Secondary / toggle — quiet flat fill */
         secondary:
-          'bg-[#1A1D24]/90 text-[#E5E4E2] hover:bg-[#1E2229]/90',
-        ghost: 'text-slate-400 hover:bg-[#111318]/80 hover:text-[#E5E4E2]',
+          'bg-[var(--raised)] text-[var(--text)] hover:bg-[var(--raised)]/80',
+        ghost: 'text-[var(--muted-foreground)] hover:bg-[var(--raised)]/60 hover:text-[var(--text)]',
         link: 'text-primary underline-offset-4 hover:underline',
       },
       size: {

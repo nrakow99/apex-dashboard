@@ -19,7 +19,7 @@ import {
 } from "@/components/ui/select"
 import { Loader2 } from "lucide-react"
 import { cn } from "@/lib/utils"
-import type { Account, AccountType, Firm, DrawdownType, TradeifyProgram } from "@/lib/types"
+import type { Account, AccountType, Firm, DrawdownType, TradeifyProgram, TopstepPayoutPath, AlphaTier } from "@/lib/types"
 import { getAccountRules } from "@/lib/rules"
 import { defaultTradeifyAccountName } from "@/lib/tradeify-rules"
 import {
@@ -30,6 +30,14 @@ import {
 } from "@/lib/account-quantity"
 
 const ACCOUNT_SIZES = [25000, 50000, 100000, 150000]
+
+/** Same table as add-account-modal.tsx — keep in sync. 50000 is valid for
+ *  every combination, so it's always a safe fallback size. */
+function validSizesFor(firm: Firm, alphaTier: AlphaTier): number[] {
+  if (firm === "Topstep") return [50000, 100000, 150000]
+  if (firm === "Alpha") return alphaTier === "zero" ? [25000, 50000, 100000] : [50000, 100000, 150000]
+  return ACCOUNT_SIZES
+}
 
 function SegmentedControl<T extends string>({
   options,
@@ -82,6 +90,9 @@ interface EditAccountModalProps {
     dailyLossLimit: number | null
     profitTarget?: number | null
     program?: TradeifyProgram | null
+    hasDailyLossLimit?: boolean
+    topstepPayoutPath?: TopstepPayoutPath | null
+    alphaTier?: AlphaTier | null
   }) => Promise<void>
   isSaving?: boolean
 }
@@ -106,6 +117,9 @@ export function EditAccountModal({
     dailyLossLimit: "",
     profitTarget: "",
     program: "select_eval" as TradeifyProgram,
+    topstepPayoutPath: "standard" as TopstepPayoutPath,
+    hasDailyLossLimit: false,
+    alphaTier: "standard" as AlphaTier,
   })
 
   useEffect(() => {
@@ -125,6 +139,9 @@ export function EditAccountModal({
         program:
           account.program ??
           (account.type === "Eval" ? "select_eval" : "select_flex"),
+        topstepPayoutPath: account.topstepPayoutPath ?? "standard",
+        hasDailyLossLimit: account.hasDailyLossLimit ?? false,
+        alphaTier: account.alphaTier ?? "standard",
       })
     }
   }, [account])
@@ -139,34 +156,59 @@ export function EditAccountModal({
     setForm((f) => ({ ...f, [k]: v }))
 
   const isTradeify = form.firm === "Tradeify"
+  const isTopstep = form.firm === "Topstep"
+  const isAlpha = form.firm === "Alpha"
+  const forcesEod = isTradeify || isTopstep || isAlpha
   const tradeifyType: AccountType =
     form.program === "select_eval" ? "Eval" : "PA"
   const effectiveType = isTradeify ? tradeifyType : form.type
 
+  // Render-safe clamp: never let a stale accountSize from a previous
+  // firm/tier reach getAccountRules (Topstep throws below 50K, Alpha Zero
+  // throws above 100K) — the useEffect below settles form.accountSize
+  // itself, but this guards the render that happens before that effect runs.
+  const validSizes = validSizesFor(form.firm, form.alphaTier)
+  const effectiveAccountSize = validSizes.includes(form.accountSize) ? form.accountSize : 50000
+
   const rules = getAccountRules({
     firm: form.firm,
     type: effectiveType,
-    drawdownType: isTradeify ? "EOD" : form.drawdownType,
-    accountSize: form.accountSize,
+    drawdownType: forcesEod ? "EOD" : form.drawdownType,
+    accountSize: effectiveAccountSize,
     program: isTradeify ? form.program : undefined,
+    hasDailyLossLimit: isTopstep ? form.hasDailyLossLimit : undefined,
+    topstepPayoutPath: isTopstep ? form.topstepPayoutPath : undefined,
+    alphaTier: isAlpha ? form.alphaTier : undefined,
   })
 
+  useEffect(() => {
+    if (forcesEod && form.drawdownType === "Intraday") {
+      setForm((f) => ({ ...f, drawdownType: "EOD" }))
+    }
+  }, [forcesEod, form.drawdownType])
+
+  useEffect(() => {
+    if (!validSizesFor(form.firm, form.alphaTier).includes(form.accountSize)) {
+      setForm((f) => ({ ...f, accountSize: 50000 }))
+    }
+  }, [form.firm, form.alphaTier, form.accountSize])
+
   const qty = Math.max(1, Math.min(MAX_ACCOUNT_QUANTITY, Math.floor(form.quantity) || 1))
-  const portfolioBuyingPower = getPortfolioBuyingPower({ accountSize: form.accountSize, quantity: qty })
+  const portfolioBuyingPower = getPortfolioBuyingPower({ accountSize: effectiveAccountSize, quantity: qty })
   const ruleStartingBalance = account
-    ? getRuleStartingBalance({ ...account, accountSize: form.accountSize, quantity: qty })
-    : form.accountSize
+    ? getRuleStartingBalance({ ...account, accountSize: effectiveAccountSize, quantity: qty })
+    : effectiveAccountSize
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!account) return
     await onSave(account.id, {
-      name: form.name || (isTradeify ? defaultTradeifyAccountName(form.accountSize, form.program) : form.name),
+      name: form.name || (isTradeify ? defaultTradeifyAccountName(effectiveAccountSize, form.program) : form.name),
       firm: form.firm,
       type: effectiveType,
       status: form.status,
-      drawdownType: isTradeify ? "EOD" : form.drawdownType,
-      accountSize: form.accountSize,
+      drawdownType: forcesEod ? "EOD" : form.drawdownType,
+      accountSize: effectiveAccountSize,
       quantity: qty,
       startingBalance: ruleStartingBalance,
       maxDrawdown: parseFloat(form.maxDrawdown) || rules.maxDrawdown,
@@ -178,6 +220,12 @@ export function EditAccountModal({
             ? rules.profitTarget
             : null,
       program: isTradeify ? form.program : null,
+      // Always send the current form value (not conditionally omitted) so a
+      // save always round-trips these fields — including firm switches away
+      // from Topstep/Alpha, which correctly clears them via null/false.
+      hasDailyLossLimit: isTopstep ? form.hasDailyLossLimit : false,
+      topstepPayoutPath: isTopstep ? form.topstepPayoutPath : null,
+      alphaTier: isAlpha ? form.alphaTier : null,
     })
   }
 
@@ -205,22 +253,45 @@ export function EditAccountModal({
                 { value: "Apex", label: "Apex" },
                 { value: "Lucid", label: "Lucid" },
                 { value: "Tradeify", label: "Tradeify" },
+                { value: "Topstep", label: "Topstep" },
+                { value: "Alpha", label: "Alpha" },
               ]}
               value={form.firm}
               onChange={(v) => {
-                set("firm", v)
-                if (v === "Tradeify") {
-                  setForm((f) => ({
-                    ...f,
-                    firm: v,
-                    drawdownType: "EOD",
-                    program: "select_eval",
-                  }))
-                }
+                setForm((f) => ({
+                  ...f,
+                  firm: v,
+                  drawdownType: v === "Apex" ? f.drawdownType : "EOD",
+                  program: v === "Tradeify" ? "select_eval" : f.program,
+                }))
               }}
               disabled={isSaving}
             />
           </div>
+
+          {/* Alpha Tier — a rule-variant choice independent of Eval/PA, required for every Alpha account */}
+          {isAlpha && (
+            <div className="space-y-2">
+              <Label>Alpha Tier</Label>
+              <SegmentedControl
+                options={[
+                  { value: "zero", label: "Zero" },
+                  { value: "standard", label: "Standard" },
+                  { value: "advanced", label: "Advanced" },
+                ]}
+                value={form.alphaTier}
+                onChange={(v) => set("alphaTier", v)}
+                disabled={isSaving}
+              />
+              <p className="text-[11px] text-muted-foreground">
+                {form.alphaTier === "zero"
+                  ? "No consistency rule at Eval. Daily Loss Guard at both stages. Sizes: 25K/50K/100K."
+                  : form.alphaTier === "standard"
+                    ? "Daily Loss Guard applies once funded only. Sizes: 50K/100K/150K."
+                    : "No Daily Loss Guard, no consistency rule at either stage. Sizes: 50K/100K/150K."}
+              </p>
+            </div>
+          )}
 
           {isTradeify ? (
             <div className="space-y-2">
@@ -295,10 +366,14 @@ export function EditAccountModal({
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-2">
               <Label>Account Size (each)</Label>
-              <Select value={String(form.accountSize)} onValueChange={(v) => set("accountSize", Number(v))} disabled={isSaving}>
+              <Select
+                value={String(effectiveAccountSize)}
+                onValueChange={(v) => set("accountSize", Number(v))}
+                disabled={isSaving}
+              >
                 <SelectTrigger className="bg-background h-9"><SelectValue /></SelectTrigger>
                 <SelectContent>
-                  {ACCOUNT_SIZES.map((s) => (
+                  {validSizes.map((s) => (
                     <SelectItem key={s} value={String(s)}>${s.toLocaleString()}</SelectItem>
                   ))}
                 </SelectContent>
@@ -323,7 +398,7 @@ export function EditAccountModal({
           </div>
           {qty > 1 && (
             <p className="text-[11px] text-muted-foreground -mt-2">
-              {formatAccountBundleHelper({ accountSize: form.accountSize, quantity: qty })} · Portfolio buying power{" "}
+              {formatAccountBundleHelper({ accountSize: effectiveAccountSize, quantity: qty })} · Portfolio buying power{" "}
               <span className="font-mono text-[#94AAB8]">${portfolioBuyingPower.toLocaleString()}</span>
               <span className="block mt-0.5">Rules track one representative account (starting ${ruleStartingBalance.toLocaleString()}).</span>
             </p>
@@ -342,6 +417,46 @@ export function EditAccountModal({
                 disabled={isSaving}
               />
             </div>
+          )}
+
+          {/* Topstep: payout path (funded stage only) + DLL election (either stage) */}
+          {isTopstep && (
+            <>
+              {effectiveType === "PA" && (
+                <div className="space-y-2">
+                  <Label>Payout Path</Label>
+                  <SegmentedControl
+                    options={[
+                      { value: "standard", label: "Standard" },
+                      { value: "consistency", label: "Consistency" },
+                    ]}
+                    value={form.topstepPayoutPath}
+                    onChange={(v) => set("topstepPayoutPath", v)}
+                    disabled={isSaving}
+                  />
+                  <p className="text-[11px] text-muted-foreground">
+                    {form.topstepPayoutPath === "consistency"
+                      ? "Higher payout ceiling. 40% consistency rule applies; 3 trading days required, no winning-day count."
+                      : "5 winning days of $150+ required. No consistency rule."}
+                  </p>
+                </div>
+              )}
+              <div className="space-y-2">
+                <Label>Daily Loss Limit</Label>
+                <SegmentedControl
+                  options={[
+                    { value: "yes", label: "Elected" },
+                    { value: "no", label: "Not Elected" },
+                  ]}
+                  value={form.hasDailyLossLimit ? "yes" : "no"}
+                  onChange={(v) => set("hasDailyLossLimit", v === "yes")}
+                  disabled={isSaving}
+                />
+                <p className="text-[11px] text-muted-foreground">
+                  Optional at checkout. Doubles the funded payout ceiling when elected.
+                </p>
+              </div>
+            </>
           )}
 
           <div className="grid grid-cols-2 gap-4">
@@ -386,7 +501,7 @@ export function EditAccountModal({
             <Button type="button" variant="ghost" onClick={() => onOpenChange(false)} disabled={isSaving}>
               Cancel
             </Button>
-            <Button type="submit" className="bg-emerald-600 hover:bg-emerald-700" disabled={isSaving}>
+            <Button type="submit" disabled={isSaving}>
               {isSaving ? <><Loader2 className="h-4 w-4 mr-2 animate-spin" />Saving...</> : "Save Changes"}
             </Button>
           </div>

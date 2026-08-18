@@ -284,7 +284,12 @@ function computeNetProfitConsistency(
     Math.max(0, ...dailyData.map((d) => d.pnl), 0),
   )
   const maxAllowedDay = roundMoney(totalProfit * (consistencyPercent / 100))
-  const isValid = totalProfit > 0 && largestWinningDay <= maxAllowedDay
+  // No profit yet (including zero trades) can't violate a rule about how
+  // profit is *distributed* — nothing to distribute yet. Matches the
+  // totalProfit <= 0 escape in computePositiveSumConsistency below; without
+  // it, a fresh zero-trade account reads as an instant violation (0 > 0 is
+  // false, so isValid was unconditionally false whenever there's no profit).
+  const isValid = totalProfit <= 0 || largestWinningDay <= maxAllowedDay
   const requiredTotalProfit =
     consistencyPercent > 0 && largestWinningDay > 0
       ? roundMoney(largestWinningDay / (consistencyPercent / 100))

@@ -1,7 +1,7 @@
 import { describe, it, expect } from "vitest"
-import { getPayoutEligibility, calculateAccountStats, getTodayDateStr } from "./storage"
+import { getPayoutEligibility, calculateAccountStats, getConsistencyInfo, getTodayDateStr } from "./storage"
 import { getAccountRules } from "./rules"
-import type { Account, Trade, Payout } from "./types"
+import type { Account, Trade, Payout, Firm, AccountType, AlphaTier, TopstepPayoutPath, TradeifyProgram } from "./types"
 
 // Golden-file tests for getPayoutEligibility's Topstep XFA and Alpha Futures
 // Qualified branches, and the payout-triggered MLL floor lock in
@@ -405,4 +405,93 @@ describe("Alpha Futures Qualified — MLL does not reset on payout (positive gua
     const stats = calculateAccountStats(account, trades, [payout("2026-07-02", 200, 1, "alpha-1")])
     expect(stats.activeEodFloor).toBe(25000) // locked at breakeven via peak, not via the payout
   })
+})
+
+// ─── Zero-activity fresh account — regression coverage ─────────────────────
+//
+// A brand-new account with no trades and $0 net PnL must read as neutral/
+// safe, never as a violation. Three distinct root causes let this slip
+// through at various points, one per firm-agnostic layer:
+//
+//   1. computeNetProfitConsistency's isValid required totalProfit > 0, so
+//      "no profit yet" (including zero trades) was indistinguishable from
+//      "violated the rule" — hit by every firm/stage using this basis
+//      (Apex PA, Lucid Eval, Tradeify Eval, Topstep XFA-consistency, Alpha
+//      Eval Standard/Advanced, Alpha Qualified Zero/Standard).
+//   2. add-account-modal.tsx passed a literal maxDrawdown: 0 placeholder
+//      into getAccountRules to probe for a computed default, but the
+//      generic "Live" fallback in rules.ts reads account.maxDrawdown back
+//      as ITS default (`?? 2000`) — 0 defeats that `??`, so every firm's
+//      brand-new Live account permanently persisted maxDrawdown: 0.
+//   3. tradeifyLockParams's minimumFloor used the POST-lock breakeven+$100
+//      value instead of the pre-lock trailing minimum (size - maxDrawdown),
+//      so Tradeify Flex/Daily PA accounts read as already-breached from
+//      the moment they're created, before the peak ever reaches the lock
+//      threshold.
+//
+// These builders mirror the real creation path (add-account-modal.tsx):
+// getAccountRules is called WITHOUT a maxDrawdown/dailyLossLimit override,
+// and the account's stored maxDrawdown is whatever that call resolves to —
+// never a hand-picked "obviously safe" number.
+function freshAccountRulesInput(firm: Firm, type: AccountType) {
+  const accountSize = 50000
+  const program: TradeifyProgram | undefined =
+    firm === "Tradeify" ? (type === "Eval" ? "select_eval" : "select_flex") : undefined
+  const alphaTier: AlphaTier | undefined = firm === "Alpha" ? "standard" : undefined
+  const topstepPayoutPath: TopstepPayoutPath | undefined = firm === "Topstep" ? "standard" : undefined
+  return { firm, type, drawdownType: "EOD" as const, accountSize, program, alphaTier, topstepPayoutPath }
+}
+
+function freshAccount(firm: Firm, type: AccountType): Account {
+  const input = freshAccountRulesInput(firm, type)
+  const rules = getAccountRules(input)
+  return {
+    id: `${firm}-${type}-fresh`,
+    name: `${firm} ${type} fresh`,
+    firm,
+    type,
+    status: "Active",
+    drawdownType: "EOD",
+    accountSize: input.accountSize,
+    startingBalance: input.accountSize,
+    balance: input.accountSize,
+    maxBalance: input.accountSize,
+    maxDrawdown: rules.maxDrawdown,
+    dailyLossLimit: rules.hasDLL ? rules.dailyLossLimit : 0,
+    profitTarget: rules.hasProfitTarget ? rules.profitTarget : undefined,
+    program: input.program ?? null,
+    alphaTier: input.alphaTier ?? null,
+    topstepPayoutPath: input.topstepPayoutPath ?? null,
+    hasDailyLossLimit: firm === "Topstep" ? false : undefined,
+  }
+}
+
+const FIRMS: Firm[] = ["Apex", "Lucid", "Tradeify", "Topstep", "Alpha"]
+const TYPES: AccountType[] = ["Eval", "PA", "Live"]
+
+describe("Zero-activity fresh account — every firm × every type", () => {
+  for (const firm of FIRMS) {
+    for (const type of TYPES) {
+      it(`${firm} ${type}: no trades, $0 PnL reads as safe, full buffer, not a consistency violation`, () => {
+        const account = freshAccount(firm, type)
+        const rules = getAccountRules(account)
+
+        // Root cause #2/#3: maxDrawdown must be a real, positive, rule-derived
+        // number — never 0 (Live placeholder bug) and never inflated above
+        // the account's own starting balance (Tradeify lock-floor bug).
+        expect(account.maxDrawdown).toBeGreaterThan(0)
+
+        const stats = calculateAccountStats(account, [], [])
+        expect(stats.isSafe).toBe(true)
+        expect(stats.drawdownRemaining).toBe(account.maxDrawdown)
+
+        // Root cause #1: a fresh account can't be "consistency-violated"
+        // when it has no profit to distribute yet.
+        if (rules.hasConsistency) {
+          const consistency = getConsistencyInfo(account.id, [], account, [])
+          expect(consistency.isValid).toBe(true)
+        }
+      })
+    }
+  }
 })

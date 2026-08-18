@@ -74,7 +74,7 @@ import {
   isEvalEligibleForPaActivation,
 } from "@/lib/pa-activation"
 import { createClient } from "@/lib/supabase/client"
-import type { Trade, Payout, Account, AccountType, DrawdownType, Firm, DailyPnL, TradeifyProgram } from "@/lib/types"
+import type { Trade, Payout, Account, AccountType, DrawdownType, Firm, DailyPnL, TradeifyProgram, TopstepPayoutPath, AlphaTier } from "@/lib/types"
 import { migrateLocalTradeMetadata, type TradeMeta } from "@/lib/trade-meta"
 import { RiskMetricsCard } from "@/components/risk-metrics-card"
 
@@ -402,6 +402,9 @@ export default function Dashboard() {
         dailyLossLimit: accountData.dailyLossLimit,
         program: accountData.program ?? null,
         legacyFiftyKTarget: accountData.legacyFiftyKTarget,
+        hasDailyLossLimit: accountData.hasDailyLossLimit,
+        topstepPayoutPath: accountData.topstepPayoutPath ?? null,
+        alphaTier: accountData.alphaTier ?? null,
       })
 
       if (result.error) throw result.error
@@ -514,6 +517,9 @@ export default function Dashboard() {
     dailyLossLimit: number | null
     profitTarget?: number | null
     program?: TradeifyProgram | null
+    hasDailyLossLimit?: boolean
+    topstepPayoutPath?: TopstepPayoutPath | null
+    alphaTier?: AlphaTier | null
   }) => {
     setIsSaving(true)
     try {
@@ -530,6 +536,9 @@ export default function Dashboard() {
         dailyLossLimit: updates.dailyLossLimit,
         profitTarget: updates.profitTarget ?? null,
         program: updates.program,
+        hasDailyLossLimit: updates.hasDailyLossLimit,
+        topstepPayoutPath: updates.topstepPayoutPath,
+        alphaTier: updates.alphaTier,
       })
 
       if (result.error) throw result.error
@@ -777,7 +786,7 @@ export default function Dashboard() {
         }}
         evalAccount={activatePaEval}
         isSubmitting={isSaving}
-        onConfirm={async ({ name, activatedAtIso, activationStartDate, tradeifyProgram }) => {
+        onConfirm={async ({ name, activatedAtIso, activationStartDate, tradeifyProgram, topstepPayoutPath }) => {
           if (!activatePaEval) return
           const evalAcc = activatePaEval
           setIsSaving(true)
@@ -788,6 +797,7 @@ export default function Dashboard() {
               activatedAtIso,
               activationStartDate,
               tradeifyProgram,
+              topstepPayoutPath,
             )
             const result = await updateAccount(evalAcc.id, updates)
             if (result.error) throw result.error

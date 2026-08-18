@@ -12,13 +12,16 @@ const Progress = React.forwardRef<
   <ProgressPrimitive.Root
     ref={ref}
     className={cn(
-      'relative h-4 w-full overflow-hidden rounded-full border border-white/[0.07] bg-[#0F1115]/80',
+      // Flat track per CLAUDE.md: --raised fill, --hairline border, 2px radius.
+      'relative h-4 w-full overflow-hidden rounded-[2px] border border-[var(--hairline)] bg-[var(--raised)]',
       className,
     )}
     {...props}
   >
     <ProgressPrimitive.Indicator
-      className="h-full w-full flex-1 bg-gradient-to-r from-emerald-500 via-emerald-400 to-teal-400 transition-all duration-500"
+      // Flat fill — no gradient. Progress is signaled by the bar's length
+      // (position/size), never by color.
+      className="h-full w-full flex-1 rounded-[2px] bg-[var(--text)] transition-all duration-500"
       style={{ transform: `translateX(-${100 - (value || 0)}%)` }}
     />
   </ProgressPrimitive.Root>

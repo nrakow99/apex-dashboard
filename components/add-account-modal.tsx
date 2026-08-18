@@ -19,7 +19,7 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import { Plus } from "lucide-react"
-import type { Account, AccountType, Firm, DrawdownType, TradeifyProgram } from "@/lib/types"
+import type { Account, AccountType, Firm, DrawdownType, TradeifyProgram, TopstepPayoutPath, AlphaTier } from "@/lib/types"
 import { getAccountRules } from "@/lib/rules"
 import { defaultTradeifyAccountName } from "@/lib/tradeify-rules"
 import {
@@ -35,6 +35,15 @@ interface AddAccountModalProps {
 
 const ACCOUNT_SIZES = [25000, 50000, 100000, 150000]
 
+/** Every firm/tier's valid account sizes — drives the Account Size dropdown.
+ *  50000 is valid for every combination below, so it's always a safe
+ *  fallback when a firm/tier switch invalidates the currently selected size. */
+function validSizesFor(firm: Firm, alphaTier: AlphaTier): number[] {
+  if (firm === "Topstep") return [50000, 100000, 150000]
+  if (firm === "Alpha") return alphaTier === "zero" ? [25000, 50000, 100000] : [50000, 100000, 150000]
+  return ACCOUNT_SIZES
+}
+
 function SegmentedControl<T extends string>({
   options,
   value,
@@ -45,14 +54,14 @@ function SegmentedControl<T extends string>({
   onChange: (v: T) => void
 }) {
   return (
-    <div className="flex gap-0 p-1 bg-[#0F1115]/80 border border-white/[0.08] rounded-xl">
+    <div className="flex flex-wrap gap-1 p-1 bg-[#0F1115]/80 border border-white/[0.08] rounded-xl">
       {options.map((opt) => (
         <button
           key={opt.value}
           type="button"
           onClick={() => onChange(opt.value)}
           className={cn(
-            "flex-1 py-1.5 px-2 rounded-lg text-sm font-medium transition-all",
+            "flex-1 basis-[30%] py-1.5 px-2 rounded-lg text-sm font-medium transition-all",
             value === opt.value
               ? "bg-[#1E2229] text-[#E5E4E2] shadow-[inset_0_0_0_1px_rgba(83,104,120,0.40),inset_0_1px_0_rgba(255,255,255,0.06)]"
               : "text-slate-500 hover:text-[#E5E4E2]"
@@ -65,78 +74,104 @@ function SegmentedControl<T extends string>({
   )
 }
 
+const INITIAL_FORM = {
+  name: "",
+  firm: "Apex" as Firm,
+  type: "Eval" as AccountType,
+  drawdownType: "EOD" as DrawdownType,
+  accountSize: 50000,
+  quantity: 1,
+  program: "select_eval" as TradeifyProgram,
+  topstepPayoutPath: "standard" as TopstepPayoutPath,
+  hasDailyLossLimit: false,
+  alphaTier: "standard" as AlphaTier,
+}
+
 export function AddAccountModal({ onAddAccount }: AddAccountModalProps) {
   const [open, setOpen] = useState(false)
-  const [form, setForm] = useState({
-    name: "",
-    firm: "Apex" as Firm,
-    type: "Eval" as AccountType,
-    drawdownType: "EOD" as DrawdownType,
-    accountSize: 50000,
-    quantity: 1,
-    program: "select_eval" as TradeifyProgram,
-  })
+  const [form, setForm] = useState(INITIAL_FORM)
 
   const isTradeify = form.firm === "Tradeify"
-  const tradeifyType: AccountType =
-    form.program === "select_eval" ? "Eval" : "PA"
+  const isTopstep = form.firm === "Topstep"
+  const isAlpha = form.firm === "Alpha"
+  const forcesEod = isTradeify || isTopstep || isAlpha
+
+  const tradeifyType: AccountType = form.program === "select_eval" ? "Eval" : "PA"
+  const effectiveType = isTradeify ? tradeifyType : form.type
+
+  // Render-safe clamp: never let a stale accountSize from a previous firm/tier
+  // reach getAccountRules (e.g. Topstep throws below 50K, Alpha Zero throws
+  // above 100K) — the useEffect below settles form.accountSize itself, but
+  // this guards the render that happens before that effect runs.
+  const validSizes = validSizesFor(form.firm, form.alphaTier)
+  const effectiveAccountSize = validSizes.includes(form.accountSize) ? form.accountSize : 50000
 
   const rules = getAccountRules({
     firm: form.firm,
-    type: isTradeify ? tradeifyType : form.type,
-    drawdownType: isTradeify ? "EOD" : form.drawdownType,
-    accountSize: form.accountSize,
+    type: effectiveType,
+    drawdownType: forcesEod ? "EOD" : form.drawdownType,
+    accountSize: effectiveAccountSize,
     program: isTradeify ? form.program : undefined,
-    maxDrawdown: 0,
-    dailyLossLimit: 0,
+    hasDailyLossLimit: isTopstep ? form.hasDailyLossLimit : undefined,
+    topstepPayoutPath: isTopstep ? form.topstepPayoutPath : undefined,
+    alphaTier: isAlpha ? form.alphaTier : undefined,
+    // Deliberately NOT passing maxDrawdown/dailyLossLimit: every firm/type
+    // with a real rule table ignores these inputs entirely, but the generic
+    // "Live" fallback in getAccountRules reads account.maxDrawdown back as
+    // its own default (`?? 2000`). Passing a literal 0 here — instead of
+    // just omitting the field — used to defeat that `??` (0 is not
+    // null/undefined) and permanently persist maxDrawdown: 0 on every new
+    // Live account, which then reads as a breached account with a 0/0
+    // drawdown bar from the moment it's created.
   })
 
   useEffect(() => {
-    if ((form.firm === "Lucid" || form.firm === "Tradeify") && form.drawdownType === "Intraday") {
+    if (forcesEod && form.drawdownType === "Intraday") {
       setForm((f) => ({ ...f, drawdownType: "EOD" }))
     }
-  }, [form.firm, form.drawdownType])
+  }, [forcesEod, form.drawdownType])
+
+  useEffect(() => {
+    if (!validSizesFor(form.firm, form.alphaTier).includes(form.accountSize)) {
+      setForm((f) => ({ ...f, accountSize: 50000 }))
+    }
+  }, [form.firm, form.alphaTier, form.accountSize])
 
   const set = <K extends keyof typeof form>(k: K, v: (typeof form)[K]) =>
     setForm((f) => ({ ...f, [k]: v }))
 
   const qty = Math.max(1, Math.min(MAX_ACCOUNT_QUANTITY, Math.floor(form.quantity) || 1))
-  const portfolioBuyingPower = getPortfolioBuyingPower({ accountSize: form.accountSize, quantity: qty })
+  const portfolioBuyingPower = getPortfolioBuyingPower({ accountSize: effectiveAccountSize, quantity: qty })
 
   const defaultName = () => {
-    if (isTradeify) return defaultTradeifyAccountName(form.accountSize, form.program)
-    return `${form.firm} ${(form.accountSize / 1000).toFixed(0)}K ${isTradeify ? tradeifyType : form.type}`
+    if (isTradeify) return defaultTradeifyAccountName(effectiveAccountSize, form.program)
+    const firmLabel = isAlpha ? `Alpha ${form.alphaTier[0].toUpperCase()}${form.alphaTier.slice(1)}` : form.firm
+    return `${firmLabel} ${(effectiveAccountSize / 1000).toFixed(0)}K ${effectiveType}`
   }
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
-    const accountType = isTradeify ? tradeifyType : form.type
     onAddAccount({
       name: form.name || defaultName(),
       firm: form.firm,
-      type: accountType,
+      type: effectiveType,
       status: "Active",
-      drawdownType: isTradeify ? "EOD" : form.drawdownType,
-      accountSize: form.accountSize,
+      drawdownType: forcesEod ? "EOD" : form.drawdownType,
+      accountSize: effectiveAccountSize,
       quantity: qty,
-      balance: form.accountSize,
-      startingBalance: form.accountSize,
-      maxBalance: form.accountSize,
+      balance: effectiveAccountSize,
+      startingBalance: effectiveAccountSize,
+      maxBalance: effectiveAccountSize,
       profitTarget: rules.hasProfitTarget ? rules.profitTarget : undefined,
       maxDrawdown: rules.maxDrawdown,
       dailyLossLimit: rules.hasDLL ? rules.dailyLossLimit : 0,
       program: isTradeify ? form.program : undefined,
+      hasDailyLossLimit: isTopstep ? form.hasDailyLossLimit : undefined,
+      topstepPayoutPath: isTopstep && effectiveType === "PA" ? form.topstepPayoutPath : undefined,
+      alphaTier: isAlpha ? form.alphaTier : undefined,
     })
     setOpen(false)
-    setForm({
-      name: "",
-      firm: "Apex",
-      type: "Eval",
-      drawdownType: "EOD",
-      accountSize: 50000,
-      quantity: 1,
-      program: "select_eval",
-    })
+    setForm(INITIAL_FORM)
   }
 
   const showDrawdownSelector = form.firm === "Apex"
@@ -150,7 +185,7 @@ export function AddAccountModal({ onAddAccount }: AddAccountModalProps) {
           Add Account
         </Button>
       </DialogTrigger>
-      <DialogContent className="sm:max-w-[420px]">
+      <DialogContent className="sm:max-w-[420px] max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>Add New Account</DialogTitle>
         </DialogHeader>
@@ -160,7 +195,7 @@ export function AddAccountModal({ onAddAccount }: AddAccountModalProps) {
           <div className="space-y-2">
             <Label>Account Name</Label>
             <Input
-              placeholder={`e.g., ${form.firm} ${(form.accountSize / 1000).toFixed(0)}K ${form.type}`}
+              placeholder={`e.g., ${defaultName()}`}
               value={form.name}
               onChange={(e) => set("name", e.target.value)}
               className="bg-background"
@@ -175,19 +210,18 @@ export function AddAccountModal({ onAddAccount }: AddAccountModalProps) {
                 { value: "Apex", label: "Apex" },
                 { value: "Lucid", label: "Lucid" },
                 { value: "Tradeify", label: "Tradeify" },
+                { value: "Topstep", label: "Topstep" },
+                { value: "Alpha", label: "Alpha" },
               ]}
               value={form.firm}
-              onChange={(v) => {
-                set("firm", v)
-                if (v === "Tradeify") {
-                  setForm((f) => ({
-                    ...f,
-                    firm: v,
-                    drawdownType: "EOD",
-                    program: "select_eval",
-                  }))
-                }
-              }}
+              onChange={(v) =>
+                setForm((f) => ({
+                  ...f,
+                  firm: v,
+                  drawdownType: v === "Apex" ? f.drawdownType : "EOD",
+                  program: v === "Tradeify" ? "select_eval" : f.program,
+                }))
+              }
             />
           </div>
 
@@ -224,19 +258,42 @@ export function AddAccountModal({ onAddAccount }: AddAccountModalProps) {
             </div>
           ) : null}
 
+          {/* Alpha Tier — a rule-variant choice independent of Eval/PA, required for every Alpha account */}
+          {isAlpha && (
+            <div className="space-y-2">
+              <Label>Alpha Tier</Label>
+              <SegmentedControl
+                options={[
+                  { value: "zero", label: "Zero" },
+                  { value: "standard", label: "Standard" },
+                  { value: "advanced", label: "Advanced" },
+                ]}
+                value={form.alphaTier}
+                onChange={(v) => set("alphaTier", v)}
+              />
+              <p className="text-[11px] text-muted-foreground">
+                {form.alphaTier === "zero"
+                  ? "No consistency rule at Eval. Daily Loss Guard at both stages. Sizes: 25K/50K/100K."
+                  : form.alphaTier === "standard"
+                    ? "Daily Loss Guard applies once funded only. Sizes: 50K/100K/150K."
+                    : "No Daily Loss Guard, no consistency rule at either stage. Sizes: 50K/100K/150K."}
+              </p>
+            </div>
+          )}
+
           <div className="grid grid-cols-2 gap-3">
-            {/* Account Size */}
+            {/* Account Size — filtered to what the selected firm/tier actually offers */}
             <div className="space-y-2">
               <Label>Account Size</Label>
               <Select
-                value={String(form.accountSize)}
+                value={String(effectiveAccountSize)}
                 onValueChange={(v) => set("accountSize", Number(v))}
               >
                 <SelectTrigger className="bg-background h-9">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  {ACCOUNT_SIZES.map((s) => (
+                  {validSizes.map((s) => (
                     <SelectItem key={s} value={String(s)}>
                       ${s.toLocaleString()}
                     </SelectItem>
@@ -264,13 +321,13 @@ export function AddAccountModal({ onAddAccount }: AddAccountModalProps) {
           </div>
           {qty > 1 && (
             <p className="text-[11px] text-muted-foreground -mt-2">
-              {formatAccountBundleHelper({ accountSize: form.accountSize, quantity: qty })} · Portfolio buying power{" "}
+              {formatAccountBundleHelper({ accountSize: effectiveAccountSize, quantity: qty })} · Portfolio buying power{" "}
               <span className="font-mono text-[#94AAB8]">${portfolioBuyingPower.toLocaleString()}</span>
-              <span className="block mt-0.5">Rules track one representative ${(form.accountSize / 1000).toFixed(0)}K account.</span>
+              <span className="block mt-0.5">Rules track one representative ${(effectiveAccountSize / 1000).toFixed(0)}K account.</span>
             </p>
           )}
 
-          {/* Drawdown Type (Apex only) */}
+          {/* Drawdown Type (Apex only — every other firm's rule engine ignores this field) */}
           {showDrawdownSelector && (
             <div className="space-y-2">
               <Label>Drawdown Type</Label>
@@ -290,7 +347,46 @@ export function AddAccountModal({ onAddAccount }: AddAccountModalProps) {
             </div>
           )}
 
-          {/* Rule preview */}
+          {/* Topstep: payout path (funded stage only) + DLL election (either stage) */}
+          {isTopstep && (
+            <>
+              {effectiveType === "PA" && (
+                <div className="space-y-2">
+                  <Label>Payout Path</Label>
+                  <SegmentedControl
+                    options={[
+                      { value: "standard", label: "Standard" },
+                      { value: "consistency", label: "Consistency" },
+                    ]}
+                    value={form.topstepPayoutPath}
+                    onChange={(v) => set("topstepPayoutPath", v)}
+                  />
+                  <p className="text-[11px] text-muted-foreground">
+                    {form.topstepPayoutPath === "consistency"
+                      ? "Higher payout ceiling. 40% consistency rule applies; 3 trading days required, no winning-day count."
+                      : "5 winning days of $150+ required. No consistency rule."}
+                  </p>
+                </div>
+              )}
+              <div className="space-y-2">
+                <Label>Daily Loss Limit</Label>
+                <SegmentedControl
+                  options={[
+                    { value: "yes", label: "Elected" },
+                    { value: "no", label: "Not Elected" },
+                  ]}
+                  value={form.hasDailyLossLimit ? "yes" : "no"}
+                  onChange={(v) => set("hasDailyLossLimit", v === "yes")}
+                />
+                <p className="text-[11px] text-muted-foreground">
+                  Optional at checkout. Doubles the funded payout ceiling when elected.
+                </p>
+              </div>
+            </>
+          )}
+
+          {/* Rule preview — every figure below reads straight from getAccountRules().
+              Never hardcode a second copy of these numbers here. */}
           <div className="p-3 rounded-xl bg-[#0F1115]/70 border border-white/[0.07] text-xs text-slate-400 space-y-1">
             <div className="font-medium text-foreground mb-1">Account Rules</div>
             <div className="flex justify-between">
@@ -321,11 +417,38 @@ export function AddAccountModal({ onAddAccount }: AddAccountModalProps) {
                 <span className="font-mono">{rules.consistencyPercent}%</span>
               </div>
             )}
+            {rules.minTradingDays > 0 && (
+              <div className="flex justify-between">
+                <span>Min Trading Days</span>
+                <span className="font-mono">{rules.minTradingDays}</span>
+              </div>
+            )}
+            {rules.minProfitDays > 0 && (
+              <div className="flex justify-between">
+                <span>{rules.winningDayThreshold > 0 ? "Winning Days" : "Qualifying Days"}</span>
+                <span className="font-mono">
+                  {rules.minProfitDays}
+                  {rules.winningDayThreshold > 0 ? ` ($${rules.winningDayThreshold}+)` : ""}
+                </span>
+              </div>
+            )}
+            {rules.hasPayouts && rules.payoutAbsoluteCap > 0 && (
+              <div className="flex justify-between">
+                <span>Payout Cap</span>
+                <span className="font-mono">${rules.payoutAbsoluteCap.toLocaleString()}</span>
+              </div>
+            )}
+            {rules.hasPayouts && (
+              <div className="flex justify-between">
+                <span>Min Payout</span>
+                <span className="font-mono">${rules.minPayoutAmount.toLocaleString()}</span>
+              </div>
+            )}
           </div>
 
           <div className="flex justify-end gap-3 pt-2">
             <Button type="button" variant="ghost" onClick={() => setOpen(false)}>Cancel</Button>
-            <Button type="submit" className="bg-emerald-600 hover:bg-emerald-700">Create Account</Button>
+            <Button type="submit">Create Account</Button>
           </div>
         </form>
       </DialogContent>
