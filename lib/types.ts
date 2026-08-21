@@ -51,6 +51,34 @@ export interface Account {
   topstepPayoutPath?: TopstepPayoutPath | null
   /** Alpha Futures only: zero | standard | advanced. Required for firm === "Alpha" — getAccountRules throws if unset, no safe default exists across tiers. */
   alphaTier?: AlphaTier | null
+  /** Risk profile override (all-or-nothing — a set of one, two, or three means an incomplete override; see lib/headroom.ts). Falls back to the user-level default when all three are unset. */
+  riskSymbol?: string | null
+  riskContracts?: number | null
+  /** Stored unit is ticks, never points — see lib/instrument-specs.ts. */
+  riskStopTicks?: number | null
+}
+
+/** A single root symbol's contract specs. tickSize is in points (the
+ *  instrument's natural quoting unit); tickValue is dollars per tick.
+ *  $/point = tickValue / tickSize. Rows with isBuiltin false are a user's
+ *  own addition or override and always take precedence over a built-in row
+ *  for the same symbol. */
+export interface InstrumentSpec {
+  symbol: string
+  label: string
+  tickSize: number
+  tickValue: number
+  source?: string | null
+  isBuiltin: boolean
+}
+
+/** A resolved (symbol, contracts, stop) risk profile — either the
+ *  user-level default or a per-account override, before being joined
+ *  against an InstrumentSpec to compute a dollar risk-per-trade. */
+export interface RiskProfile {
+  symbol: string
+  contracts: number
+  riskStopTicks: number
 }
 
 export interface Trade {

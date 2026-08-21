@@ -10,7 +10,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
-import { cn } from "@/lib/utils"
+import { cn, formatPnL, pnlColorClass } from "@/lib/utils"
 import { ChevronRight, MoreHorizontal, Pencil, Trash2 } from "lucide-react"
 import type { Trade } from "@/lib/types"
 import { buildMetaMapFromTrades, GRADE_STYLES, DISCIPLINE_POSITIVE, DIRECTION_BADGE_STYLES, DIRECTION_LABELS, type TradeMeta } from "@/lib/trade-meta"
@@ -347,13 +347,14 @@ export function TradeHistoryTable({ trades, onEditTrade, onDeleteTrade }: TradeH
                     </div>
                 </TableCell>
 
-                  {/* Daily PnL */}
+                  {/* Daily PnL — formatPnL always emits a leading − on a loss.
+                      Color is only legal on that signed figure. */}
                   <TableCell className="text-right py-1.5 sm:py-3.5 px-2 sm:px-3">
                   <span className={cn(
                       "font-mono font-bold text-sm sm:text-[15px] tabular-nums",
-                      isProfit ? "text-emerald-500" : isLoss ? "text-red-500" : "text-muted-foreground",
+                      pnlColorClass(group.dailyPnl),
                     )}>
-                      {isProfit ? "+" : ""}${Math.abs(group.dailyPnl).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                      {formatPnL(group.dailyPnl)}
                     </span>
                   </TableCell>
 
@@ -446,10 +447,8 @@ export function TradeHistoryTable({ trades, onEditTrade, onDeleteTrade }: TradeH
 
                       {/* Individual PnL */}
                       <TableCell className="text-right py-1.5 sm:py-2.5 px-2 sm:px-3">
-                        <span className={cn("font-mono text-xs font-semibold tabular-nums",
-                          trade.pnl > 0 ? "text-emerald-500/80" : trade.pnl < 0 ? "text-red-500/80" : "text-muted-foreground",
-                  )}>
-                    {trade.pnl > 0 ? "+" : ""}${trade.pnl.toFixed(2)}
+                        <span className={cn("font-mono text-xs font-semibold tabular-nums", pnlColorClass(trade.pnl))}>
+                    {formatPnL(trade.pnl)}
                   </span>
                 </TableCell>
 

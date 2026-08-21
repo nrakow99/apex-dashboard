@@ -19,7 +19,7 @@ import {
 } from "@/components/ui/select"
 import { Loader2 } from "lucide-react"
 import { cn } from "@/lib/utils"
-import type { Account, AccountType, Firm, DrawdownType, TradeifyProgram, TopstepPayoutPath, AlphaTier } from "@/lib/types"
+import type { Account, AccountType, Firm, DrawdownType, TradeifyProgram, TopstepPayoutPath, AlphaTier, InstrumentSpec } from "@/lib/types"
 import { getAccountRules } from "@/lib/rules"
 import { defaultTradeifyAccountName } from "@/lib/tradeify-rules"
 import {
@@ -28,6 +28,8 @@ import {
   getRuleStartingBalance,
   MAX_ACCOUNT_QUANTITY,
 } from "@/lib/account-quantity"
+import { RiskProfileFormFields } from "@/components/risk-profile-fields"
+import { findInstrumentSpec, pointsToTicks, ticksToPoints } from "@/lib/instrument-specs"
 
 const ACCOUNT_SIZES = [25000, 50000, 100000, 150000]
 
@@ -93,8 +95,13 @@ interface EditAccountModalProps {
     hasDailyLossLimit?: boolean
     topstepPayoutPath?: TopstepPayoutPath | null
     alphaTier?: AlphaTier | null
+    riskSymbol?: string | null
+    riskContracts?: number | null
+    riskStopTicks?: number | null
   }) => Promise<void>
   isSaving?: boolean
+  /** Headroom-in-trades instrument table, for the per-account risk override section. */
+  instrumentSpecs?: InstrumentSpec[]
 }
 
 export function EditAccountModal({
@@ -103,6 +110,7 @@ export function EditAccountModal({
   onOpenChange,
   onSave,
   isSaving = false,
+  instrumentSpecs = [],
 }: EditAccountModalProps) {
   const [form, setForm] = useState({
     name: "",
@@ -121,6 +129,15 @@ export function EditAccountModal({
     hasDailyLossLimit: false,
     alphaTier: "standard" as AlphaTier,
   })
+
+  // Risk profile override — kept separate from `form` since it's
+  // all-or-nothing and independent of every other field. `useOverride`
+  // false means "inherit the user-level default"; true with fields unset
+  // is caught before submit (see riskOverrideIncomplete below).
+  const [useOverride, setUseOverride] = useState(false)
+  const [riskSymbol, setRiskSymbol] = useState("")
+  const [riskContracts, setRiskContracts] = useState("")
+  const [riskStopPoints, setRiskStopPoints] = useState("")
 
   useEffect(() => {
     if (account) {
@@ -143,8 +160,21 @@ export function EditAccountModal({
         hasDailyLossLimit: account.hasDailyLossLimit ?? false,
         alphaTier: account.alphaTier ?? "standard",
       })
+
+      const hasOverride = !!(account.riskSymbol && account.riskContracts && account.riskStopTicks)
+      setUseOverride(hasOverride)
+      if (hasOverride) {
+        const spec = findInstrumentSpec(instrumentSpecs, account.riskSymbol)
+        setRiskSymbol(account.riskSymbol!)
+        setRiskContracts(String(account.riskContracts))
+        setRiskStopPoints(spec ? String(ticksToPoints(account.riskStopTicks!, spec.tickSize)) : "")
+      } else {
+        setRiskSymbol("")
+        setRiskContracts("")
+        setRiskStopPoints("")
+      }
     }
-  }, [account])
+  }, [account, instrumentSpecs])
 
   useEffect(() => {
     if ((form.firm === "Lucid" || form.firm === "Tradeify") && form.drawdownType === "Intraday") {
@@ -199,9 +229,24 @@ export function EditAccountModal({
     ? getRuleStartingBalance({ ...account, accountSize: effectiveAccountSize, quantity: qty })
     : effectiveAccountSize
 
+  const riskOverrideSpec = findInstrumentSpec(instrumentSpecs, riskSymbol)
+  const riskStopPointsNum = parseFloat(riskStopPoints)
+  const riskContractsNum = parseFloat(riskContracts)
+  const riskOverrideComplete =
+    useOverride &&
+    !!riskOverrideSpec &&
+    Number.isFinite(riskContractsNum) &&
+    riskContractsNum > 0 &&
+    Number.isFinite(riskStopPointsNum) &&
+    riskStopPointsNum > 0
+  // Override is on but a field isn't filled in yet — block save rather than
+  // persist a partial override, which lib/headroom.ts treats as "no profile
+  // at all" anyway (never blends with the user default).
+  const riskOverrideIncomplete = useOverride && !riskOverrideComplete
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    if (!account) return
+    if (!account || riskOverrideIncomplete) return
     await onSave(account.id, {
       name: form.name || (isTradeify ? defaultTradeifyAccountName(effectiveAccountSize, form.program) : form.name),
       firm: form.firm,
@@ -226,6 +271,11 @@ export function EditAccountModal({
       hasDailyLossLimit: isTopstep ? form.hasDailyLossLimit : false,
       topstepPayoutPath: isTopstep ? form.topstepPayoutPath : null,
       alphaTier: isAlpha ? form.alphaTier : null,
+      // Same always-send-current-value rule for the risk override: turning
+      // it off must clear all three, not leave stale values in the DB.
+      riskSymbol: riskOverrideComplete ? riskOverrideSpec!.symbol : null,
+      riskContracts: riskOverrideComplete ? Math.floor(riskContractsNum) : null,
+      riskStopTicks: riskOverrideComplete ? pointsToTicks(riskStopPointsNum, riskOverrideSpec!.tickSize) : null,
     })
   }
 
@@ -497,11 +547,42 @@ export function EditAccountModal({
             </div>
           )}
 
+          <div className="space-y-2 pt-2 border-t border-[var(--hairline)]">
+            <Label>Risk Profile Override</Label>
+            <p className="text-[11px] text-muted-foreground">
+              Overrides your account-wide default for &ldquo;headroom in trades&rdquo; on this account only. Leave
+              off to inherit the default from Settings.
+            </p>
+            <SegmentedControl
+              options={[
+                { value: "default", label: "Use Default" },
+                { value: "override", label: "Override" },
+              ]}
+              value={useOverride ? "override" : "default"}
+              onChange={(v) => setUseOverride(v === "override")}
+              disabled={isSaving}
+            />
+            {useOverride && (
+              <div className="pt-1">
+                <RiskProfileFormFields
+                  specs={instrumentSpecs}
+                  symbol={riskSymbol}
+                  contracts={riskContracts}
+                  stopPoints={riskStopPoints}
+                  onSymbolChange={setRiskSymbol}
+                  onContractsChange={setRiskContracts}
+                  onStopPointsChange={setRiskStopPoints}
+                  disabled={isSaving}
+                />
+              </div>
+            )}
+          </div>
+
           <div className="flex justify-end gap-2 pt-2">
             <Button type="button" variant="ghost" onClick={() => onOpenChange(false)} disabled={isSaving}>
               Cancel
             </Button>
-            <Button type="submit" disabled={isSaving}>
+            <Button type="submit" disabled={isSaving || riskOverrideIncomplete}>
               {isSaving ? <><Loader2 className="h-4 w-4 mr-2 animate-spin" />Saving...</> : "Save Changes"}
             </Button>
           </div>

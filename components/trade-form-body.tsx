@@ -20,7 +20,7 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import { cn } from "@/lib/utils"
-import type { Account } from "@/lib/types"
+import type { Account, RiskProfile } from "@/lib/types"
 import {
   DISCIPLINE_POSITIVE,
   DISCIPLINE_NEGATIVE,
@@ -46,6 +46,7 @@ import {
   COL_SESSION_DIR,
 } from "@/components/trade-modal-layout"
 import { getAccountQuantity } from "@/lib/account-quantity"
+import { hasMixedRiskContracts } from "@/lib/headroom"
 
 const GRADES: TradeGrade[] = ["A+", "A", "B", "C", "FOMO", "Revenge"]
 
@@ -70,6 +71,11 @@ interface TradeFormBodyProps {
   serializeDateStr: (date: Date) => string
   toggleDiscipline: (tag: DisciplineTag) => void
   toggleSetup: (tag: SetupTag) => void
+  /** Add Trade: multi-select. Edit Trade omits this and stays single-select. */
+  accountIds?: string[]
+  onAccountIdsChange?: (ids: string[]) => void
+  /** User-level default risk profile — used only to compare contract counts across a bulk selection. */
+  userDefaultRiskProfile?: RiskProfile | null
 }
 
 export function TradeFormBody({
@@ -85,9 +91,27 @@ export function TradeFormBody({
   serializeDateStr,
   toggleDiscipline,
   toggleSetup,
+  accountIds,
+  onAccountIdsChange,
+  userDefaultRiskProfile = null,
 }: TradeFormBodyProps) {
-  const selectedAccount = accounts.find((a) => a.id === formData.accountId)
-  const selectedQty = selectedAccount ? getAccountQuantity(selectedAccount) : 1
+  const isMultiAccount = onAccountIdsChange != null
+  const selectedIds = isMultiAccount
+    ? (accountIds ?? [])
+    : formData.accountId
+      ? [formData.accountId]
+      : []
+  const selectedAccounts = accounts.filter((a) => selectedIds.includes(a.id))
+  const selectedQty = selectedAccounts.reduce((max, a) => Math.max(max, getAccountQuantity(a)), 1)
+  const mixedContracts = isMultiAccount && hasMixedRiskContracts(selectedAccounts, userDefaultRiskProfile)
+
+  const toggleAccount = (id: string) => {
+    if (!onAccountIdsChange) return
+    const next = selectedIds.includes(id)
+      ? selectedIds.filter((x) => x !== id)
+      : [...selectedIds, id]
+    onAccountIdsChange(next)
+  }
 
   return (
     <>
@@ -191,26 +215,78 @@ export function TradeFormBody({
 
       {/* Account */}
       <div className={cn(TRADE_FIELD, COL_FULL)}>
-        <Label className={TRADE_LABEL}>Account</Label>
-        <Select
-          value={formData.accountId}
-          onValueChange={(v) => setFormData({ ...formData, accountId: v })}
-          disabled={disabled}
-        >
-          <SelectTrigger className="bg-background h-9">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            {accounts.map((a) => (
-              <SelectItem key={a.id} value={a.id}>
-                {a.name}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
+        <Label className={TRADE_LABEL}>
+          {isMultiAccount ? "Accounts" : "Account"}
+        </Label>
+        {isMultiAccount ? (
+          <div className="max-h-40 overflow-y-auto rounded-[2px] border border-[var(--hairline)] bg-[var(--raised)] divide-y divide-[var(--hairline)]">
+            {accounts.map((a) => {
+              const checked = selectedIds.includes(a.id)
+              const qty = getAccountQuantity(a)
+              return (
+                <button
+                  key={a.id}
+                  type="button"
+                  disabled={disabled}
+                  onClick={() => toggleAccount(a.id)}
+                  aria-pressed={checked}
+                  className={cn(
+                    "flex w-full items-center gap-2 px-2.5 py-1.5 text-left text-sm",
+                    disabled && "opacity-50 cursor-not-allowed",
+                    checked ? "text-[var(--text)]" : "text-[var(--muted-foreground)]",
+                  )}
+                >
+                  <span
+                    className={cn(
+                      "flex h-3.5 w-3.5 shrink-0 items-center justify-center rounded-[2px] border",
+                      checked
+                        ? "border-[var(--text)] bg-[var(--text)]"
+                        : "border-[var(--faint)] bg-transparent",
+                    )}
+                    aria-hidden
+                  >
+                    {checked && (
+                      <span className="block h-1.5 w-1.5 bg-[var(--ground)]" />
+                    )}
+                  </span>
+                  <span className="truncate">{a.name}</span>
+                  {qty > 1 && (
+                    <span className="ml-auto shrink-0 font-mono text-[10px] text-[var(--muted-foreground)]">
+                      {qty}x
+                    </span>
+                  )}
+                </button>
+              )
+            })}
+          </div>
+        ) : (
+          <Select
+            value={formData.accountId}
+            onValueChange={(v) => setFormData({ ...formData, accountId: v })}
+            disabled={disabled}
+          >
+            <SelectTrigger className="bg-background h-9">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {accounts.map((a) => (
+                <SelectItem key={a.id} value={a.id}>
+                  {a.name}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        )}
         {selectedQty > 1 && (
           <p className="text-[10px] text-muted-foreground mt-0.5">
-            This account represents {selectedQty} accounts. Enter combined PnL.
+            {isMultiAccount
+              ? "Cards marked Nx track identical copies. PnL is for one representative account, not a combined total."
+              : `This card tracks ${selectedQty} identical accounts. PnL is for one representative account, not a combined total.`}
+          </p>
+        )}
+        {mixedContracts && (
+          <p className="text-[10px] text-muted-foreground mt-0.5">
+            Net PnL is copied as-is. If contract size differs across these accounts, log them separately.
           </p>
         )}
       </div>

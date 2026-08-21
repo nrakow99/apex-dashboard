@@ -1,8 +1,20 @@
 "use client"
 
 import { createClient } from "@/lib/supabase/client"
-import type { Account, Trade, Payout, Firm, DrawdownType, TradeifyProgram, TopstepPayoutPath, AlphaTier } from "@/lib/types"
+import type {
+  Account,
+  Trade,
+  Payout,
+  Firm,
+  DrawdownType,
+  TradeifyProgram,
+  TopstepPayoutPath,
+  AlphaTier,
+  InstrumentSpec,
+  RiskProfile,
+} from "@/lib/types"
 import { metaToDbPayload, type TradeMeta } from "@/lib/trade-meta"
+import { normalizeSymbol } from "@/lib/instrument-specs"
 
 const VALID_FIRMS: readonly Firm[] = ["Apex", "Lucid", "Tradeify", "Topstep", "Alpha"]
 
@@ -31,8 +43,28 @@ interface AccountRow {
   has_daily_loss_limit?: boolean | null
   topstep_payout_path?: string | null
   alpha_tier?: string | null
+  risk_symbol?: string | null
+  risk_contracts?: number | null
+  risk_stop_ticks?: number | null
   created_at: string
   updated_at: string
+}
+
+interface InstrumentSpecRow {
+  id: string
+  user_id: string | null
+  symbol: string
+  label: string
+  tick_size: number
+  tick_value: number
+  source: string | null
+}
+
+interface UserSettingsRow {
+  user_id: string
+  risk_symbol: string | null
+  risk_contracts: number | null
+  risk_stop_ticks: number | null
 }
 
 interface TradeRow {
@@ -103,6 +135,20 @@ function rowToAccount(row: AccountRow): Account {
     hasDailyLossLimit: row.has_daily_loss_limit ?? false,
     topstepPayoutPath: (row.topstep_payout_path as TopstepPayoutPath | null) ?? null,
     alphaTier: (row.alpha_tier as AlphaTier | null) ?? null,
+    riskSymbol: row.risk_symbol ?? null,
+    riskContracts: row.risk_contracts != null ? Number(row.risk_contracts) : null,
+    riskStopTicks: row.risk_stop_ticks != null ? Number(row.risk_stop_ticks) : null,
+  }
+}
+
+function rowToInstrumentSpec(row: InstrumentSpecRow): InstrumentSpec {
+  return {
+    symbol: row.symbol,
+    label: row.label,
+    tickSize: Number(row.tick_size),
+    tickValue: Number(row.tick_value),
+    source: row.source,
+    isBuiltin: row.user_id === null,
   }
 }
 
@@ -185,6 +231,9 @@ export async function createAccount(account: {
   hasDailyLossLimit?: boolean
   topstepPayoutPath?: TopstepPayoutPath | null
   alphaTier?: AlphaTier | null
+  riskSymbol?: string | null
+  riskContracts?: number | null
+  riskStopTicks?: number | null
 }): Promise<{ data: Account | null; error: Error | null }> {
   const supabase = createClient()
   const { data: { user } } = await supabase.auth.getUser()
@@ -210,6 +259,9 @@ export async function createAccount(account: {
       has_daily_loss_limit: account.hasDailyLossLimit ?? false,
       topstep_payout_path: account.topstepPayoutPath ?? null,
       alpha_tier: account.alphaTier ?? null,
+      risk_symbol: account.riskSymbol ?? null,
+      risk_contracts: account.riskContracts ?? null,
+      risk_stop_ticks: account.riskStopTicks ?? null,
     })
     .select()
     .single()
@@ -330,6 +382,9 @@ export async function updateAccount(
     hasDailyLossLimit?: boolean
     topstepPayoutPath?: TopstepPayoutPath | null
     alphaTier?: AlphaTier | null
+    riskSymbol?: string | null
+    riskContracts?: number | null
+    riskStopTicks?: number | null
   }
 ): Promise<{ data: Account | null; error: Error | null }> {
   const supabase = createClient()
@@ -363,6 +418,9 @@ export async function updateAccount(
   if (updates.topstepPayoutPath !== undefined)
     updateData.topstep_payout_path = updates.topstepPayoutPath
   if (updates.alphaTier !== undefined) updateData.alpha_tier = updates.alphaTier
+  if (updates.riskSymbol !== undefined) updateData.risk_symbol = updates.riskSymbol
+  if (updates.riskContracts !== undefined) updateData.risk_contracts = updates.riskContracts
+  if (updates.riskStopTicks !== undefined) updateData.risk_stop_ticks = updates.riskStopTicks
 
   const { data, error } = await supabase
     .from("accounts")
@@ -404,4 +462,113 @@ export async function updateTrade(
 
   if (error) return { data: null, error: new Error(error.message) }
   return { data: rowToTrade(data as TradeRow), error: null }
+}
+
+/** Built-ins (user_id null) plus the current user's own rows. RLS already
+ *  scopes this correctly. */
+export async function fetchInstrumentSpecs(): Promise<{ data: InstrumentSpec[] | null; error: Error | null }> {
+  const supabase = createClient()
+  const { data, error } = await supabase
+    .from("instrument_specs")
+    .select("*")
+    .order("symbol", { ascending: true })
+  if (error) return { data: null, error: new Error(error.message) }
+  return { data: (data as InstrumentSpecRow[]).map(rowToInstrumentSpec), error: null }
+}
+
+/** Adds a user's own instrument, or updates it if they already have a row
+ *  for that symbol (e.g. correcting their own earlier entry). Never touches
+ *  a built-in row — a user can only shadow one via their own row, never
+ *  edit the built-in itself. */
+export async function upsertUserInstrumentSpec(spec: {
+  symbol: string
+  label: string
+  tickSize: number
+  tickValue: number
+}): Promise<{ data: InstrumentSpec | null; error: Error | null }> {
+  const supabase = createClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) return { data: null, error: new Error("Not authenticated") }
+
+  const symbol = normalizeSymbol(spec.symbol)
+  const { data: existing } = await supabase
+    .from("instrument_specs")
+    .select("id")
+    .eq("user_id", user.id)
+    .eq("symbol", symbol)
+    .maybeSingle()
+
+  const payload = {
+    user_id: user.id,
+    symbol,
+    label: spec.label,
+    tick_size: spec.tickSize,
+    tick_value: spec.tickValue,
+  }
+
+  const { data, error } = existing
+    ? await supabase.from("instrument_specs").update(payload).eq("id", (existing as { id: string }).id).select().single()
+    : await supabase.from("instrument_specs").insert(payload).select().single()
+
+  if (error) return { data: null, error: new Error(error.message) }
+  return { data: rowToInstrumentSpec(data as InstrumentSpecRow), error: null }
+}
+
+export async function deleteUserInstrumentSpec(symbol: string): Promise<{ error: Error | null }> {
+  const supabase = createClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) return { error: new Error("Not authenticated") }
+  const { error } = await supabase
+    .from("instrument_specs")
+    .delete()
+    .eq("user_id", user.id)
+    .eq("symbol", normalizeSymbol(symbol))
+  if (error) return { error: new Error(error.message) }
+  return { error: null }
+}
+
+export async function fetchUserSettings(): Promise<{ data: RiskProfile | null; error: Error | null }> {
+  const supabase = createClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) return { data: null, error: new Error("Not authenticated") }
+
+  const { data, error } = await supabase
+    .from("user_settings")
+    .select("*")
+    .eq("user_id", user.id)
+    .maybeSingle()
+  if (error) return { data: null, error: new Error(error.message) }
+  const row = data as UserSettingsRow | null
+  if (!row || !row.risk_symbol || !row.risk_contracts || !row.risk_stop_ticks) {
+    return { data: null, error: null }
+  }
+  return {
+    data: {
+      symbol: row.risk_symbol,
+      contracts: Number(row.risk_contracts),
+      riskStopTicks: Number(row.risk_stop_ticks),
+    },
+    error: null,
+  }
+}
+
+/** Upserts the user's default risk profile. Pass null to clear it. */
+export async function saveUserSettings(
+  profile: RiskProfile | null,
+): Promise<{ error: Error | null }> {
+  const supabase = createClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) return { error: new Error("Not authenticated") }
+
+  const { error } = await supabase.from("user_settings").upsert(
+    {
+      user_id: user.id,
+      risk_symbol: profile ? normalizeSymbol(profile.symbol) : null,
+      risk_contracts: profile?.contracts ?? null,
+      risk_stop_ticks: profile?.riskStopTicks ?? null,
+    },
+    { onConflict: "user_id" },
+  )
+  if (error) return { error: new Error(error.message) }
+  return { error: null }
 }

@@ -4,8 +4,9 @@ import { useMemo } from "react"
 import { Card } from "@/components/ui/card"
 import { Progress } from "@/components/ui/progress"
 import { cn } from "@/lib/utils"
-import type { Account, DailyPnL } from "@/lib/types"
+import type { Account, DailyPnL, InstrumentSpec, RiskProfile } from "@/lib/types"
 import { getAccountRules } from "@/lib/rules"
+import { resolveRiskProfile, getHeadroom, tradesSuffix } from "@/lib/headroom"
 import { isApexPaConsistency, isLucidEvalConsistency, isTradeifyEvalConsistency } from "@/lib/storage"
 import { getTradeifyScalingTier } from "@/lib/tradeify-scaling"
 import { resolveTradeifyProgram } from "@/lib/rules"
@@ -45,6 +46,9 @@ interface RuleEnginePanelProps {
   consistencyInfo: ConsistencyInfo | null
   /** LucidFlex PA: qualifying days in current payout cycle (matches payout eligibility) */
   lucidCycleQualifyingDays?: number
+  /** Headroom-in-trades inputs — optional, degrades to dollars-only. See lib/headroom.ts. */
+  instrumentSpecs?: InstrumentSpec[]
+  userDefaultRiskProfile?: RiskProfile | null
 }
 
 /**
@@ -136,8 +140,14 @@ export function RuleEnginePanel({
   stats,
   consistencyInfo,
   lucidCycleQualifyingDays,
+  instrumentSpecs = [],
+  userDefaultRiskProfile = null,
 }: RuleEnginePanelProps) {
   const rules = getAccountRules(account)
+  const headroom = getHeadroom(
+    stats.drawdownRemaining,
+    resolveRiskProfile(account, userDefaultRiskProfile, instrumentSpecs),
+  )
   const effectiveProfitTarget =
     account.profitTarget ?? (rules.hasProfitTarget ? rules.profitTarget : null)
   const lucidQualifyingDaysInCycle =
@@ -245,6 +255,7 @@ export function RuleEnginePanel({
                 <span className="font-medium">Remaining</span>
                 <span className="font-mono font-bold">
                   ${Math.max(0, stats.drawdownRemaining).toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                  {tradesSuffix(headroom)}
                 </span>
               </div>
               <Progress value={Math.max(0, drawdownPercent)} className="h-1.5 mt-1.5" />

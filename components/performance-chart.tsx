@@ -14,7 +14,7 @@ import {
 import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
 import { TrendingUp } from "lucide-react"
-import { cn } from "@/lib/utils"
+import { cn, pnlColorClass, pnlBgClass } from "@/lib/utils"
 import type { DailyPnL, Account } from "@/lib/types"
 import { PA_CONSTANTS } from "@/lib/types"
 import {
@@ -156,7 +156,9 @@ export function PerformanceChart({ data, account, stats }: PerformanceChartProps
   // Format value based on view with 2 decimal places
   const formatValue = (value: number, showSign = false) => {
     const formatted = value.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })
-    if (showSign && value >= 0) {
+    // Strictly > 0 for the "+" — a value of exactly zero has no sign to
+    // report and must not be prefixed as if it were a gain.
+    if (showSign && value > 0) {
       return `+$${formatted}`
     }
     if (value < 0) {
@@ -177,16 +179,16 @@ export function PerformanceChart({ data, account, stats }: PerformanceChartProps
     })
 
     if (view === "dailyPnl") {
-      const isPositive = point.dailyPnl >= 0
       return (
         <div className="rounded-xl border border-border/50 bg-card/95 backdrop-blur-sm p-4 shadow-2xl min-w-[180px]">
           <p className="text-[13px] font-medium text-foreground mb-3">{formattedDate}</p>
               <div className="flex items-center gap-2">
               {/* Legitimate use of signed color — this dot mirrors an actual
-                  +/- P&L figure, unlike the floor line below. */}
-              <div className={cn("w-2 h-2 rounded-full", isPositive ? "bg-emerald-500" : "bg-red-500")} />
+                  +/- P&L figure, unlike the floor line below. Zero is
+                  neutral, never green or red. */}
+              <div className={cn("w-2 h-2 rounded-full", pnlBgClass(point.dailyPnl))} />
               <span className="text-[12px] text-muted-foreground">Daily PnL:</span>
-            <span className={cn("font-mono font-semibold text-[13px]", isPositive ? "text-emerald-500" : "text-red-500")}>
+            <span className={cn("font-mono font-semibold text-[13px]", pnlColorClass(point.dailyPnl))}>
               {formatValue(point.dailyPnl, true)}
             </span>
           </div>
@@ -224,10 +226,10 @@ export function PerformanceChart({ data, account, stats }: PerformanceChartProps
           {!point.isStartingPoint && (
             <div className="flex items-center justify-between gap-3 pt-2 border-t border-border/30 mt-2">
               <div className="flex items-center gap-2">
-                <div className={cn("w-2 h-2 rounded-full", point.dailyPnl >= 0 ? "bg-emerald-400" : "bg-red-400")} />
+                <div className={cn("w-2 h-2 rounded-full", pnlBgClass(point.dailyPnl))} />
 <span className="text-[11px] text-muted-foreground uppercase tracking-wider">Daily PnL</span>
               </div>
-              <span className={cn("font-mono font-semibold text-[13px]", point.dailyPnl >= 0 ? "text-emerald-500" : "text-red-500")}>
+              <span className={cn("font-mono font-semibold text-[13px]", pnlColorClass(point.dailyPnl))}>
                 {formatValue(point.dailyPnl, true)}
               </span>
             </div>
@@ -555,14 +557,18 @@ export function PerformanceChart({ data, account, stats }: PerformanceChartProps
                 dot={(props) => {
                   const { cx, cy, payload } = props
                   if (!cx || !cy) return null
-                  const isPositive = payload.dailyPnl >= 0
+                  // Zero is neutral gray, matching the y=0 reference line —
+                  // not a gain or a loss, so it doesn't get their colors.
+                  const dailyPnl: number = payload.dailyPnl
+                  const fill = dailyPnl > 0 ? "#34d399" : dailyPnl < 0 ? "#f87171" : "#64748b"
+                  const stroke = dailyPnl > 0 ? "#047857" : dailyPnl < 0 ? "#991b1b" : "#334155"
                   return (
                     <circle
                       cx={cx}
                       cy={cy}
                       r={6}
-                      fill={isPositive ? "#34d399" : "#f87171"}
-                      stroke={isPositive ? "#047857" : "#991b1b"}
+                      fill={fill}
+                      stroke={stroke}
                       strokeWidth={2}
                     />
                   )

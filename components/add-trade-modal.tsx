@@ -9,7 +9,7 @@ import {
 } from "@/components/ui/dialog"
 import { Button } from "@/components/ui/button"
 import { Plus } from "lucide-react"
-import type { Account } from "@/lib/types"
+import type { Account, RiskProfile } from "@/lib/types"
 import {
   type DisciplineTag,
   type SetupTag,
@@ -40,9 +40,11 @@ const DEFAULT_SESSION: SessionId = "ny_am"
 interface AddTradeModalProps {
   accounts: Account[]
   selectedAccountId: string
+  userDefaultRiskProfile?: RiskProfile | null
   onAddTrade: (
-    trade: { date: string; accountId: string; symbol: string; pnl: number; notes?: string },
+    trade: { date: string; symbol: string; pnl: number; notes?: string },
     meta: TradeMeta,
+    accountIds: string[],
   ) => void
 }
 
@@ -65,11 +67,19 @@ const emptyForm = (accountId: string) => ({
   notes: "",
 })
 
-export function AddTradeModal({ accounts, selectedAccountId, onAddTrade }: AddTradeModalProps) {
+export function AddTradeModal({
+  accounts,
+  selectedAccountId,
+  userDefaultRiskProfile = null,
+  onAddTrade,
+}: AddTradeModalProps) {
   const [open, setOpen] = useState(false)
   const [calendarOpen, setCalendarOpen] = useState(false)
   const [formData, setFormData] = useState(emptyForm(selectedAccountId))
   const [meta, setMeta] = useState<TradeMeta>(emptyMeta())
+  const [accountIds, setAccountIds] = useState<string[]>(
+    selectedAccountId ? [selectedAccountId] : [],
+  )
 
   const toggleDiscipline = (tag: DisciplineTag) => {
     setMeta((prev) => {
@@ -93,26 +103,34 @@ export function AddTradeModal({ accounts, selectedAccountId, onAddTrade }: AddTr
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
+    if (accountIds.length === 0) return
     onAddTrade(
       {
         date: formData.date,
-        accountId: formData.accountId,
         symbol: formData.symbol.toUpperCase(),
         pnl: parseFloat(formData.pnl) || 0,
         notes: formData.notes.trim() || undefined,
       },
       meta,
+      accountIds,
     )
     setOpen(false)
     setFormData(emptyForm(selectedAccountId))
     setMeta(emptyMeta())
+    setAccountIds(selectedAccountId ? [selectedAccountId] : [])
   }
+
+  const n = accountIds.length
 
   return (
     <Dialog
       open={open}
       onOpenChange={(isOpen) => {
-        if (isOpen) setFormData((prev) => ({ ...prev, accountId: selectedAccountId }))
+        if (isOpen) {
+          const initial = selectedAccountId ? [selectedAccountId] : []
+          setFormData((prev) => ({ ...prev, accountId: selectedAccountId }))
+          setAccountIds(initial)
+        }
         setOpen(isOpen)
       }}
     >
@@ -141,6 +159,9 @@ export function AddTradeModal({ accounts, selectedAccountId, onAddTrade }: AddTr
             serializeDateStr={serializeDateStr}
             toggleDiscipline={toggleDiscipline}
             toggleSetup={toggleSetup}
+            accountIds={accountIds}
+            onAccountIdsChange={setAccountIds}
+            userDefaultRiskProfile={userDefaultRiskProfile}
           />
         </form>
 
@@ -148,8 +169,13 @@ export function AddTradeModal({ accounts, selectedAccountId, onAddTrade }: AddTr
           <Button type="button" variant="ghost" size="sm" onClick={() => setOpen(false)}>
             Cancel
           </Button>
-          <Button form="add-trade-form" type="submit" size="sm" className="bg-emerald-600 hover:bg-emerald-700">
-            Add Trade
+          <Button
+            form="add-trade-form"
+            type="submit"
+            size="sm"
+            disabled={n === 0}
+          >
+            {n <= 1 ? "Add Trade" : `Add to ${n} accounts`}
           </Button>
         </div>
       </DialogContent>

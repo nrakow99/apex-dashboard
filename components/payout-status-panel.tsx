@@ -21,12 +21,13 @@ import {
   Plus,
   Shield,
   AlertCircle,
+  Circle,
 } from "lucide-react"
-import { cn } from "@/lib/utils"
+import { cn, formatPnL, pnlColorClass } from "@/lib/utils"
 import type { Account, Payout } from "@/lib/types"
 import { useToast } from "@/hooks/use-toast"
 import { getAccountRules } from "@/lib/rules"
-import { isApexPaConsistency } from "@/lib/storage"
+import { isApexPaConsistency, isTopstepXfaConsistency } from "@/lib/storage"
 import { localTodayKey, parseLocalDate } from "@/lib/date-utils"
 
 // ─── Shared prop types ────────────────────────────────────────────────────────
@@ -128,14 +129,18 @@ function ConsistencyChecklistRow({
   isConsistent,
   info,
   percent,
+  hasActivity,
 }: {
   account: Account
   isConsistent: boolean
   info: NonNullable<PayoutEligibility["consistencyInfo"]>
   percent: number
+  /** False for a zero-trade account — "no violation yet" isn't the same as "passed". */
+  hasActivity: boolean
 }) {
-  const showDetail = isApexPaConsistency(account)
-  const failed = !isConsistent
+  const showDetail = isApexPaConsistency(account) || isTopstepXfaConsistency(account)
+  const failed = hasActivity && !isConsistent
+  const notYetEvaluated = !hasActivity
 
   return (
     <div
@@ -152,12 +157,14 @@ function ConsistencyChecklistRow({
           <span
             className={cn(
               "text-xs font-semibold",
-              failed ? "text-red-400" : "text-emerald-500",
+              notYetEvaluated ? "text-muted-foreground" : failed ? "text-red-400" : "text-emerald-500",
             )}
           >
-            {failed ? "Failed" : "Passed"}
+            {notYetEvaluated ? "Not Yet Evaluated" : failed ? "Failed" : "Passed"}
           </span>
-          {failed ? (
+          {notYetEvaluated ? (
+            <Circle className="h-4 w-4 text-muted-foreground" />
+          ) : failed ? (
             <XCircle className="h-4 w-4 text-red-500" />
           ) : (
             <CheckCircle2 className="h-4 w-4 text-emerald-500" />
@@ -165,13 +172,15 @@ function ConsistencyChecklistRow({
         </div>
       </div>
       <p className={cn("text-[10px] mt-0.5", failed ? "text-red-400/80" : "text-muted-foreground")}>
-        {failed
-          ? info.totalProfit <= 0
-            ? "No net profits since last payout"
-            : "Largest day exceeds 50% of total profit"
-          : "Largest day within 50% limit"}
+        {notYetEvaluated
+          ? "No trades yet — nothing to evaluate"
+          : failed
+            ? info.totalProfit <= 0
+              ? "No net profits since last payout"
+              : `Largest day exceeds ${percent}% of total profit`
+            : `Largest day within ${percent}% limit`}
       </p>
-      {showDetail && (
+      {showDetail && !notYetEvaluated && (
         <div className="mt-1.5 space-y-1.5">
           <div className="grid grid-cols-3 gap-2 text-[10px]">
             <div>
@@ -223,9 +232,15 @@ export function PayoutStatusPanel({ account, eligibility, payouts, onAddPayout }
       />
     )
   }
-  return eligibility.firm === "Lucid"
-    ? <LucidPayoutPanel account={account} eligibility={eligibility} payouts={payouts} onAddPayout={onAddPayout} />
-    : <ApexPayoutPanel account={account} eligibility={eligibility} payouts={payouts} onAddPayout={onAddPayout} />
+  if (eligibility.firm === "Lucid") {
+    return <LucidPayoutPanel account={account} eligibility={eligibility} payouts={payouts} onAddPayout={onAddPayout} />
+  }
+  if (eligibility.firm === "Topstep") {
+    return <TopstepPayoutPanel account={account} eligibility={eligibility} payouts={payouts} onAddPayout={onAddPayout} />
+  }
+  // Alpha still falls through to the Apex-shaped panel below — same known
+  // gap as Topstep was until this pass, not yet rebuilt.
+  return <ApexPayoutPanel account={account} eligibility={eligibility} payouts={payouts} onAddPayout={onAddPayout} />
 }
 
 // ─── Apex Payout Panel ────────────────────────────────────────────────────────
@@ -384,6 +399,7 @@ function ApexPayoutPanel({ account, eligibility, payouts, onAddPayout }: PayoutS
                 isConsistent={eligibility.conditions.isConsistent}
                 info={eligibility.consistencyInfo}
                 percent={rules.consistencyPercent}
+                hasActivity={(eligibility.stats?.tradingDays ?? 0) > 0}
               />
             )}
             <ChecklistRow
@@ -710,9 +726,232 @@ function LucidPayoutPanel({ account, eligibility, payouts, onAddPayout }: Payout
         </div>
         <div className="p-2 rounded-lg bg-muted/30 border border-border/50">
           <div className="text-xs text-muted-foreground mb-0.5">Cycle Profit</div>
-          <div className={cn("text-base font-bold font-mono", cycleProfit >= 0 ? "text-emerald-500" : "text-red-500")}>
-            {cycleProfit >= 0 ? "+" : ""}${cycleProfit.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+          <div className={cn("text-base font-bold font-mono", pnlColorClass(cycleProfit))}>
+            {formatPnL(cycleProfit)}
           </div>
+        </div>
+      </div>
+    </Card>
+  )
+}
+
+// ─── Topstep XFA ──────────────────────────────────────────────────────────────
+//
+// Was previously falling through to ApexPayoutPanel (CLAUDE.md known issue),
+// which reads Apex-shaped condition keys and an Apex-only Safety Net concept
+// Topstep doesn't have — hence "Safety Net $0" with a red X on every Topstep
+// account, and a "Balance - Safety Net = Available" line that's really just
+// the balance restated. This panel reads Topstep's real formula (balance ×
+// 50%, capped) and its real path-specific conditions (standard: winning
+// days + profitable-since-last-payout; consistency: trading days +
+// consistencyPercent rule) straight from getAccountRules()/getPayoutEligibility.
+
+function TopstepPayoutPanel({ account, eligibility, payouts, onAddPayout }: PayoutStatusPanelProps) {
+  const rules = getAccountRules(account)
+  const [open, setOpen] = useState(false)
+  const [formData, setFormData] = useState({ date: localTodayKey(), amount: "", notes: "" })
+  const [error, setError] = useState<string | null>(null)
+  const { toast } = useToast()
+
+  const path = eligibility.topstepPayoutPath === "consistency" ? "consistency" : "standard"
+  const winningDays = eligibility.winningDays ?? 0
+  const cycleProfit = eligibility.cycleProfit ?? 0
+  // Overloaded on the eligibility object: rules.minProfitDays for the
+  // standard path, rules.minTradingDays for the consistency path — already
+  // the correct denominator, unlike rules.minProfitDays alone (which is 0 on
+  // the consistency path and was the source of the "Qualifying Days 1 / 0" bug).
+  const daysRequired = eligibility.minProfitDays ?? 0
+  const daysCompleted = eligibility.cycleProfitDays ?? 0
+  const totalPayouts = payouts.reduce((sum, p) => sum + p.amount, 0)
+  const hasActivity = (eligibility.stats?.tradingDays ?? 0) > 0
+
+  const conditions = eligibility.conditions as Record<string, boolean> | undefined
+  const hasEnoughDays = path === "standard"
+    ? conditions?.hasEnoughWinningDays ?? false
+    : conditions?.hasEnoughTradingDays ?? false
+  const isConsistent = conditions?.isConsistent ?? true
+  const isProfitableSinceLastPayout = conditions?.isProfitableSinceLastPayout ?? true
+  const hasMinWithdrawable = conditions?.hasMinWithdrawable ?? false
+
+  const validatePayout = (amount: number): string | null => {
+    if (!eligibility.isEligible) return "Account not yet eligible for payout"
+    if (amount < eligibility.minPayoutAmount) return `Minimum payout is $${eligibility.minPayoutAmount}`
+    if (amount > eligibility.maxWithdrawable) return `Exceeds max payout ($${eligibility.maxWithdrawable.toLocaleString()})`
+    return null
+  }
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault()
+    setError(null)
+    const amount = parseFloat(formData.amount)
+    if (isNaN(amount) || amount <= 0) { setError("Enter a valid amount"); return }
+    const err = validatePayout(amount)
+    if (err) { setError(err); return }
+    onAddPayout({ date: formData.date, amount, notes: formData.notes || undefined })
+    toast({ title: "Payout logged", description: `$${amount.toLocaleString()} gross — you receive $${(amount * rules.payoutSplit).toLocaleString(undefined, { maximumFractionDigits: 0 })}.` })
+    setOpen(false)
+    setFormData({ date: localTodayKey(), amount: "", notes: "" })
+  }
+
+  return (
+    <Card className="p-2.5 sm:p-4 rounded-[20px] sm:rounded-[24px] glass-card h-fit">
+      <div className="flex items-center justify-between mb-2">
+        <div>
+          <h2 className="text-sm sm:text-lg font-semibold">Payout Status</h2>
+          <p className="text-xs text-slate-400 mt-0.5">
+            XFA {path === "consistency" ? "Consistency" : "Standard"} path · {Math.round(rules.payoutSplit * 100)}/{Math.round((1 - rules.payoutSplit) * 100)} split · {Math.round(rules.payoutMaxPercent * 100)}% of balance (cap ${rules.payoutAbsoluteCap.toLocaleString()})
+          </p>
+        </div>
+        <Dialog open={open} onOpenChange={(v) => { setOpen(v); if (!v) setError(null) }}>
+          <DialogTrigger asChild>
+            <Button size="sm" variant={eligibility.isEligible ? "default" : "outline"} className="gap-2">
+              <Plus className="h-4 w-4" />Log Payout
+            </Button>
+          </DialogTrigger>
+          <DialogContent className="sm:max-w-[400px]">
+            <DialogHeader><DialogTitle>Log Topstep Payout</DialogTitle></DialogHeader>
+            <form onSubmit={handleSubmit} className="space-y-4 mt-4">
+              {error && (
+                <div className="p-3 rounded-lg bg-red-500/10 border border-red-500/30 flex items-start gap-2">
+                  <AlertCircle className="h-4 w-4 text-red-500 mt-0.5 shrink-0" />
+                  <span className="text-sm text-red-500">{error}</span>
+                </div>
+              )}
+              <div className="space-y-2">
+                <Label>Date</Label>
+                <Input type="date" value={formData.date} onChange={(e) => setFormData({ ...formData, date: e.target.value })} className="bg-background" />
+              </div>
+              <div className="space-y-2">
+                <Label>Gross Payout Amount ($)</Label>
+                <Input type="number" step="0.01" min={eligibility.minPayoutAmount} placeholder="0.00"
+                  value={formData.amount}
+                  onChange={(e) => { setFormData({ ...formData, amount: e.target.value }); setError(null) }}
+                  className="bg-background font-mono"
+                />
+                <div className="text-xs text-muted-foreground">
+                  Min: ${eligibility.minPayoutAmount} | Max: ${eligibility.maxWithdrawable.toLocaleString()}
+                </div>
+              </div>
+              <div className="space-y-2">
+                <Label>Notes (optional)</Label>
+                <Input placeholder="e.g., First payout" value={formData.notes}
+                  onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
+                  className="bg-background"
+                />
+              </div>
+              <div className="flex justify-end gap-3 pt-2">
+                <Button type="button" variant="ghost" onClick={() => setOpen(false)}>Cancel</Button>
+                <Button type="submit">Log Payout</Button>
+              </div>
+            </form>
+          </DialogContent>
+        </Dialog>
+      </div>
+
+      {/* Eligibility banner */}
+      <div className={cn(
+        "p-2 rounded-xl mb-2 flex items-start gap-2",
+        eligibility.isEligible ? "bg-emerald-500/10 border border-emerald-500/30" : "bg-amber-500/10 border border-amber-500/30",
+      )}>
+        {eligibility.isEligible
+          ? <CheckCircle2 className="h-5 w-5 text-emerald-500 mt-0.5 shrink-0" />
+          : <XCircle className="h-5 w-5 text-amber-500 mt-0.5 shrink-0" />}
+        <div>
+          <div className={cn("font-semibold text-sm", eligibility.isEligible ? "text-emerald-500" : "text-amber-500")}>
+            {eligibility.isEligible ? "Eligible for Payout" : "Not Yet Eligible"}
+          </div>
+          {!eligibility.isEligible && eligibility.missingConditions.length > 0 && (
+            <ul className="mt-1.5 space-y-0.5 text-xs">
+              {eligibility.missingConditions.map((c, i) => (
+                <li key={i} className="text-amber-500/80">• {c}</li>
+              ))}
+            </ul>
+          )}
+        </div>
+      </div>
+
+      {/* Checklist — no Safety Net (Topstep has no safety-net concept) and no
+          lifetime Payouts Used/Payout Tiers (maxPayouts is an inert 99, not a
+          real cap — see the payoutPolicyKind: "topstep_xfa" comment in
+          lib/rules.ts). */}
+      <div className="space-y-1 mb-2">
+        {path === "standard" ? (
+          <>
+            <ChecklistRow
+              label="Winning Days"
+              value={`${winningDays} / ${daysRequired}`}
+              isComplete={hasEnoughDays}
+              tooltip={`$${rules.winningDayThreshold}+ net profit per day`}
+            />
+            <ChecklistRow
+              label="Profitable Since Last Payout"
+              value={eligibility.payoutCount === 0 ? "First payout exempt" : formatPnL(cycleProfit)}
+              isComplete={isProfitableSinceLastPayout}
+            />
+          </>
+        ) : (
+          <>
+            <ChecklistRow
+              label="Trading Days Since Last Payout"
+              value={`${daysCompleted} / ${daysRequired}`}
+              isComplete={hasEnoughDays}
+            />
+            {eligibility.consistencyInfo && (
+              <ConsistencyChecklistRow
+                account={account}
+                isConsistent={isConsistent}
+                info={eligibility.consistencyInfo}
+                percent={rules.consistencyPercent}
+                hasActivity={hasActivity}
+              />
+            )}
+          </>
+        )}
+        <ChecklistRow
+          label="Minimum Payout"
+          value={`$${rules.minPayoutAmount}`}
+          isComplete={hasMinWithdrawable}
+        />
+      </div>
+
+      {/* Available to withdraw — real formula, not Apex's balance-minus-safety-net */}
+      <div className="p-2 rounded-xl bg-emerald-500/10 border border-emerald-500/30 mb-2">
+        <div className="text-xs text-emerald-500/80 mb-0.5">Available to Withdraw</div>
+        <div className="text-xl font-bold font-mono text-emerald-500">
+          {eligibility.maxWithdrawable >= eligibility.minPayoutAmount
+            ? `$${eligibility.maxWithdrawable.toLocaleString()}`
+            : "$0"}
+        </div>
+        <div className="text-xs text-muted-foreground mt-1">
+          min(Balance × {Math.round(rules.payoutMaxPercent * 100)}%, ${rules.payoutAbsoluteCap.toLocaleString()} cap)
+        </div>
+        {eligibility.maxWithdrawable >= eligibility.minPayoutAmount && (
+          <div className="mt-1.5 pt-1.5 border-t border-emerald-500/20 space-y-0.5 text-xs">
+            <div className="flex justify-between">
+              <span className="text-muted-foreground">You receive ({Math.round(rules.payoutSplit * 100)}%)</span>
+              <span className="font-mono text-slate-200">${(eligibility.traderReceives ?? 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-muted-foreground">Topstep split ({Math.round((1 - rules.payoutSplit) * 100)}%)</span>
+              <span className="font-mono text-muted-foreground">${(eligibility.lucidSplit ?? 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* History */}
+      <PayoutHistory payouts={payouts} showSplit />
+
+      {/* Summary — balance-based formula, so current balance (not cycle
+          profit) is the figure that actually drives the payout ceiling. */}
+      <div className="grid grid-cols-2 gap-1.5">
+        <div className="p-2 rounded-lg bg-muted/30 border border-border/50">
+          <div className="text-xs text-muted-foreground mb-0.5">Total Withdrawn</div>
+          <div className="text-base font-bold font-mono text-emerald-500">${totalPayouts.toLocaleString()}</div>
+        </div>
+        <div className="p-2 rounded-lg bg-muted/30 border border-border/50">
+          <div className="text-xs text-muted-foreground mb-0.5">Current Balance</div>
+          <div className="text-base font-bold font-mono">${(eligibility.stats?.currentBalance ?? 0).toLocaleString()}</div>
         </div>
       </div>
     </Card>

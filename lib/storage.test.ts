@@ -254,6 +254,105 @@ describe("Topstep XFA — MLL resets to breakeven immediately on an approved pay
   })
 })
 
+// ─── Topstep XFA payout panel — golden-file coverage ───────────────────────
+//
+// PayoutStatusPanel previously fell through to the Apex-shaped panel for
+// every firm except Tradeify/Lucid, which produced several visible bugs on
+// a real Topstep PA account:
+//   1. "Qualifying Days 1 / 0" — the Apex panel's denominator is
+//      rules.minProfitDays directly, which is 0 on Topstep's consistency
+//      path (days are counted via minTradingDays there instead).
+//   2. "Consistency Rule (40%)" next to "...exceeds 50% of total profit" —
+//      the label read rules.consistencyPercent but the body text had a
+//      hardcoded "50%" left over from the Apex copy.
+//   3. "Payouts Used 0 / 99" / "Payout Tiers 0 / 99 used" — 99 is the inert
+//      "effectively unlimited" placeholder (Topstep XFA has no lifetime
+//      payout cap), displayed as if it were a real ceiling.
+//   4. "Safety Net $0" with a red X, and a "Balance - Safety Net = X" line
+//      — Topstep has no safety-net concept; eligibility.safetyNet is
+//      hardcoded to 0 in lib/storage.ts purely to satisfy the shared
+//      PayoutEligibility shape, not because it's a real Topstep figure.
+//   5. A zero-trade account showed "Consistency Rule (40%) Passed" — no
+//      violation yet isn't the same as an affirmative pass.
+// These assertions pin the exact fields the new TopstepPayoutPanel reads,
+// so a future refactor can't silently reintroduce any of the five.
+
+describe("Topstep XFA payout panel — real Topstep branch, not the Apex fallthrough", () => {
+  it("standard path: eligibility.minProfitDays (the panel's day-count denominator) equals rules.minProfitDays, never 0", () => {
+    const account = topstepAccount()
+    const rules = getAccountRules(account)
+    const el = expectFirm(getPayoutEligibility(account.id, [], account, []), "Topstep")
+    expect(rules.minProfitDays).toBe(5)
+    expect(el.minProfitDays).toBe(5)
+    expect(el.minProfitDays).toBeGreaterThan(0)
+  })
+
+  it("consistency path: eligibility.minProfitDays is overloaded to rules.minTradingDays (3), not rules.minProfitDays (0) — this is the fix for bug #1", () => {
+    const account = topstepAccount({ topstepPayoutPath: "consistency" })
+    const rules = getAccountRules(account)
+    expect(rules.minProfitDays).toBe(0) // confirms the trap: reading this directly would render "X / 0"
+    expect(rules.minTradingDays).toBe(3)
+    const el = expectFirm(getPayoutEligibility(account.id, [], account, []), "Topstep")
+    expect(el.minProfitDays).toBe(3)
+  })
+
+  it("consistency path: rules.consistencyPercent is 40, matching both the row label and the violation copy (bug #2 — no hardcoded 50%)", () => {
+    const account = topstepAccount({ topstepPayoutPath: "consistency" })
+    const rules = getAccountRules(account)
+    expect(rules.consistencyPercent).toBe(40)
+    expect(rules.hasConsistency).toBe(true)
+  })
+
+  it("standard path has no consistency rule at all — hasConsistency is false, so the row (and any %) is simply absent", () => {
+    const account = topstepAccount()
+    const rules = getAccountRules(account)
+    expect(rules.hasConsistency).toBe(false)
+    expect(rules.consistencyPercent).toBe(0)
+  })
+
+  it("maxPayouts is the inert 99 placeholder on both paths — confirms there's no real lifetime cap for the panel to display (bug #3)", () => {
+    for (const topstepPayoutPath of ["standard", "consistency"] as const) {
+      const rules = getAccountRules(topstepAccount({ topstepPayoutPath }))
+      expect(rules.maxPayouts).toBe(99)
+    }
+  })
+
+  it("safetyNet is a hardcoded 0 placeholder, not a real Topstep figure — the panel must not render it as one (bug #4)", () => {
+    const account = topstepAccount()
+    const el = expectFirm(getPayoutEligibility(account.id, [], account, []), "Topstep")
+    expect(el.safetyNet).toBe(0)
+  })
+
+  it("payout formula is balance-based (min(balance × 50%, cap)), not the Apex balance-minus-safety-net formula (bug #4)", () => {
+    const account = topstepAccount({ accountSize: 50000, startingBalance: 50000, maxBalance: 56000, balance: 56000 })
+    const trades = [
+      trade("2026-07-01", 300, "topstep-1"),
+      trade("2026-07-02", 300, "topstep-1"),
+      trade("2026-07-03", 300, "topstep-1"),
+      trade("2026-07-04", 300, "topstep-1"),
+      trade("2026-07-05", 5000, "topstep-1"),
+    ]
+    const rules = getAccountRules(account)
+    const el = expectFirm(getPayoutEligibility(account.id, trades, account, []), "Topstep")
+    const rawPayout = el.stats!.currentBalance * rules.payoutMaxPercent
+    expect(el.maxWithdrawable).toBe(Math.min(rawPayout, rules.payoutAbsoluteCap))
+  })
+
+  it("zero-trade account: consistency reads as valid (no violation) but tradingDays is 0 — the panel's hasActivity gate must render 'Not Yet Evaluated', not 'Passed' (bug #5)", () => {
+    const account = topstepAccount({ topstepPayoutPath: "consistency" })
+    const el = expectFirm(getPayoutEligibility(account.id, [], account, []), "Topstep")
+    expect(el.stats!.tradingDays).toBe(0)
+    expect(el.conditions.isConsistent).toBe(true)
+    expect(el.consistencyInfo?.totalProfit).toBe(0)
+    // The panel computes hasActivity = (eligibility.stats?.tradingDays ?? 0) > 0.
+    // Zero trading days means hasActivity is false, which must override the
+    // technically-true isConsistent into a neutral "Not Yet Evaluated" state
+    // rather than displaying "Passed".
+    const hasActivity = (el.stats?.tradingDays ?? 0) > 0
+    expect(hasActivity).toBe(false)
+  })
+})
+
 describe("Alpha Futures Qualified — hasPayouts wiring", () => {
   it("hasPayouts is on and getPayoutEligibility returns a real Alpha-shaped object, not the Apex fallback", () => {
     const account = alphaAccount()

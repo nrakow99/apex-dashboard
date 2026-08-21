@@ -3,10 +3,11 @@
 import { useMemo } from "react"
 import { Card } from "@/components/ui/card"
 import { cn, formatCurrency } from "@/lib/utils"
-import type { Account } from "@/lib/types"
+import type { Account, InstrumentSpec, RiskProfile } from "@/lib/types"
 import { getAccountRules } from "@/lib/rules"
 import { getRuleStartingBalance } from "@/lib/account-quantity"
 import { getAccountRangeFloorTitle } from "@/lib/floor-display-labels"
+import { resolveRiskProfile, getHeadroom, tradesSuffix } from "@/lib/headroom"
 
 /** Fields from calculateAccountStats — no new calculations. */
 export interface AccountRangeStats {
@@ -34,10 +35,22 @@ export function shouldShowAccountRangeCard(account: Account): boolean {
 interface AccountRangeCardProps {
   account: Account
   stats: AccountRangeStats
+  /** Headroom-in-trades inputs — optional, degrades to dollars-only. See lib/headroom.ts. */
+  instrumentSpecs?: InstrumentSpec[]
+  userDefaultRiskProfile?: RiskProfile | null
 }
 
-export function AccountRangeCard({ account, stats }: AccountRangeCardProps) {
+export function AccountRangeCard({
+  account,
+  stats,
+  instrumentSpecs = [],
+  userDefaultRiskProfile = null,
+}: AccountRangeCardProps) {
   const rules = getAccountRules(account)
+  const headroom = getHeadroom(
+    stats.drawdownRemaining,
+    resolveRiskProfile(account, userDefaultRiskProfile, instrumentSpecs),
+  )
   const startingBalance = getRuleStartingBalance(account)
   const lucidFlex = rules.lucidFlexFloor
   const isLucidFlexPa =
@@ -203,6 +216,7 @@ export function AccountRangeCard({ account, stats }: AccountRangeCardProps) {
   ) : (
     <span className="font-mono font-semibold text-slate-200">
       {formatCurrency(Math.max(0, stats.drawdownRemaining))}
+      <span className="text-slate-400">{tradesSuffix(headroom)}</span>
     </span>
   )
 

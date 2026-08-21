@@ -8,7 +8,8 @@ import { lucidFlexActiveFloor } from "./lucid-flex-floor"
 export function tradesEffectiveForAccount(account: Account, trades: Trade[]): Trade[] {
   const forAcct = trades.filter((t) => t.accountId === account.id)
   if (account.type === "PA" && account.activationStartDate) {
-    return forAcct.filter((t) => t.date >= account.activationStartDate)
+    const activationStartDate = account.activationStartDate
+    return forAcct.filter((t) => t.date >= activationStartDate)
   }
   return forAcct
 }
@@ -16,7 +17,8 @@ export function tradesEffectiveForAccount(account: Account, trades: Trade[]): Tr
 export function payoutsEffectiveForAccount(account: Account, payouts: Payout[]): Payout[] {
   const forAcct = payouts.filter((p) => p.accountId === account.id)
   if (account.type === "PA" && account.activationStartDate) {
-    return forAcct.filter((p) => p.date >= account.activationStartDate)
+    const activationStartDate = account.activationStartDate
+    return forAcct.filter((p) => p.date >= activationStartDate)
   }
   return forAcct
 }
@@ -56,7 +58,8 @@ export function calculateDailyPnLData(
 ): DailyPnL[] {
   let accountTrades = trades.filter((t) => t.accountId === accountId)
   if (account.type === "PA" && account.activationStartDate) {
-    accountTrades = accountTrades.filter((t) => t.date >= account.activationStartDate)
+    const activationStartDate = account.activationStartDate
+    accountTrades = accountTrades.filter((t) => t.date >= activationStartDate)
   }
   if (accountTrades.length === 0) return []
 
@@ -438,7 +441,8 @@ function getCycleData(
 ) {
   let accountPayouts = payouts.filter((p) => p.accountId === accountId)
   if (account.type === "PA" && account.activationStartDate) {
-    accountPayouts = accountPayouts.filter((p) => p.date >= account.activationStartDate)
+    const activationStartDate = account.activationStartDate
+    accountPayouts = accountPayouts.filter((p) => p.date >= activationStartDate)
   }
 
   const lastPayout = accountPayouts.length > 0
@@ -448,7 +452,8 @@ function getCycleData(
 
   let accountTrades = trades.filter((t) => t.accountId === accountId)
   if (account.type === "PA" && account.activationStartDate) {
-    accountTrades = accountTrades.filter((t) => t.date >= account.activationStartDate)
+    const activationStartDate = account.activationStartDate
+    accountTrades = accountTrades.filter((t) => t.date >= activationStartDate)
   }
 
   accountTrades = accountTrades.filter(

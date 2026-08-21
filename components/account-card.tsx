@@ -1,27 +1,33 @@
 "use client"
 
 import { Card } from "@/components/ui/card"
-import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
-import { Progress } from "@/components/ui/progress"
-import { cn } from "@/lib/utils"
-import type { Account, Trade, Payout } from "@/lib/types"
-import { calculateAccountStats, getConsistencyInfo, getPayoutEligibility } from "@/lib/storage"
+import { cn, formatCurrency, formatPercent, formatPnL, pnlColor } from "@/lib/utils"
+import type { Account, Trade, Payout, InstrumentSpec, RiskProfile } from "@/lib/types"
+import {
+  calculateAccountStats,
+  getConsistencyInfo,
+  getPayoutEligibility,
+} from "@/lib/storage"
 import { applyIntradayManualDrawdownToStats } from "@/lib/intraday-manual-drawdown"
 import { getAccountRules, resolveTradeifyProgram } from "@/lib/rules"
+import { resolveRiskProfile, getHeadroom } from "@/lib/headroom"
 import { tradeifyProgramLabel } from "@/lib/tradeify-rules"
+import { getAccountQuantity, getRuleStartingBalance } from "@/lib/account-quantity"
+import { localTodayKey, parseLocalDate } from "@/lib/date-utils"
 import {
-  getRuleStartingBalance,
-  getAccountQuantity,
-  formatAccountBundleHelper,
-} from "@/lib/account-quantity"
-import { AccountQuantityBadge } from "@/components/account-quantity-badge"
-import { ChevronRight, AlertTriangle, CheckCircle2, Circle } from "lucide-react"
+  AT_RISK_DRAWDOWN_FRACTION,
+  isAccountBreached,
+  lastEffectiveTradeDate,
+} from "@/lib/accounts-overview"
+import { InfoHint } from "@/components/info-hint"
+import { ChevronRight, AlertTriangle, CheckCircle2 } from "lucide-react"
 import { AccountCardInsightBanner } from "@/components/account-card-insight-banner"
 import {
   getAccountCardInsight,
   getAccountTenure,
 } from "@/lib/account-card-insight"
+import { format } from "date-fns"
 
 interface AccountCardProps {
   account: Account
@@ -32,10 +38,11 @@ interface AccountCardProps {
   onActivatePa?: () => void
   /** Dropdown menu rendered in top-right, fades in on hover */
   menuSlot?: React.ReactNode
-}
-
-function fmtMoney(n: number) {
-  return n.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+  /** Headroom-in-trades inputs — optional so existing callers/tests degrade
+   *  to dollars-only display rather than needing to thread these through
+   *  everywhere immediately. See lib/headroom.ts. */
+  instrumentSpecs?: InstrumentSpec[]
+  userDefaultRiskProfile?: RiskProfile | null
 }
 
 /**
@@ -85,7 +92,7 @@ function getAccountHealth({
   if (account.status === "Breached" || !isSafe) {
     return { label: "Breached", severity: "critical" }
   }
-  if (drawdownRemaining < maxDrawdown * 0.18) {
+  if (drawdownRemaining < maxDrawdown * AT_RISK_DRAWDOWN_FRACTION) {
     return { label: "At Risk", severity: "critical" }
   }
   if (hasConsistency && consistencyValid === false) {
@@ -110,12 +117,41 @@ function getAccountHealth({
   return { label: "Stable", severity: "neutral" }
 }
 
-// Progress itself is flat (see components/ui/progress.tsx) — no per-call
-// color/gradient override needed here anymore, just the height.
-const structuralBarClass = "h-1.5"
+function formatSizeK(accountSize: number): string {
+  return accountSize >= 1000
+    ? `${Math.round(accountSize / 1000)}K`
+    : String(accountSize)
+}
 
-const rowLabelClass = "text-[10px] text-[var(--muted-foreground)] uppercase tracking-wider"
-const rowValueClass = "font-mono text-[10px] font-medium tabular-nums text-[var(--text)]"
+/** Compact identity line — firm, size, program/type. Not a pill row. */
+function accountIdentity(account: Account): string {
+  const qty = getAccountQuantity(account)
+  const firm = account.firm ?? "Apex"
+  const size = formatSizeK(account.accountSize)
+  const tradeify = firm === "Tradeify" ? resolveTradeifyProgram(account) : null
+  const program = tradeify
+    ? tradeifyProgramLabel(tradeify)
+    : account.type
+  const tier =
+    firm === "Alpha" && account.alphaTier
+      ? account.alphaTier.charAt(0).toUpperCase() + account.alphaTier.slice(1)
+      : null
+
+  const bits = [
+    qty > 1 ? `${qty}×` : null,
+    firm,
+    tier,
+    size,
+    program,
+  ].filter(Boolean)
+  return bits.join(" ")
+}
+
+/** Identity is hidden when it would just repeat the title. Quantity, a
+ *  Tradeify program, an Alpha tier, or a renamed account make it useful. */
+function identityAddsInfo(account: Account): boolean {
+  return accountIdentity(account) !== account.name.trim()
+}
 
 export function AccountCard({
   account,
@@ -124,12 +160,16 @@ export function AccountCard({
   onClick,
   onActivatePa,
   menuSlot,
+  instrumentSpecs = [],
+  userDefaultRiskProfile = null,
 }: AccountCardProps) {
   const rawStats = calculateAccountStats(account, trades, payouts)
   const stats = applyIntradayManualDrawdownToStats(account, rawStats)
+  const headroom = getHeadroom(
+    stats.drawdownRemaining,
+    resolveRiskProfile(account, userDefaultRiskProfile, instrumentSpecs),
+  )
   const rules = getAccountRules(account)
-  const qty = getAccountQuantity(account)
-  const startingBalance = getRuleStartingBalance(account)
   const consistencyInfo = account.type === "PA" && rules.hasConsistency
     ? getConsistencyInfo(account.id, trades, account, payouts)
     : null
@@ -152,21 +192,6 @@ export function AccountCard({
       ? rules.minBalanceToRequest
       : null
 
-  const payoutSpan =
-    minPayoutBalanceTarget != null ? minPayoutBalanceTarget - startingBalance : null
-
-  const paMinBalanceProgress =
-    minPayoutBalanceTarget != null
-      ? payoutSpan != null && payoutSpan > 0
-        ? Math.min(
-            100,
-            Math.max(0, ((stats.currentBalance - startingBalance) / payoutSpan) * 100)
-          )
-        : stats.currentBalance >= minPayoutBalanceTarget
-          ? 100
-          : 0
-      : 0
-
   const remainingToMinPayoutBalance =
     minPayoutBalanceTarget != null ? Math.max(0, minPayoutBalanceTarget - stats.currentBalance) : null
 
@@ -177,28 +202,6 @@ export function AccountCard({
       ? getPayoutEligibility(account.id, trades, account, payouts)
       : null
 
-  const lucidCycleThreshold =
-    lucidEligibility && rules.payoutMaxPercent > 0
-      ? rules.minPayoutAmount / rules.payoutMaxPercent
-      : null
-
-  const lucidCycleProgress =
-    lucidCycleThreshold != null && lucidCycleThreshold > 0 && lucidEligibility
-      ? lucidEligibility.isEligible
-        ? 100
-        : Math.min(100, Math.max(0, (Math.max(0, lucidEligibility.cycleProfit) / lucidCycleThreshold) * 100))
-      : 0
-
-  const showLiveMainGoal =
-    account.type === "Live" &&
-    (effectiveProfitTarget != null ||
-      (rules.minBalanceToRequest > 0 && rules.minBalanceToRequest > startingBalance))
-
-  const drawdownLabel = account.drawdownType === "EOD" ? "EOD Drawdown" : "Intraday Drawdown"
-  const drawdownCritical = stats.drawdownRemaining <= account.maxDrawdown * 0.2
-  const drawdownElevated = !drawdownCritical && stats.drawdownRemaining <= account.maxDrawdown * 0.5
-
-  // Apex PA eligibility for "Locked In" badge
   const apexPayoutEligibility =
     account.firm === "Apex" && account.type === "PA" && rules.hasPayouts
       ? getPayoutEligibility(account.id, trades, account, payouts)
@@ -206,8 +209,7 @@ export function AccountCard({
 
   const isPayoutEligible =
     (lucidEligibility?.isEligible ?? false) ||
-    (apexPayoutEligibility?.isEligible ?? false) ||
-    (lucidEligibility?.firm === "Tradeify" && lucidEligibility.isEligible)
+    (apexPayoutEligibility?.isEligible ?? false)
 
   const health = getAccountHealth({
     account,
@@ -236,32 +238,48 @@ export function AccountCard({
     currentBalance: stats.currentBalance,
   })
 
+  const floorVal = stats.activeEodFloor ?? stats.minBalance
+  const maxDrawdown = account.maxDrawdown
+  const isBreached = isAccountBreached(account, stats.isSafe)
+  const startingBalance = getRuleStartingBalance(account)
+  const evalTargetBalance =
+    account.type === "Eval" && effectiveProfitTarget != null && effectiveProfitTarget > 0
+      ? startingBalance + effectiveProfitTarget
+      : null
+  const evalTrackSpan =
+    evalTargetBalance != null ? evalTargetBalance - floorVal : 0
+  const evalBalancePct =
+    evalTargetBalance != null && evalTrackSpan > 0
+      ? Math.min(100, Math.max(0, ((stats.currentBalance - floorVal) / evalTrackSpan) * 100))
+      : 0
+  const fundedFillPct =
+    maxDrawdown > 0
+      ? Math.min(100, Math.max(0, (stats.drawdownRemaining / maxDrawdown) * 100))
+      : 0
+  const showIdentity = identityAddsInfo(account)
+
+  const lastLogDate = lastEffectiveTradeDate(account, trades)
+  const isStale =
+    tenure.daysOwned != null &&
+    tenure.daysOwned > 1 &&
+    lastLogDate !== localTodayKey()
+
   return (
     <Card
       className={cn(
-        "relative p-3.5 sm:p-6 glass-card glass-card-hover account-card-hover rounded-[24px] cursor-pointer group",
+        "relative p-3.5 sm:p-6 glass-card glass-card-hover account-card-hover rounded-[2px] cursor-pointer group",
         "transition-all active:scale-[0.992] active:shadow-none",
-        // Severity is expressed as a left-edge accent whose WIDTH scales with
-        // severity — never its hue. Positive/neutral states add no accent at
-        // all; the flat hairline border (from .glass-card) is enough.
         health.severity === "critical" && "border-l-4 border-l-[var(--text)]",
         health.severity === "elevated" && "border-l-2 border-l-[var(--text)]",
       )}
       onClick={onClick}
     >
-      {/* ── Absolutely-positioned top-right controls ─────────────────────
-          Chevron, health badge, and the 3-dot action menu are all placed
-          here so they never participate in the flex layout and cannot
-          cause shifts or overlaps.
-      ────────────────────────────────────────────────────────────────── */}
-
-      {/* Chevron — always visible, top-right */}
       <ChevronRight
         className="absolute top-5 right-5 h-5 w-5 text-[var(--faint)] group-hover:text-[var(--muted-foreground)] transition-colors pointer-events-none"
         aria-hidden
       />
 
-      {/* Health badge — structural severity: icon + weight/case, no hue */}
+      {/* One badge — structural health only. Identity is text, not pills. */}
       <span
         className={cn(
           "absolute top-12 right-5 inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded-[2px] border tabular-nums pointer-events-none",
@@ -278,7 +296,6 @@ export function AccountCard({
         {health.label}
       </span>
 
-      {/* 3-dot action menu — to the left of the chevron, fades in on hover */}
       {menuSlot && (
         <div
           className="absolute top-4 right-12 z-10 opacity-0 pointer-events-none group-hover:opacity-100 group-hover:pointer-events-auto transition-opacity"
@@ -288,240 +305,155 @@ export function AccountCard({
         </div>
       )}
 
-      {/* Header — left side only; right side is handled by absolute controls above */}
-      <div className="mb-3 sm:mb-4 pr-[76px]">
+      <div className="mb-4 pr-[76px]">
         <h3 className="font-semibold text-base sm:text-lg truncate text-[var(--text)]">{account.name}</h3>
-        {qty > 1 && (
-          <p className="text-[10px] text-[var(--muted-foreground)] mt-0.5">
-            {formatAccountBundleHelper(account)}
-          </p>
-        )}
-        {/* Badge row — every tag renders on the same neutral surface now.
-            Firm / program / type / drawdown / status differ in label only,
-            never in hue. Status keeps a weight bump on Breached, matching
-            the severity system above (structural emphasis, not color). */}
-        <div className="flex items-center gap-1.5 mt-2 flex-wrap">
-          <AccountQuantityBadge account={account} />
-          <Badge variant="outline" className="text-[10px] px-2 py-0.5 premium-pill border-[var(--hairline)] text-[var(--muted-foreground)] bg-[var(--raised)]">
-            {account.firm ?? "Apex"}
-          </Badge>
-          {account.firm === "Tradeify" && resolveTradeifyProgram(account) && (
-            <Badge variant="outline" className="text-[10px] px-2 py-0.5 premium-pill border-[var(--hairline)] text-[var(--muted-foreground)] bg-[var(--raised)]">
-              {tradeifyProgramLabel(resolveTradeifyProgram(account)!)}
-            </Badge>
+        <p className="mt-1 flex items-center gap-1 text-[11px] text-[var(--muted-foreground)]">
+          {showIdentity && (
+            <span className="truncate">
+              {accountIdentity(account)}
+              {" · "}
+            </span>
           )}
-          {account.firm !== "Tradeify" && (
-            <Badge variant="outline" className="text-[10px] px-2 py-0.5 premium-pill border-[var(--hairline)] text-[var(--muted-foreground)] bg-[var(--raised)]">
-              {account.type}
-            </Badge>
-          )}
-          <Badge variant="outline" className="text-[10px] px-2 py-0.5 premium-pill border-[var(--hairline)] text-[var(--muted-foreground)] bg-[var(--raised)]">
-            {account.drawdownType ?? "EOD"}
-          </Badge>
-          <Badge
-            variant="outline"
-            className={cn(
-              "text-[10px] px-2 py-0.5 premium-pill border-[var(--hairline)] bg-[var(--raised)]",
-              account.status === "Breached"
-                ? "font-bold text-[var(--text)]"
-                : "text-[var(--muted-foreground)]",
-            )}
-          >
-            {account.status}
-          </Badge>
-        </div>
+          <span>{account.drawdownType ?? "EOD"}</span>
+          <InfoHint topic="drawdownType" firm={account.firm} />
+        </p>
       </div>
 
-      <div className="space-y-2 sm:space-y-3">
-        {/* Balance & PnL — Net PnL is the one place color is allowed: it is
-            a signed figure. Balance itself carries no color. */}
-        <div className="grid grid-cols-2 gap-3">
-          <div>
-            <div className="text-[10px] text-[var(--muted-foreground)] uppercase tracking-wider mb-0.5">Balance</div>
-            <div className="text-lg sm:text-2xl font-semibold font-mono tracking-tight text-[var(--text)]">
-              ${fmtMoney(stats.currentBalance)}
-            </div>
-          </div>
-          <div>
-            <div className="text-[10px] text-[var(--muted-foreground)] uppercase tracking-wider mb-0.5">Net PnL</div>
-            <div
-              className="text-lg sm:text-2xl font-semibold font-mono tracking-tight"
-              style={{ color: stats.totalPnL >= 0 ? "var(--gain)" : "var(--loss)" }}
-            >
-              {stats.totalPnL >= 0 ? "+" : ""}${Math.abs(stats.totalPnL).toLocaleString(undefined, {
-                minimumFractionDigits: 2,
-                maximumFractionDigits: 2,
-              })}
-            </div>
-          </div>
-        </div>
-
-        {/* Main goal — Eval */}
-        {account.type === "Eval" && effectiveProfitTarget != null && effectiveProfitTarget > 0 && (
-          <div>
-            <div className="flex justify-between items-baseline gap-2 mb-1">
-              <span className={rowLabelClass}>Profit Target</span>
-              <span className={cn(rowValueClass, evalPassed && "font-bold")}>
-                {evalPassed
-                  ? "Passed"
-                  : `${fmtMoney(Math.max(0, stats.totalPnL))} / ${fmtMoney(effectiveProfitTarget)}`}
+      <div className="space-y-4">
+        {isBreached ? (
+          <p className="text-sm leading-relaxed text-[var(--text)]">
+            This account is breached — stop trading it and contact {account.firm ?? "Apex"}.
+          </p>
+        ) : (
+          <>
+        {/* Headroom hero — trade count when a profile resolves, dollars otherwise.
+            Never invent a trade count. Net PnL is the only signed/colored figure. */}
+        <div className="flex items-end justify-between gap-4">
+          <div className="min-w-0">
+            <div className="mb-1 flex items-center gap-1">
+              <span className="text-[10px] uppercase tracking-wider text-[var(--muted-foreground)]">
+                Headroom
               </span>
+              <InfoHint topic="headroom" firm={account.firm} />
             </div>
-            <Progress value={evalPassed ? 100 : evalProfitProgress} className={structuralBarClass} />
-          </div>
-        )}
-
-        {/* Main goal — Apex PA */}
-        {account.type === "PA" && account.firm === "Apex" && minPayoutBalanceTarget != null && (
-          <div>
-            <div className="flex justify-between items-baseline gap-2 mb-1">
-              <span className={rowLabelClass}>Min Payout Balance</span>
-              <span className={cn(rowValueClass, remainingToMinPayoutBalance === 0 && "font-bold")}>
-                {remainingToMinPayoutBalance !== null ? `$${fmtMoney(remainingToMinPayoutBalance)} remaining` : "—"}
-              </span>
-            </div>
-            <Progress value={paMinBalanceProgress} className={structuralBarClass} />
-          </div>
-        )}
-
-        {/* Main goal — Lucid PA (cycle profit vs payout-eligibility threshold from rules) */}
-        {account.type === "PA" &&
-          account.firm === "Lucid" &&
-          lucidEligibility &&
-          lucidCycleThreshold != null && (
-            <div>
-              <div className="flex justify-between items-baseline gap-2 mb-1">
-                <span className={rowLabelClass}>Payout cycle</span>
-                <span className={cn(rowValueClass, lucidEligibility.isEligible && "font-bold")}>
-                  {lucidEligibility.isEligible
-                    ? "Eligible"
-                    : `${fmtMoney(Math.max(0, lucidEligibility.cycleProfit))} / ${fmtMoney(lucidCycleThreshold)}`}
-                </span>
+            {headroom.trades != null ? (
+              <>
+                <div className="flex items-baseline gap-1.5">
+                  <span className="font-mono text-3xl sm:text-4xl font-semibold tabular-nums tracking-tight text-[var(--text)]">
+                    {headroom.trades}
+                  </span>
+                  <span className="text-sm text-[var(--muted-foreground)]">
+                    {headroom.trades === 1 ? "trade" : "trades"}
+                  </span>
+                </div>
+                <p className="mt-0.5 font-mono text-xs tabular-nums text-[var(--muted-foreground)]">
+                  {formatCurrency(headroom.dollars)} of room
+                </p>
+              </>
+            ) : (
+              <div className="font-mono text-3xl sm:text-4xl font-semibold tabular-nums tracking-tight text-[var(--text)]">
+                {formatCurrency(headroom.dollars)}
               </div>
-              <Progress value={lucidCycleProgress} className={structuralBarClass} />
-            </div>
-          )}
-
-        {/* Main goal — Live (only when a rule-based target exists) */}
-        {showLiveMainGoal && (
-          <div>
-            <div className="flex justify-between items-baseline gap-2 mb-1">
-              <span className={rowLabelClass}>
-                {effectiveProfitTarget != null ? "Profit Target" : "Min Payout Balance"}
-              </span>
-              <span className={rowValueClass}>
-                {effectiveProfitTarget != null ? (
-                  `${fmtMoney(Math.max(0, stats.totalPnL))} / ${fmtMoney(effectiveProfitTarget)}`
-                ) : rules.minBalanceToRequest > 0 ? (
-                  `$${fmtMoney(Math.max(0, rules.minBalanceToRequest - stats.currentBalance))} remaining`
-                ) : (
-                  "—"
-                )}
-              </span>
-            </div>
-            <Progress
-              value={
-                effectiveProfitTarget != null && effectiveProfitTarget > 0
-                  ? Math.min(100, (Math.max(0, stats.totalPnL) / effectiveProfitTarget) * 100)
-                  : rules.minBalanceToRequest > startingBalance
-                    ? Math.min(
-                        100,
-                        Math.max(
-                          0,
-                          ((stats.currentBalance - startingBalance) /
-                            (rules.minBalanceToRequest - startingBalance)) *
-                            100
-                        )
-                      )
-                    : 0
-              }
-              className={structuralBarClass}
-            />
+            )}
           </div>
-        )}
-
-        {/* Drawdown — the shrinking bar length IS the risk signal (position/
-            size). Weight (bold + icon) reinforces it at the critical tier.
-            No color anywhere in this row. */}
-        <div>
-          <div className="flex justify-between items-baseline gap-2 mb-1">
-            <span className={rowLabelClass}>{drawdownLabel}</span>
-            <span
-              className={cn(
-                rowValueClass,
-                "inline-flex items-center gap-1",
-                (drawdownCritical || drawdownElevated) && "font-bold",
-              )}
+          <div className="shrink-0 text-right">
+            <div className="mb-1 text-[10px] uppercase tracking-wider text-[var(--muted-foreground)]">
+              Net PnL
+            </div>
+            <div
+              className="font-mono text-base sm:text-lg font-semibold tabular-nums tracking-tight"
+              style={{ color: pnlColor(stats.totalPnL) }}
             >
-              {drawdownCritical && <AlertTriangle className="h-2.5 w-2.5" aria-hidden />}
-              ${fmtMoney(Math.max(0, stats.drawdownRemaining))} / ${fmtMoney(account.maxDrawdown)}
-            </span>
+              {formatPnL(stats.totalPnL)}
+            </div>
           </div>
-          <Progress
-            value={Math.max(0, (stats.drawdownRemaining / account.maxDrawdown) * 100)}
-            className={structuralBarClass}
-          />
         </div>
 
-        {/* Tenure + insight */}
+        {/* Floor line. Eval: floor → target, square = balance. Funded: floor → balance. */}
+        <div>
+          <div className="mb-1.5 flex items-center justify-between gap-2">
+            <span className="inline-flex items-center gap-1">
+              <span className="text-[10px] uppercase tracking-wider text-[var(--muted-foreground)]">
+                Floor
+              </span>
+              <InfoHint topic="floor" firm={account.firm} />
+            </span>
+            {evalTargetBalance != null && (
+              <span className="font-mono text-[10px] tabular-nums text-[var(--muted-foreground)]">
+                {formatPercent(evalProfitProgress)} to target
+              </span>
+            )}
+          </div>
+          {evalTargetBalance != null ? (
+            <>
+              <div
+                className="relative h-1.5 rounded-[2px] bg-[var(--raised)] ring-1 ring-[var(--hairline)]"
+                role="img"
+                aria-label={`Floor ${formatCurrency(floorVal)}, balance ${formatCurrency(stats.currentBalance)}, target ${formatCurrency(evalTargetBalance)}`}
+              >
+                <div
+                  className="absolute inset-y-0 left-0 bg-[var(--text)]/20"
+                  style={{ width: `${evalBalancePct}%` }}
+                />
+                <div className="absolute left-0 top-1/2 h-2.5 w-px -translate-y-1/2 bg-[var(--text)]" />
+                <div className="absolute right-0 top-1/2 h-2.5 w-px -translate-y-1/2 bg-[var(--text)]" />
+                <div
+                  className="absolute top-1/2 h-2 w-2 -translate-x-1/2 -translate-y-1/2 rounded-[2px] bg-[var(--text)]"
+                  style={{ left: `${evalBalancePct}%` }}
+                />
+              </div>
+              <div className="mt-1 flex justify-between font-mono text-[10px] tabular-nums text-[var(--muted-foreground)]">
+                <span>{formatCurrency(floorVal)}</span>
+                <span>{formatCurrency(evalTargetBalance)}</span>
+              </div>
+            </>
+          ) : (
+            <>
+              <div
+                className="relative h-1.5 rounded-[2px] bg-[var(--raised)] ring-1 ring-[var(--hairline)]"
+                role="img"
+                aria-label={`Floor ${formatCurrency(floorVal)}, balance ${formatCurrency(stats.currentBalance)}`}
+              >
+                <div
+                  className="absolute inset-y-0 left-0 bg-[var(--text)]/20"
+                  style={{ width: `${fundedFillPct}%` }}
+                />
+                <div className="absolute left-0 top-1/2 h-2.5 w-px -translate-y-1/2 bg-[var(--text)]" />
+                <div
+                  className="absolute top-1/2 h-2 w-2 -translate-x-1/2 -translate-y-1/2 rounded-[2px] bg-[var(--text)]"
+                  style={{ left: `${fundedFillPct}%` }}
+                />
+              </div>
+              <div className="mt-1 flex justify-between font-mono text-[10px] tabular-nums text-[var(--muted-foreground)]">
+                <span>{formatCurrency(floorVal)}</span>
+                <span>{formatCurrency(stats.currentBalance)}</span>
+              </div>
+            </>
+          )}
+        </div>
+          </>
+        )}
+
         <div className="space-y-1.5">
-          <p className="text-[10px] text-[var(--faint)] font-medium tabular-nums tracking-wide">
+          <AccountCardInsightBanner insight={insight} />
+          <p className="text-[10px] font-medium tabular-nums tracking-wide text-[var(--faint)]">
             {tenure.daysOwned != null ? `Owned ${tenure.daysOwned}d` : "Owned —"}
             {" · "}
             Traded {tenure.daysTraded}d
           </p>
-          <AccountCardInsightBanner insight={insight} />
+          {isStale && !isBreached && (
+            <p className="inline-flex items-center gap-1 text-[10px] text-[var(--muted-foreground)]">
+              Last log{" "}
+              {lastLogDate
+                ? format(parseLocalDate(lastLogDate), "MMM d")
+                : "—"}
+              <InfoHint topic="staleness" firm={account.firm} />
+            </p>
+          )}
         </div>
 
-        {/* PA consistency summary — filled vs outline icon replaces the
-            colored dot; no red/amber/emerald. Every number below reads from
-            getAccountRules()/getConsistencyInfo(); this used to hardcode "5"
-            and "50%", which was only ever correct for Apex — Topstep's
-            consistency path (3 trading days, 40%) and Alpha (40%, 5 winning
-            days at $200+) rendered the wrong numbers on every PA card. */}
-        {account.type === "PA" && consistencyInfo && (
-          <div className="flex items-center gap-4 pt-2 border-t border-[var(--hairline)]">
-            {rules.minProfitDays > 0 ? (
-              <div className="flex items-center gap-1.5">
-                {consistencyInfo.daysWithMinProfit >= rules.minProfitDays
-                  ? <CheckCircle2 className="h-3 w-3 text-[var(--text)]" aria-hidden />
-                  : <Circle className="h-3 w-3 text-[var(--faint)]" aria-hidden />}
-                <span className="text-xs text-[var(--muted-foreground)]">
-                  {consistencyInfo.daysWithMinProfit}/{rules.minProfitDays} Days (${rules.minDailyProfit}+)
-                </span>
-              </div>
-            ) : rules.minTradingDays > 0 ? (
-              <div className="flex items-center gap-1.5">
-                {stats.tradingDays >= rules.minTradingDays
-                  ? <CheckCircle2 className="h-3 w-3 text-[var(--text)]" aria-hidden />
-                  : <Circle className="h-3 w-3 text-[var(--faint)]" aria-hidden />}
-                <span className="text-xs text-[var(--muted-foreground)]">
-                  {stats.tradingDays}/{rules.minTradingDays} Trading Days
-                </span>
-              </div>
-            ) : null}
-            <div className="flex items-center gap-1.5">
-              {consistencyInfo.isValid
-                ? <CheckCircle2 className="h-3 w-3 text-[var(--text)]" aria-hidden />
-                : <AlertTriangle className="h-3 w-3 text-[var(--text)]" aria-hidden />}
-              <span className={cn("text-xs text-[var(--muted-foreground)]", !consistencyInfo.isValid && "font-semibold text-[var(--text)]")}>
-                {consistencyInfo.isValid ? "Consistent" : `${rules.consistencyPercent}% Violated`}
-              </span>
-            </div>
-          </div>
-        )}
-
-        {/* Lucid PA: scaling (only when program includes scaling tiers) */}
-        {account.firm === "Lucid" && account.type === "PA" && rules.hasScaling && (
-          <div className="flex items-center gap-1.5 pt-2 border-t border-[var(--hairline)]">
-            <Circle className="h-3 w-3 text-[var(--faint)]" aria-hidden />
-            <span className="text-xs text-[var(--muted-foreground)]">Scaling Plan Active</span>
-          </div>
-        )}
-
         {onActivatePa && (
-          <div className="pt-3 border-t border-[var(--hairline)] flex justify-end">
-            {/* Default Button variant is already flat white/black per CLAUDE.md. */}
+          <div className="flex justify-end border-t border-[var(--hairline)] pt-3">
             <Button
               type="button"
               size="sm"

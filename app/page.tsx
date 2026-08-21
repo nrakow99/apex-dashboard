@@ -7,6 +7,7 @@ import { TradeHistoryTable } from "@/components/trade-history-table"
 import { TradingCalendar } from "@/components/trading-calendar"
 import { RuleEnginePanel } from "@/components/rule-engine-panel"
 import { AccountCard } from "@/components/account-card"
+import { AccountsOverviewRow } from "@/components/accounts-overview-row"
 import { PayoutStatusPanel } from "@/components/payout-status-panel"
 import { AddTradeModal } from "@/components/add-trade-modal"
 import { AddAccountModal } from "@/components/add-account-modal"
@@ -38,13 +39,8 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 import { ArrowLeft, LogOut, Loader2, AlertCircle, RefreshCw, MoreHorizontal, Pencil, Trash2 } from "lucide-react"
-import { cn, formatCurrency, formatPnL } from "@/lib/utils"
-import {
-  getAccountQuantity,
-  getPortfolioBalance,
-  formatRepresentativeTrackingHelper,
-  sumAccountQuantities,
-} from "@/lib/account-quantity"
+import { cn, formatCurrency, formatPnL, pnlColorClass } from "@/lib/utils"
+import { formatRepresentativeTrackingHelper } from "@/lib/account-quantity"
 import { AccountQuantityBadge } from "@/components/account-quantity-badge"
 import { useToast } from "@/hooks/use-toast"
 import {
@@ -56,10 +52,16 @@ import {
   payoutsEffectiveForAccount,
 } from "@/lib/storage"
 import { getAccountRules } from "@/lib/rules"
+import { getAccountsOverview } from "@/lib/accounts-overview"
 import {
   fetchAccounts,
   fetchTrades,
   fetchPayouts,
+  fetchInstrumentSpecs,
+  fetchUserSettings,
+  saveUserSettings,
+  upsertUserInstrumentSpec,
+  deleteUserInstrumentSpec,
   createAccount,
   createTrade,
   createPayout,
@@ -74,9 +76,12 @@ import {
   isEvalEligibleForPaActivation,
 } from "@/lib/pa-activation"
 import { createClient } from "@/lib/supabase/client"
-import type { Trade, Payout, Account, AccountType, DrawdownType, Firm, DailyPnL, TradeifyProgram, TopstepPayoutPath, AlphaTier } from "@/lib/types"
+import type { Trade, Payout, Account, AccountType, DrawdownType, Firm, DailyPnL, TradeifyProgram, TopstepPayoutPath, AlphaTier, InstrumentSpec, RiskProfile } from "@/lib/types"
 import { migrateLocalTradeMetadata, type TradeMeta } from "@/lib/trade-meta"
 import { RiskMetricsCard } from "@/components/risk-metrics-card"
+import { SettingsModal } from "@/components/settings-modal"
+import { BUILTIN_INSTRUMENTS } from "@/lib/instrument-specs"
+import { resolveRiskProfile, getHeadroom, tradesSuffix, lossEndsAccountText } from "@/lib/headroom"
 
 type ViewMode = "accounts" | "detail"
 
@@ -88,6 +93,11 @@ export default function Dashboard() {
   const [accounts, setAccounts] = useState<Account[]>([])
   const [allTrades, setAllTrades] = useState<Trade[]>([])
   const [allPayouts, setAllPayouts] = useState<Payout[]>([])
+  // Headroom-in-trades: instrument table (built-ins + user's own rows) and
+  // the user-level default risk profile. Falls back to the built-in table
+  // before the fetch resolves so the UI never shows a blank instrument list.
+  const [instrumentSpecs, setInstrumentSpecs] = useState<InstrumentSpec[]>([...BUILTIN_INSTRUMENTS])
+  const [userRiskProfile, setUserRiskProfile] = useState<RiskProfile | null>(null)
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [isSaving, setIsSaving] = useState(false)
@@ -108,10 +118,12 @@ export default function Dashboard() {
     setError(null)
 
     try {
-      const [accountsResult, tradesResult, payoutsResult] = await Promise.all([
+      const [accountsResult, tradesResult, payoutsResult, instrumentsResult, userSettingsResult] = await Promise.all([
         fetchAccounts(),
         fetchTrades(),
         fetchPayouts(),
+        fetchInstrumentSpecs(),
+        fetchUserSettings(),
       ])
 
       if (accountsResult.error) throw accountsResult.error
@@ -122,6 +134,12 @@ export default function Dashboard() {
       setAccounts(accountsResult.data ?? [])
       setAllTrades(loadedTrades)
       setAllPayouts(payoutsResult.data ?? [])
+      // Instrument table / user settings failures shouldn't block the rest
+      // of the dashboard from loading — headroom just degrades to
+      // dollars-only display, which is the same safe fallback as any other
+      // incomplete risk profile.
+      if (!instrumentsResult.error && instrumentsResult.data) setInstrumentSpecs(instrumentsResult.data)
+      if (!userSettingsResult.error) setUserRiskProfile(userSettingsResult.data)
 
       if (loadedTrades.length > 0) {
         const migrated = await migrateLocalTradeMetadata(loadedTrades, updateTrade)
@@ -182,6 +200,15 @@ export default function Dashboard() {
     if (!selectedAccount || !accountStats) return null
     return applyIntradayManualDrawdownToStats(selectedAccount, accountStats)
   }, [selectedAccount, accountStats])
+
+  /** Headroom-in-trades for the selected account's drawdown remaining —
+   *  account override if complete, else the user default, else
+   *  dollars-only (trades: null). See lib/headroom.ts. */
+  const selectedAccountHeadroom = useMemo(() => {
+    if (!selectedAccount || !displayAccountStats) return null
+    const profile = resolveRiskProfile(selectedAccount, userRiskProfile, instrumentSpecs)
+    return getHeadroom(displayAccountStats.drawdownRemaining, profile)
+  }, [selectedAccount, displayAccountStats, userRiskProfile, instrumentSpecs])
 
   const consistencyInfo = useMemo(() => {
     if (!selectedAccount) return null
@@ -348,32 +375,11 @@ export default function Dashboard() {
     return allPayouts.reduce((sum, p) => sum + p.amount, 0)
   }, [allPayouts])
 
-  /** Portfolio summary for accounts overview (display-only aggregates) */
+  /** Portfolio summary for the accounts page — remaining room, not cash totals. */
   const accountsOverview = useMemo(() => {
-    if (accounts.length === 0) return null
-    let totalBalance = 0
-    let totalNetPnL = 0
-    let evalPassed = 0
-    let payoutEligible = 0
-    for (const a of accounts) {
-      const s = calculateAccountStats(a, allTrades, allPayouts)
-      totalBalance += getPortfolioBalance(s.currentBalance, a)
-      totalNetPnL += s.totalPnL
-      if (a.type === "Eval" && a.status === "Passed") evalPassed++
-      if (a.type === "PA") {
-        const el = getPayoutEligibility(a.id, allTrades, a, allPayouts)
-        if (el.isEligible) payoutEligible++
-      }
-    }
-    return {
-      totalBalance,
-      totalNetPnL,
-      accountCount: sumAccountQuantities(accounts),
-      cardCount: accounts.length,
-      evalPassed,
-      payoutEligible,
-    }
-  }, [accounts, allTrades, allPayouts])
+    if (filteredAccounts.length === 0) return null
+    return getAccountsOverview(filteredAccounts, allTrades, allPayouts)
+  }, [filteredAccounts, allTrades, allPayouts])
 
   const handleSelectAccount = (account: Account) => {
     setSelectedAccountId(account.id)
@@ -419,18 +425,90 @@ export default function Dashboard() {
     }
   }
 
-  const handleAddTrade = async (
-    tradeData: { date: string; accountId: string; symbol: string; pnl: number; notes?: string },
-    meta: TradeMeta = {},
-  ) => {
+  const handleSaveUserRiskProfile = async (profile: RiskProfile | null) => {
     setIsSaving(true)
     try {
-      const result = await createTrade(tradeData, meta)
-
+      const result = await saveUserSettings(profile)
       if (result.error) throw result.error
-      if (result.data) {
-        setAllTrades([...allTrades, result.data])
-        toast({ title: "Trade added", description: `${result.data.symbol} trade recorded.` })
+      setUserRiskProfile(profile)
+      toast({
+        title: profile ? "Default risk profile saved" : "Default risk profile cleared",
+        description: profile ? `${profile.symbol} · ${profile.contracts} contract${profile.contracts === 1 ? "" : "s"}` : undefined,
+      })
+    } catch (err) {
+      toast({ title: "Error", description: err instanceof Error ? err.message : "Failed to save settings", variant: "destructive" })
+    } finally {
+      setIsSaving(false)
+    }
+  }
+
+  const handleAddInstrument = async (spec: { symbol: string; label: string; tickSize: number; tickValue: number }) => {
+    try {
+      const result = await upsertUserInstrumentSpec(spec)
+      if (result.error) throw result.error
+      const newSpec = result.data
+      if (newSpec) {
+        setInstrumentSpecs((prev) => [...prev.filter((s) => !(s.symbol === newSpec.symbol && !s.isBuiltin)), newSpec])
+        toast({ title: "Instrument added", description: `${newSpec.symbol} — ${newSpec.label}` })
+      }
+    } catch (err) {
+      toast({ title: "Error", description: err instanceof Error ? err.message : "Failed to add instrument", variant: "destructive" })
+    }
+  }
+
+  const handleDeleteInstrument = async (symbol: string) => {
+    try {
+      const result = await deleteUserInstrumentSpec(symbol)
+      if (result.error) throw result.error
+      setInstrumentSpecs((prev) => prev.filter((s) => !(s.symbol === symbol && !s.isBuiltin)))
+    } catch (err) {
+      toast({ title: "Error", description: err instanceof Error ? err.message : "Failed to remove instrument", variant: "destructive" })
+    }
+  }
+
+  const handleAddTrade = async (
+    tradeData: { date: string; symbol: string; pnl: number; notes?: string },
+    meta: TradeMeta = {},
+    accountIds: string[] = [],
+  ) => {
+    if (accountIds.length === 0) return
+    setIsSaving(true)
+    const created: Trade[] = []
+    const failed: string[] = []
+    try {
+      for (const accountId of accountIds) {
+        const result = await createTrade({ ...tradeData, accountId }, meta)
+        if (result.error || !result.data) {
+          const name = accounts.find((a) => a.id === accountId)?.name ?? accountId
+          failed.push(name)
+        } else {
+          created.push(result.data)
+        }
+      }
+      if (created.length > 0) {
+        setAllTrades((prev) => [...prev, ...created])
+      }
+      const symbol = tradeData.symbol
+      if (failed.length === 0) {
+        toast({
+          title: created.length === 1 ? "Trade added" : "Trades added",
+          description:
+            created.length === 1
+              ? `${symbol} trade recorded.`
+              : `${symbol} logged on ${created.length} accounts.`,
+        })
+      } else if (created.length > 0) {
+        toast({
+          title: "Partial save",
+          description: `${symbol} logged on ${created.length} of ${accountIds.length} accounts. Failed: ${failed.join(", ")}`,
+          variant: "destructive",
+        })
+      } else {
+        toast({
+          title: "Error",
+          description: `Failed to create ${symbol} trade${accountIds.length > 1 ? "s" : ""}.`,
+          variant: "destructive",
+        })
       }
     } catch (err) {
       toast({ title: "Error", description: err instanceof Error ? err.message : "Failed to create trade", variant: "destructive" })
@@ -520,6 +598,9 @@ export default function Dashboard() {
     hasDailyLossLimit?: boolean
     topstepPayoutPath?: TopstepPayoutPath | null
     alphaTier?: AlphaTier | null
+    riskSymbol?: string | null
+    riskContracts?: number | null
+    riskStopTicks?: number | null
   }) => {
     setIsSaving(true)
     try {
@@ -539,6 +620,9 @@ export default function Dashboard() {
         hasDailyLossLimit: updates.hasDailyLossLimit,
         topstepPayoutPath: updates.topstepPayoutPath,
         alphaTier: updates.alphaTier,
+        riskSymbol: updates.riskSymbol,
+        riskContracts: updates.riskContracts,
+        riskStopTicks: updates.riskStopTicks,
       })
 
       if (result.error) throw result.error
@@ -717,11 +801,8 @@ export default function Dashboard() {
             </div>
             <div className="flex justify-between text-sm">
               <span className="text-muted-foreground">Net PnL:</span>
-              <span className={cn(
-                "font-mono font-semibold",
-                deletingTrade.pnl >= 0 ? "text-emerald-500" : "text-red-500"
-              )}>
-                {deletingTrade.pnl >= 0 ? "+" : ""}${deletingTrade.pnl.toFixed(2)}
+              <span className={cn("font-mono font-semibold", pnlColorClass(deletingTrade.pnl))}>
+                {formatPnL(deletingTrade.pnl)}
               </span>
             </div>
           </div>
@@ -737,6 +818,7 @@ export default function Dashboard() {
         onOpenChange={(open) => !open && setEditingAccount(null)}
         onSave={handleUpdateAccount}
         isSaving={isSaving}
+        instrumentSpecs={instrumentSpecs}
       />
 
       {/* Delete Account Modal */}
@@ -860,10 +942,19 @@ export default function Dashboard() {
                   <AddTradeModal
                     accounts={accounts}
                     selectedAccountId={accounts[0]?.id ?? ""}
+                    userDefaultRiskProfile={userRiskProfile}
                     onAddTrade={handleAddTrade}
                   />
                 )}
                 <AddAccountModal onAddAccount={handleAddAccount} />
+                <SettingsModal
+                  specs={instrumentSpecs}
+                  userDefault={userRiskProfile}
+                  onSaveDefault={handleSaveUserRiskProfile}
+                  onAddInstrument={handleAddInstrument}
+                  onDeleteInstrument={handleDeleteInstrument}
+                  isSaving={isSaving}
+                />
                 <Button variant="ghost" size="icon" onClick={handleSignOut} title="Sign out" className="h-9 w-9 shrink-0 border border-white/10 bg-slate-900/55 hover:bg-slate-800/80">
                   <LogOut className="h-4 w-4" />
                 </Button>
@@ -884,45 +975,7 @@ export default function Dashboard() {
               </TabsList>
             </Tabs>
 
-            {accountsOverview && (
-              <div className="mb-2.5 grid grid-cols-2 gap-1.5 sm:mb-5 sm:gap-3 lg:grid-cols-4">
-                <div className="rounded-2xl border border-white/[0.07] bg-[#111318]/75 px-3 py-2.5 shadow-[inset_0_1px_0_0_rgba(255,255,255,0.04)] backdrop-blur-sm sm:px-4 sm:py-3">
-                  <p className="text-[10px] font-medium uppercase tracking-[0.14em] text-slate-500">Total balance</p>
-                  <p className="mt-0.5 font-mono text-base font-semibold tracking-tight text-[#E5E4E2] sm:text-lg">
-                    {formatCurrency(accountsOverview.totalBalance)}
-                  </p>
-                </div>
-                <div className="rounded-2xl border border-white/[0.07] bg-[#111318]/75 px-3 py-2.5 shadow-[inset_0_1px_0_0_rgba(255,255,255,0.04)] backdrop-blur-sm sm:px-4 sm:py-3">
-                  <p className="text-[10px] font-medium uppercase tracking-[0.14em] text-slate-500">Total net PnL</p>
-                  <p
-                    className={cn(
-                      "mt-0.5 font-mono text-base font-semibold tracking-tight sm:text-lg",
-                      accountsOverview.totalNetPnL >= 0 ? "text-emerald-400" : "text-red-400",
-                    )}
-                  >
-                    {formatPnL(accountsOverview.totalNetPnL)}
-                  </p>
-                </div>
-                <div className="rounded-2xl border border-white/[0.07] bg-[#111318]/75 px-3 py-2.5 shadow-[inset_0_1px_0_0_rgba(255,255,255,0.04)] backdrop-blur-sm sm:px-4 sm:py-3">
-                  <p className="text-[10px] font-medium uppercase tracking-[0.14em] text-slate-500">Accounts</p>
-                  <p className="mt-0.5 font-mono text-base font-semibold tracking-tight text-[#E5E4E2] sm:text-lg">
-                    {accountsOverview.accountCount}
-                  </p>
-                  {accountsOverview.cardCount !== accountsOverview.accountCount && (
-                    <p className="text-[10px] text-muted-foreground mt-0.5">
-                      {accountsOverview.cardCount} cards · {accountsOverview.accountCount} accounts
-                    </p>
-                  )}
-                </div>
-                <div className="rounded-2xl border border-white/[0.07] bg-[#111318]/75 px-3 py-2.5 shadow-[inset_0_1px_0_0_rgba(255,255,255,0.04)] backdrop-blur-sm sm:px-4 sm:py-3">
-                  <p className="text-[10px] font-medium uppercase tracking-[0.14em] text-slate-500">Milestones</p>
-                  <p className="mt-0.5 text-[11px] leading-tight text-slate-300 sm:text-sm">
-                    <span className="block"><span className="font-mono text-emerald-400/95">{accountsOverview.evalPassed}</span> eval passed</span>
-                    <span className="block mt-0.5"><span className="font-mono text-[#E5E4E2]">{accountsOverview.payoutEligible}</span> PA ready</span>
-                  </p>
-                </div>
-              </div>
-            )}
+            {accountsOverview && <AccountsOverviewRow overview={accountsOverview} />}
 
             {/* Account Cards Grid */}
             {filteredAccounts.length > 0 ? (
@@ -940,6 +993,8 @@ export default function Dashboard() {
                     account={account}
                     trades={allTrades}
                     payouts={allPayouts}
+                    instrumentSpecs={instrumentSpecs}
+                    userDefaultRiskProfile={userRiskProfile}
                     onClick={() => handleSelectAccount(account)}
                     onActivatePa={
                       eligibleForPa
@@ -1038,6 +1093,7 @@ export default function Dashboard() {
                   <AddTradeModal
                     accounts={accounts}
                     selectedAccountId={selectedAccount.id}
+                    userDefaultRiskProfile={userRiskProfile}
                     onAddTrade={handleAddTrade}
                   />
                   {/* Account Actions Menu */}
@@ -1144,16 +1200,15 @@ export default function Dashboard() {
                   title="Drawdown Remaining"
                   value={formatCurrency(Math.max(0, displayAccountStats!.drawdownRemaining))}
                   change={{
-                    value: `of ${formatCurrency(selectedAccount.maxDrawdown)}`,
+                    value: `of ${formatCurrency(selectedAccount.maxDrawdown)}${selectedAccountHeadroom ? tradesSuffix(selectedAccountHeadroom) : ""}`,
                     isPositive:
                       displayAccountStats!.drawdownRemaining >
                       selectedAccount.maxDrawdown * 0.5,
                   }}
                   subValue={
-                    selectedAccount.drawdownType === "Intraday" &&
-                    hasIntradayManualDrawdown(selectedAccount)
+                    selectedAccount.drawdownType === "Intraday" && hasIntradayManualDrawdown(selectedAccount)
                       ? "Manually updated from Tradovate."
-                      : undefined
+                      : lossEndsAccountText(displayAccountStats!.drawdownRemaining)
                   }
                   titleAction={
                     selectedAccount.drawdownType === "Intraday" ? (
@@ -1177,7 +1232,12 @@ export default function Dashboard() {
 
               {shouldShowAccountRangeCard(selectedAccount) && (
                 <div className="mb-2 sm:mb-4 lg:mb-2">
-                  <AccountRangeCard account={selectedAccount} stats={displayAccountStats!} />
+                  <AccountRangeCard
+                    account={selectedAccount}
+                    stats={displayAccountStats!}
+                    instrumentSpecs={instrumentSpecs}
+                    userDefaultRiskProfile={userRiskProfile}
+                  />
                 </div>
               )}
 
@@ -1204,6 +1264,8 @@ export default function Dashboard() {
                   dailyData={accountDailyData}
                   stats={displayAccountStats!}
                   consistencyInfo={consistencyInfo}
+                  instrumentSpecs={instrumentSpecs}
+                  userDefaultRiskProfile={userRiskProfile}
                   lucidCycleQualifyingDays={
                     selectedAccount.firm === "Lucid" &&
                     selectedAccount.type === "PA" &&
