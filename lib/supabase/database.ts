@@ -15,6 +15,11 @@ import type {
 } from "@/lib/types"
 import { metaToDbPayload, type TradeMeta } from "@/lib/trade-meta"
 import { normalizeSymbol } from "@/lib/instrument-specs"
+import {
+  createScreenshotImportKey,
+  type ImportableScreenshotTradeRow,
+  type ScreenshotImportSource,
+} from "@/lib/screenshot-import"
 
 const VALID_FIRMS: readonly Firm[] = ["Apex", "Lucid", "Tradeify", "Topstep", "Alpha"]
 
@@ -83,6 +88,20 @@ interface TradeRow {
   entry_price?: number | null
   exit_price?: number | null
   contracts?: number | null
+  import_source?: string | null
+  raw_symbol?: string | null
+  is_aggregate?: boolean | null
+  pnl_high?: number | null
+  pnl_low?: number | null
+  commission?: number | null
+  avg_win?: number | null
+  avg_loss?: number | null
+  win_duration_seconds?: number | null
+  loss_duration_seconds?: number | null
+  win_rate_percent?: number | null
+  extraction_confidence?: string | null
+  import_batch_id?: string | null
+  import_key?: string | null
   created_at: string
 }
 
@@ -168,6 +187,169 @@ function rowToTrade(row: TradeRow): Trade {
     entryPrice: row.entry_price != null ? Number(row.entry_price) : undefined,
     exitPrice: row.exit_price != null ? Number(row.exit_price) : undefined,
     contracts: row.contracts != null ? Number(row.contracts) : undefined,
+    importSource: row.import_source === "screenshot" ? "screenshot" : null,
+    rawSymbol: row.raw_symbol ?? null,
+    isAggregate: row.is_aggregate ?? false,
+    pnlHigh: row.pnl_high != null ? Number(row.pnl_high) : null,
+    pnlLow: row.pnl_low != null ? Number(row.pnl_low) : null,
+    commission: row.commission != null ? Number(row.commission) : null,
+    avgWin: row.avg_win != null ? Number(row.avg_win) : null,
+    avgLoss: row.avg_loss != null ? Number(row.avg_loss) : null,
+    winDurationSeconds:
+      row.win_duration_seconds != null ? Number(row.win_duration_seconds) : null,
+    lossDurationSeconds:
+      row.loss_duration_seconds != null ? Number(row.loss_duration_seconds) : null,
+    winRatePercent: row.win_rate_percent != null ? Number(row.win_rate_percent) : null,
+    extractionConfidence:
+      row.extraction_confidence === "high" ||
+      row.extraction_confidence === "medium" ||
+      row.extraction_confidence === "low"
+        ? row.extraction_confidence
+        : null,
+    importBatchId: row.import_batch_id ?? null,
+    importKey: row.import_key ?? null,
+  }
+}
+
+export interface ScreenshotTradeImportRequest {
+  accountId: string
+  source: ScreenshotImportSource
+  filenames: string[]
+  coverageStart: string | null
+  coverageEnd: string | null
+  warnings: string[]
+  rows: ImportableScreenshotTradeRow[]
+}
+
+export interface ScreenshotTradeImportResult {
+  insertedCount: number
+  duplicateCount: number
+  /** True only when the live database has not applied the import migration. */
+  usedCompatibilityMode: boolean
+}
+
+function screenshotNotes(row: ImportableScreenshotTradeRow): string {
+  const details = [
+    `Imported aggregate from screenshot (${row.rawSymbol})`,
+    row.commission != null ? `Commission $${row.commission}` : null,
+    row.pnlHigh != null ? `P&L high $${row.pnlHigh}` : null,
+    row.pnlLow != null ? `P&L low $${row.pnlLow}` : null,
+  ].filter(Boolean)
+  return details.join(" · ")
+}
+
+function rpcUnavailable(error: { code?: string; message?: string } | null): boolean {
+  if (!error) return false
+  return (
+    error.code === "PGRST202" ||
+    error.code === "42883" ||
+    /import_screenshot_trade_rows/i.test(error.message ?? "") &&
+      /schema cache|does not exist|could not find/i.test(error.message ?? "")
+  )
+}
+
+/**
+ * Imports all reviewed rows in one database transaction. Until the migration
+ * is applied to an older local database, a one-statement compatibility insert
+ * preserves core P&L and clearly records the source in notes.
+ */
+export async function importScreenshotTrades(
+  request: ScreenshotTradeImportRequest,
+): Promise<{ data: ScreenshotTradeImportResult | null; error: Error | null }> {
+  const supabase = createClient()
+  const {
+    data: { user },
+  } = await supabase.auth.getUser()
+  if (!user) return { data: null, error: new Error("Not authenticated") }
+  if (request.rows.length === 0) return { data: null, error: new Error("No reviewed rows selected") }
+
+  const rpcRows = request.rows.map((row) => ({
+    trade_date: row.date,
+    symbol: row.symbol,
+    raw_symbol: row.rawSymbol,
+    pnl: row.netPnl,
+    contracts: row.quantity != null && Number.isInteger(row.quantity) ? row.quantity : null,
+    notes: screenshotNotes(row),
+    pnl_high: row.pnlHigh,
+    pnl_low: row.pnlLow,
+    commission: row.commission,
+    avg_win: row.avgWin,
+    avg_loss: row.avgLoss,
+    win_duration_seconds:
+      row.winDurationSeconds != null ? Math.round(row.winDurationSeconds) : null,
+    loss_duration_seconds:
+      row.lossDurationSeconds != null ? Math.round(row.lossDurationSeconds) : null,
+    win_rate_percent: row.winRatePercent,
+    extraction_confidence: row.confidence,
+    import_key: createScreenshotImportKey(request.accountId, row),
+  }))
+
+  const { data, error } = await supabase.rpc("import_screenshot_trade_rows", {
+    p_account_id: request.accountId,
+    p_source: request.source,
+    p_filenames: request.filenames,
+    p_coverage_start: request.coverageStart,
+    p_coverage_end: request.coverageEnd,
+    p_warnings: request.warnings,
+    p_rows: rpcRows,
+  })
+
+  if (!error) {
+    const summary = Array.isArray(data) ? data[0] : data
+    const typed = (summary ?? {}) as { inserted_count?: number; duplicate_count?: number }
+    return {
+      data: {
+        insertedCount: Number(typed.inserted_count ?? 0),
+        duplicateCount: Number(typed.duplicate_count ?? 0),
+        usedCompatibilityMode: false,
+      },
+      error: null,
+    }
+  }
+
+  if (!rpcUnavailable(error)) return { data: null, error: new Error(error.message) }
+
+  // Compatibility path for an existing development DB before the new
+  // migration is applied. This is still a single atomic INSERT statement.
+  const { data: existing, error: existingError } = await supabase
+    .from("trades")
+    .select("date,symbol,pnl,contracts")
+    .eq("account_id", request.accountId)
+  if (existingError) return { data: null, error: new Error(existingError.message) }
+
+  const pending = request.rows.filter(
+    (row) =>
+      !(existing ?? []).some(
+        (trade) =>
+          trade.date === row.date &&
+          String(trade.symbol).toUpperCase() === row.symbol.toUpperCase() &&
+          Number(trade.pnl) === row.netPnl &&
+          (trade.contracts == null ||
+            row.quantity == null ||
+            Number(trade.contracts) === row.quantity),
+      ),
+  )
+  const duplicateCount = request.rows.length - pending.length
+  if (pending.length === 0) {
+    return { data: { insertedCount: 0, duplicateCount, usedCompatibilityMode: true }, error: null }
+  }
+
+  const { error: insertError } = await supabase.from("trades").insert(
+    pending.map((row) => ({
+      user_id: user.id,
+      account_id: request.accountId,
+      date: row.date,
+      symbol: row.symbol,
+      pnl: row.netPnl,
+      notes: screenshotNotes(row),
+      contracts: row.quantity != null && Number.isInteger(row.quantity) ? row.quantity : null,
+    })),
+  )
+  if (insertError) return { data: null, error: new Error(insertError.message) }
+
+  return {
+    data: { insertedCount: pending.length, duplicateCount, usedCompatibilityMode: true },
+    error: null,
   }
 }
 

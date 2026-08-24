@@ -1,7 +1,8 @@
 "use client"
 
 import { format } from "date-fns"
-import { CalendarIcon } from "lucide-react"
+import { useState } from "react"
+import { CalendarIcon, ChevronDown } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Calendar } from "@/components/ui/calendar"
 import { Input } from "@/components/ui/input"
@@ -24,9 +25,7 @@ import type { Account, RiskProfile } from "@/lib/types"
 import {
   DISCIPLINE_POSITIVE,
   DISCIPLINE_NEGATIVE,
-  GRADE_STYLES,
   DIRECTION_OPTIONS,
-  DIRECTION_SELECTOR_STYLES,
   SETUP_TAGS,
   type TradeGrade,
   type DisciplineTag,
@@ -34,7 +33,7 @@ import {
   type TradeMeta,
   type TradeDirection,
 } from "@/lib/trade-meta"
-import { SESSION_OPTIONS, SESSION_SELECTOR_STYLES } from "@/lib/sessions"
+import { SESSION_OPTIONS } from "@/lib/sessions"
 import { TRADING_SYMBOLS } from "@/lib/trading-symbols"
 import {
   TRADE_FIELD,
@@ -95,6 +94,7 @@ export function TradeFormBody({
   onAccountIdsChange,
   userDefaultRiskProfile = null,
 }: TradeFormBodyProps) {
+  const [showDetails, setShowDetails] = useState(false)
   const isMultiAccount = onAccountIdsChange != null
   const selectedIds = isMultiAccount
     ? (accountIds ?? [])
@@ -136,7 +136,7 @@ export function TradeFormBody({
             </Button>
           </PopoverTrigger>
           <PopoverContent
-            className="w-auto p-0 border-[rgba(83,104,120,0.22)] bg-[rgba(10,12,16,0.92)] backdrop-blur-xl"
+            className="w-auto border-[#303034] bg-[#171719] p-0"
             align="start"
             sideOffset={6}
           >
@@ -158,7 +158,7 @@ export function TradeFormBody({
       </div>
 
       {/* Session + Direction */}
-      <div
+      {(!isMultiAccount || showDetails) && <div
         className={cn(
           TRADE_FIELD,
           COL_SESSION_DIR,
@@ -169,7 +169,6 @@ export function TradeFormBody({
           <Label className={TRADE_LABEL}>Session</Label>
           <div className="flex gap-0.5 sm:gap-1">
             {SESSION_OPTIONS.map(({ id, label }) => {
-              const s = SESSION_SELECTOR_STYLES[id]
               const active = meta.session === id
               return (
                 <button
@@ -178,8 +177,8 @@ export function TradeFormBody({
                   disabled={disabled}
                   onClick={() => setMeta({ ...meta, session: id })}
                   className={cn(
-                    "flex-1 text-[11px] font-semibold py-1.5 rounded-lg border transition-all",
-                    active ? s.active : s.inactive,
+                    "flex-1 rounded-[7px] border py-1.5 text-[11px] font-semibold transition-colors",
+                    active ? "border-[#55555B] bg-[#2A2A2D] text-white" : "border-[#2A2A2D] bg-[#171719] text-[var(--muted)] hover:text-white",
                   )}
                 >
                   {label}
@@ -192,7 +191,6 @@ export function TradeFormBody({
           <Label className={TRADE_LABEL}>Dir.</Label>
           <div className="flex gap-0.5 sm:gap-1">
             {DIRECTION_OPTIONS.map(({ id, label }) => {
-              const s = DIRECTION_SELECTOR_STYLES[id]
               const active = meta.direction === id
               return (
                 <button
@@ -201,8 +199,8 @@ export function TradeFormBody({
                   disabled={disabled}
                   onClick={() => setMeta({ ...meta, direction: id as TradeDirection })}
                   className={cn(
-                    "px-2.5 text-[11px] font-semibold py-1.5 rounded-lg border transition-all",
-                    active ? s.active : s.inactive,
+                    "rounded-[7px] border px-2.5 py-1.5 text-[11px] font-semibold transition-colors",
+                    active ? "border-[#55555B] bg-[#2A2A2D] text-white" : "border-[#2A2A2D] bg-[#171719] text-[var(--muted)] hover:text-white",
                   )}
                 >
                   {label}
@@ -211,7 +209,7 @@ export function TradeFormBody({
             })}
           </div>
         </div>
-      </div>
+      </div>}
 
       {/* Account */}
       <div className={cn(TRADE_FIELD, COL_FULL)}>
@@ -219,7 +217,7 @@ export function TradeFormBody({
           {isMultiAccount ? "Accounts" : "Account"}
         </Label>
         {isMultiAccount ? (
-          <div className="max-h-40 overflow-y-auto rounded-[2px] border border-[var(--hairline)] bg-[var(--raised)] divide-y divide-[var(--hairline)]">
+          <div className="max-h-40 divide-y divide-[var(--hairline)] overflow-y-auto rounded-[9px] border border-[#303034] bg-[#171719]">
             {accounts.map((a) => {
               const checked = selectedIds.includes(a.id)
               const qty = getAccountQuantity(a)
@@ -319,12 +317,29 @@ export function TradeFormBody({
           type="number"
           step="0.01"
           placeholder="0.00"
-          value={formData.pnl}
-          onChange={(e) => setFormData({ ...formData, pnl: e.target.value })}
-          className="bg-background font-mono h-9"
-          disabled={disabled}
-        />
+        value={formData.pnl}
+        onChange={(e) => setFormData({ ...formData, pnl: e.target.value })}
+        className="bg-background font-mono h-9"
+        disabled={disabled}
+        required
+      />
       </div>
+
+      {isMultiAccount && (
+        <div className={cn(TRADE_FIELD, COL_FULL)}>
+          <button
+            type="button"
+            onClick={() => setShowDetails((value) => !value)}
+            className="flex w-full items-center justify-between border-t border-[var(--hairline)] pt-3 text-left text-xs font-medium text-[var(--muted)] transition-colors hover:text-[var(--text)]"
+            aria-expanded={showDetails}
+          >
+            Optional trade details
+            <ChevronDown className={cn("h-4 w-4 transition-transform", showDetails && "rotate-180")} />
+          </button>
+        </div>
+      )}
+
+      {(!isMultiAccount || showDetails) && <>
 
       {/* Entry */}
       <div className={cn(TRADE_FIELD, COL_THIRD)}>
@@ -389,7 +404,6 @@ export function TradeFormBody({
         <Label className={cn(TRADE_LABEL, "text-muted-foreground")}>Grade</Label>
         <div className="flex gap-0.5 sm:gap-1 flex-wrap">
           {GRADES.map((grade) => {
-            const s = GRADE_STYLES[grade]
             const active = meta.grade === grade
             return (
               <button
@@ -398,8 +412,8 @@ export function TradeFormBody({
                 disabled={disabled}
                 onClick={() => setMeta({ ...meta, grade: active ? undefined : grade })}
                 className={cn(
-                  "text-[11px] font-semibold px-2 py-0.5 rounded-md border transition-all",
-                  active ? s.activeClassName : s.className,
+                  "rounded-[6px] border px-2 py-0.5 text-[11px] font-semibold transition-colors",
+                  active ? "border-[#55555B] bg-[#2A2A2D] text-white" : "border-[#2A2A2D] text-[var(--muted)] hover:text-white",
                 )}
               >
                 {grade}
@@ -424,8 +438,8 @@ export function TradeFormBody({
                 className={cn(
                   "text-[10px] font-medium px-1.5 py-0.5 rounded border transition-all",
                   active
-                    ? "bg-[rgba(83,104,120,0.18)] border-[rgba(83,104,120,0.38)] text-[#94AAB8]"
-                    : "border-[rgba(83,104,120,0.15)] text-[#E5E4E2]/35 hover:border-[rgba(83,104,120,0.28)] hover:text-[#94AAB8]/70",
+                    ? "border-[#55555B] bg-[#2A2A2D] text-white"
+                    : "border-[#2A2A2D] text-[var(--muted)] hover:text-white",
                 )}
               >
                 {tag}
@@ -450,9 +464,7 @@ export function TradeFormBody({
                   onClick={() => toggleDiscipline(tag)}
                   className={cn(
                     "text-[10px] font-medium px-1.5 py-0.5 rounded border transition-all",
-                    active
-                      ? "bg-teal-500/[0.12] border-teal-500/30 text-teal-300/90"
-                      : "border-teal-500/18 text-teal-400/45 hover:border-teal-500/28 hover:text-teal-400/65",
+                    active ? "border-[#55555B] bg-[#2A2A2D] text-white" : "border-[#2A2A2D] text-[var(--muted)] hover:text-white",
                   )}
                 >
                   {tag}
@@ -471,9 +483,7 @@ export function TradeFormBody({
                   onClick={() => toggleDiscipline(tag)}
                   className={cn(
                     "text-[10px] font-medium px-1.5 py-0.5 rounded border transition-all",
-                    active
-                      ? "bg-amber-500/[0.10] border-amber-500/28 text-amber-400/90"
-                      : "border-amber-500/16 text-amber-400/40 hover:border-amber-500/26 hover:text-amber-400/60",
+                    active ? "border-[#55555B] bg-[#2A2A2D] text-white" : "border-[#2A2A2D] text-[var(--muted)] hover:text-white",
                   )}
                 >
                   {tag}
@@ -495,6 +505,7 @@ export function TradeFormBody({
           disabled={disabled}
         />
       </div>
+      </>}
     </>
   )
 }

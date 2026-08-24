@@ -9,7 +9,7 @@ import { cn } from "@/lib/utils"
 import type { Account, DailyPnL, Trade } from "@/lib/types"
 import { getAccountRules, resolveTradeifyProgram } from "@/lib/rules"
 import { getRuleStartingBalance } from "@/lib/account-quantity"
-import { buildMetaMapFromTrades, DIRECTION_BADGE_STYLES, DIRECTION_LABELS, GRADE_STYLES, type TradeMeta } from "@/lib/trade-meta"
+import { buildMetaMapFromTrades, DIRECTION_LABELS, type TradeMeta } from "@/lib/trade-meta"
 import { resolveSession, SESSION_LABELS } from "@/lib/sessions"
 
 interface TradingCalendarProps {
@@ -142,14 +142,13 @@ export function TradingCalendar({ account, dailyData, trades }: TradingCalendarP
   const selectedDayStats = selectedDate ? getDayStats(selectedDate) : null
 
   const cellShell = cn(
-    "relative flex flex-col items-center justify-center gap-0.5 transition-all rounded-xl",
-    "min-h-[32px] aspect-square sm:min-h-[58px] sm:rounded-2xl sm:aspect-square sm:min-w-0",
-    "lg:aspect-auto lg:w-full lg:justify-center lg:rounded-xl lg:p-1.5",
-    "lg:h-[clamp(78px,11.5dvh,104px)] lg:min-h-[78px] lg:max-h-[104px]",
+    "relative flex flex-col items-center justify-center gap-0.5 rounded-[8px] transition-colors",
+    "min-h-[32px] aspect-square sm:min-h-[58px] sm:aspect-square sm:min-w-0",
+    "lg:aspect-auto lg:h-[72px] lg:w-full lg:justify-center lg:p-1.5 xl:h-[78px]",
   )
 
   return (
-    <Card className="flex flex-col rounded-[20px] sm:rounded-[24px] glass-card p-2 sm:p-4 lg:p-4 max-sm:pb-2 lg:min-h-[min(840px,calc(100dvh-6.5rem))]">
+    <Card className="activity-panel flex flex-col rounded-[14px] border-[#262629] bg-[#101012] p-3 sm:p-6">
       <div className="mb-1 flex flex-shrink-0 flex-col gap-0.5 sm:gap-2 lg:mb-2 lg:gap-2">
         <div className="flex items-center justify-between gap-2">
           <h2 className="text-base font-semibold sm:text-lg">Trading Calendar</h2>
@@ -242,13 +241,13 @@ export function TradingCalendar({ account, dailyData, trades }: TradingCalendarP
                 !hasTrades && isWeekend && "cursor-default border border-white/[0.025] bg-[rgba(10,10,10,0.12)] opacity-60",
                 isSelected && "ring-2 ring-primary ring-offset-1 ring-offset-background sm:ring-offset-2",
                 consistencyWarn &&
-                  "ring-1 ring-amber-500/70 ring-offset-1 ring-offset-background",
+                  "ring-1 ring-white/60 ring-offset-1 ring-offset-background",
                 hasTrades && "cursor-pointer active:scale-[0.96] transition-transform",
               )}
             >
               {consistencyWarn && !qualifiesForPayout && !dailyPayoutReady && (
                 <div
-                  className="absolute left-0.5 top-0.5 h-1.5 w-1.5 rounded-full bg-amber-500 sm:h-2 sm:w-2"
+                  className="absolute left-0.5 top-0.5 h-1.5 w-1.5 rounded-full bg-white sm:h-2 sm:w-2"
                   title="Day exceeds 40% consistency share"
                 />
               )}
@@ -257,9 +256,7 @@ export function TradingCalendar({ account, dailyData, trades }: TradingCalendarP
                   <Star
                     className={cn(
                       "h-2 w-2 sm:h-3 sm:w-3",
-                      dailyPayoutReady && !qualifiesForPayout
-                        ? "fill-emerald-400 text-emerald-400"
-                        : "fill-amber-400 text-amber-400",
+                      "fill-white text-white",
                     )}
                   />
                 </div>
@@ -267,9 +264,7 @@ export function TradingCalendar({ account, dailyData, trades }: TradingCalendarP
               <span
                 className={cn(
                   "text-[13px] font-semibold leading-none sm:text-base lg:text-[15px] xl:text-[16px]",
-                  hasTrades && dayStats.pnl > 0 && "text-emerald-400",
-                  hasTrades && dayStats.pnl < 0 && "text-red-400",
-                  hasTrades && dayStats.pnl === 0 && "text-muted-foreground",
+                  hasTrades && "text-white",
                   !hasTrades && "text-muted-foreground/40",
                 )}
               >
@@ -297,14 +292,7 @@ export function TradingCalendar({ account, dailyData, trades }: TradingCalendarP
                     </span>
                     <span className="text-[10px] text-muted-foreground/50 lg:text-[10px]">·</span>
                     <span
-                      className={cn(
-                        "text-[10px] font-medium tabular-nums lg:text-[10px] xl:text-[11px]",
-                        dayStats.winPercent >= 60
-                          ? "text-emerald-400"
-                          : dayStats.winPercent >= 40
-                            ? "text-amber-400"
-                            : "text-red-400",
-                      )}
+                      className="text-[10px] font-medium tabular-nums text-muted-foreground lg:text-[10px] xl:text-[11px]"
                     >
                       {dayStats.winPercent}%
                     </span>
@@ -361,24 +349,15 @@ export function TradingCalendar({ account, dailyData, trades }: TradingCalendarP
                 <span className="hidden text-muted-foreground/30 sm:inline">|</span>
                 <div className="flex items-center gap-1.5">
                   <span className="text-xs text-muted-foreground sm:text-sm">Win:</span>
-                  <span
-                    className={cn(
-                      "text-xs font-semibold sm:text-sm",
-                      selectedDayStats.winPercent >= 60
-                        ? "text-emerald-500"
-                        : selectedDayStats.winPercent >= 40
-                          ? "text-amber-500"
-                          : "text-red-500",
-                    )}
-                  >
+                  <span className="text-xs font-semibold text-[var(--muted)] sm:text-sm">
                     {selectedDayStats.winPercent}%
                   </span>
                 </div>
                 {showQualifyingStars && selectedDayStats.pnl > 0 && selectedDayStats.pnl >= minQualifyingProfit && (
                   <>
                     <span className="hidden text-muted-foreground/30 sm:inline">|</span>
-                    <span className="flex items-center gap-1 text-xs font-semibold text-amber-400 sm:text-sm">
-                      <Star className="h-3 w-3 fill-amber-400" /> Qualifying Day (${minQualifyingProfit}+)
+                    <span className="flex items-center gap-1 text-xs font-semibold text-white sm:text-sm">
+                      <Star className="h-3 w-3 fill-white" /> Qualifying Day (${minQualifyingProfit}+)
                     </span>
                   </>
                 )}
@@ -414,17 +393,17 @@ export function TradingCalendar({ account, dailyData, trades }: TradingCalendarP
                     <div className="flex items-center gap-2 flex-wrap">
                       <span className="font-mono text-sm font-bold">{trade.symbol}</span>
                       {direction && (
-                        <span className={cn("text-[10px] font-medium px-1.5 py-0.5 rounded border", DIRECTION_BADGE_STYLES[direction])}>
+                        <span className="rounded-[6px] border border-[#303034] bg-[#1B1B1E] px-1.5 py-0.5 text-[10px] font-medium text-[var(--muted)]">
                           {DIRECTION_LABELS[direction]}
                         </span>
                       )}
                       {sessionLabel && (
-                        <span className="text-[10px] font-medium px-1.5 py-0.5 rounded border bg-[rgba(83,104,120,0.10)] text-[#94AAB8] border-[rgba(83,104,120,0.22)]">
+                        <span className="rounded-[6px] border border-[#303034] bg-[#1B1B1E] px-1.5 py-0.5 text-[10px] font-medium text-[var(--muted)]">
                           {sessionLabel}
                         </span>
                       )}
                       {grade && (
-                        <span className={cn("text-[10px] font-semibold px-1.5 py-0.5 rounded border", GRADE_STYLES[grade].activeClassName)}>
+                        <span className="rounded-[6px] border border-[#303034] bg-[#1B1B1E] px-1.5 py-0.5 text-[10px] font-semibold text-[var(--muted)]">
                           {grade}
                         </span>
                       )}
@@ -442,7 +421,7 @@ export function TradingCalendar({ account, dailyData, trades }: TradingCalendarP
                   {setupTags.length > 0 && (
                     <div className="mt-1.5 flex gap-1 flex-wrap">
                       {setupTags.map((tag) => (
-                        <span key={tag} className="text-[9px] font-medium px-1 py-0.5 rounded border bg-[rgba(83,104,120,0.07)] text-[#94AAB8]/70 border-[rgba(83,104,120,0.18)]">
+                        <span key={tag} className="rounded-[6px] border border-[#303034] bg-[#1B1B1E] px-1 py-0.5 text-[9px] font-medium text-[var(--muted)]">
                           {tag}
                         </span>
                       ))}

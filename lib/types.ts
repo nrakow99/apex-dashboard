@@ -96,6 +96,21 @@ export interface Trade {
   entryPrice?: number | null
   exitPrice?: number | null
   contracts?: number | null
+  /** Stable identity for a reviewed screenshot-import row, when available. */
+  importKey?: string | null
+  importSource?: "screenshot" | null
+  rawSymbol?: string | null
+  isAggregate?: boolean
+  pnlHigh?: number | null
+  pnlLow?: number | null
+  commission?: number | null
+  avgWin?: number | null
+  avgLoss?: number | null
+  winDurationSeconds?: number | null
+  lossDurationSeconds?: number | null
+  winRatePercent?: number | null
+  extractionConfidence?: "high" | "medium" | "low" | null
+  importBatchId?: string | null
 }
 
 export interface DailyPnL {

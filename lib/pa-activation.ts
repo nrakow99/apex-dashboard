@@ -32,8 +32,7 @@ export function isEvalEligibleForPaActivation(
   if (account.status === "Breached") return false
 
   const rules = getAccountRules(account)
-  const target =
-    account.profitTarget ?? (rules.hasProfitTarget ? rules.profitTarget : undefined)
+  const target = rules.hasProfitTarget ? rules.profitTarget : undefined
   if (!target || target <= 0) return false
 
   let consistencyOk = true

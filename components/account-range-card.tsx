@@ -22,8 +22,7 @@ export interface AccountRangeStats {
 
 export function shouldShowAccountRangeCard(account: Account): boolean {
   const rules = getAccountRules(account)
-  const effectiveProfitTarget =
-    account.profitTarget ?? (rules.hasProfitTarget ? rules.profitTarget : null)
+  const effectiveProfitTarget = rules.hasProfitTarget ? rules.profitTarget : null
 
   if (account.type === "Eval") return true
   if (effectiveProfitTarget != null && effectiveProfitTarget > 0) return true
@@ -60,8 +59,8 @@ export function AccountRangeCard({
   const isLucidPaOther = account.firm === "Lucid" && account.type === "PA" && lucidFlex == null
 
   const effectiveProfitTarget = useMemo(() => {
-    return account.profitTarget ?? (rules.hasProfitTarget ? rules.profitTarget : null)
-  }, [account.profitTarget, rules.hasProfitTarget, rules.profitTarget])
+    return rules.hasProfitTarget ? rules.profitTarget : null
+  }, [rules.hasProfitTarget, rules.profitTarget])
 
   const hasProfitGoal = effectiveProfitTarget != null && effectiveProfitTarget > 0
   const isEval = account.type === "Eval"
@@ -92,18 +91,18 @@ export function AccountRangeCard({
         span: sp,
         rightTitle: "Peak lock milestone",
         rightValue: (
-          <span className="font-mono text-base font-semibold tracking-tight text-emerald-300/95 sm:text-lg lg:text-base">
+          <span className="font-mono text-base font-semibold tracking-tight text-[var(--text)] sm:text-lg lg:text-base">
             {formatCurrency(lucidFlex.lockPeakThreshold)}{" "}
             <span className="text-[10px] font-medium text-slate-400 sm:text-xs">peak</span>
           </span>
         ),
         bottomRightLabel: locked ? "Floor status" : "Peak to milestone",
         bottomRightValue: locked ? (
-          <span className="font-mono font-semibold text-emerald-400/95">
+          <span className="font-mono font-semibold text-[var(--text)]">
             Locked at {formatCurrency(lucidFlex.lockedFloor)}
           </span>
         ) : (
-          <span className="font-mono font-semibold text-emerald-400/95">
+          <span className="font-mono font-semibold text-[var(--text)]">
             {formatCurrency(Math.max(0, lucidFlex.lockPeakThreshold - peakForFloor))}
           </span>
         ),
@@ -118,14 +117,14 @@ export function AccountRangeCard({
         span: sp,
         rightTitle: "Peak (high water)",
         rightValue: (
-          <span className="font-mono text-base font-semibold tracking-tight text-emerald-300/95 sm:text-lg lg:text-base">
+          <span className="font-mono text-base font-semibold tracking-tight text-[var(--text)] sm:text-lg lg:text-base">
             {formatCurrency(peakForFloor)}{" "}
             <span className="text-[10px] font-medium text-slate-400 sm:text-xs">best</span>
           </span>
         ),
         bottomRightLabel: "Below peak",
         bottomRightValue: (
-          <span className="font-mono font-semibold text-emerald-400/95">
+          <span className="font-mono font-semibold text-[var(--text)]">
             {formatCurrency(Math.max(0, peakForFloor - stats.currentBalance))}
           </span>
         ),
@@ -152,12 +151,12 @@ export function AccountRangeCard({
             : "Target",
       rightValue:
         hasProfitGoal || isEval ? (
-          <span className="font-mono text-base font-semibold tracking-tight text-emerald-300/95 sm:text-lg lg:text-base">
+          <span className="font-mono text-base font-semibold tracking-tight text-[var(--text)] sm:text-lg lg:text-base">
             {formatCurrency(passBalance)}{" "}
             <span className="text-[10px] font-medium text-slate-400 sm:text-xs">target</span>
           </span>
         ) : (
-          <span className="font-mono text-base font-semibold tracking-tight text-emerald-300/95 sm:text-lg lg:text-base">
+          <span className="font-mono text-base font-semibold tracking-tight text-[var(--text)] sm:text-lg lg:text-base">
             {formatCurrency(payoutThreshold)}{" "}
             <span className="text-[10px] font-medium text-slate-400 sm:text-xs">threshold</span>
           </span>
@@ -166,11 +165,11 @@ export function AccountRangeCard({
         hasProfitGoal || isEval ? "Remaining to target" : "Remaining to threshold",
       bottomRightValue:
         hasProfitGoal || isEval ? (
-          <span className="font-mono font-semibold text-emerald-400/95">
+          <span className="font-mono font-semibold text-[var(--text)]">
             {formatCurrency(remainingToProfitGoal)}
           </span>
         ) : (
-          <span className="font-mono font-semibold text-emerald-400/95">
+          <span className="font-mono font-semibold text-[var(--text)]">
             {formatCurrency(remainingToPayout)}
           </span>
         ),
@@ -212,7 +211,7 @@ export function AccountRangeCard({
   const bottomLeftEvalStyle = isEval
   const bottomLeftLabel = bottomLeftEvalStyle ? "Drawdown amount" : "Drawdown remaining"
   const bottomLeftValue = bottomLeftEvalStyle ? (
-    <span className="font-mono font-semibold text-slate-200">{formatCurrency(account.maxDrawdown)}</span>
+    <span className="font-mono font-semibold text-slate-200">{formatCurrency(rules.maxDrawdown)}</span>
   ) : (
     <span className="font-mono font-semibold text-slate-200">
       {formatCurrency(Math.max(0, stats.drawdownRemaining))}
@@ -221,7 +220,7 @@ export function AccountRangeCard({
   )
 
   return (
-    <Card className="glass-card overflow-hidden rounded-[20px] border-white/10 bg-slate-950/35 px-2.5 py-2 shadow-[inset_0_1px_0_0_rgba(255,255,255,0.04)] backdrop-blur-xl sm:rounded-[24px] sm:px-4 sm:py-4 lg:px-3.5 lg:py-2.5 max-sm:py-2">
+    <Card className="overflow-hidden rounded-[14px] border-[#262629] bg-[#101012] p-4 sm:p-6">
       <div className="mb-1 lg:mb-0.5 flex items-center justify-between gap-2">
         <h2 className="text-[10px] font-semibold uppercase tracking-[0.16em] text-slate-400">
           Account range
@@ -236,15 +235,14 @@ export function AccountRangeCard({
       <div className="relative mb-2 lg:mb-1.5">
         <div
           className={cn(
-            "relative h-2.5 overflow-visible rounded-full ring-1 ring-[var(--hairline)] sm:h-3",
+            "relative h-2.5 overflow-visible rounded-[2px] ring-1 ring-[var(--hairline)] sm:h-3",
             "bg-[var(--raised)]",
-            "shadow-[inset_0_1px_2px_rgba(0,0,0,0.35)]",
           )}
           aria-hidden
         >
           {/* Ground covered: floor → current balance */}
           <div
-            className="pointer-events-none absolute inset-y-0 left-0 rounded-l-full bg-[var(--text)]/15"
+            className="pointer-events-none absolute inset-y-0 left-0 bg-[var(--text)]/15"
             style={{ width: `${Math.min(100, balancePct)}%` }}
           />
 
@@ -259,10 +257,10 @@ export function AccountRangeCard({
             className="absolute top-1/2 z-20 flex -translate-x-1/2 -translate-y-1/2 flex-col items-center gap-0.5"
             style={{ left: `${startPct}%` }}
           >
-            <span className="whitespace-nowrap rounded-full border border-cyan-400/40 bg-slate-950/95 px-2 py-0.5 text-[8px] font-semibold uppercase tracking-[0.12em] text-cyan-100/95">
+            <span className="whitespace-nowrap rounded-[2px] border border-[var(--hairline)] bg-[var(--surface)] px-2 py-0.5 text-[8px] font-semibold uppercase tracking-[0.12em] text-[var(--muted)]">
               Start
             </span>
-            <span className="h-1.5 w-1.5 rounded-full border border-cyan-300/70 bg-cyan-400/90 shadow-[0_0_10px_rgba(34,211,238,0.5)] sm:h-2 sm:w-2" />
+            <span className="h-1.5 w-1.5 rounded-full border border-[var(--text)] bg-[var(--surface)] sm:h-2 sm:w-2" />
           </div>
 
           {/* Balance */}
@@ -270,7 +268,7 @@ export function AccountRangeCard({
             className="absolute top-1/2 z-30 -translate-x-1/2 -translate-y-1/2"
             style={{ left: `${balancePct}%` }}
           >
-            <span className="block h-3.5 w-3.5 rounded-full border-2 border-white bg-emerald-400 shadow-[0_0_16px_rgba(52,211,153,0.65)] ring-4 ring-emerald-400/15 sm:h-4 sm:w-4" />
+            <span className="block h-3.5 w-3.5 rounded-full border-2 border-[var(--ground)] bg-[var(--text)] sm:h-4 sm:w-4" />
           </div>
         </div>
 

@@ -38,14 +38,14 @@ export function AccountCardInsightBanner({ insight, className }: AccountCardInsi
   return (
     <div
       className={cn(
-        "flex items-center gap-1.5 py-1.5 px-2 rounded-[2px] border min-h-0",
-        "border-[var(--hairline)] bg-[var(--raised)]",
+        "flex min-h-0 items-center gap-2 rounded-[8px] border px-3 py-2.5",
+        "border-[#29292C] bg-[#171719]",
         className,
       )}
       role="status"
     >
       <InsightIcon tone={insight.tone} />
-      <span className={cn("text-[10px] leading-snug", s.text, s.weight)}>{insight.message}</span>
+      <span className={cn("text-[11px] leading-snug", s.text, s.weight)}>{insight.message}</span>
     </div>
   )
 }

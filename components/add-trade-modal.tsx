@@ -23,6 +23,7 @@ import {
 } from "@/components/trade-modal-layout"
 import { TradeFormBody } from "@/components/trade-form-body"
 import { format } from "date-fns"
+import { TRADING_SYMBOLS } from "@/lib/trading-symbols"
 
 /** Parse a YYYY-MM-DD string as local midnight (avoids UTC day-shift). */
 function parseDateStr(dateStr: string): Date {
@@ -62,7 +63,7 @@ const emptyMeta = (): TradeMeta => ({
 const emptyForm = (accountId: string) => ({
   date: serializeDateStr(new Date()),
   accountId,
-  symbol: "NQM6",
+  symbol: TRADING_SYMBOLS[0] ?? "NQ",
   pnl: "",
   notes: "",
 })
@@ -104,11 +105,13 @@ export function AddTradeModal({
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
     if (accountIds.length === 0) return
+    const parsedPnl = Number(formData.pnl)
+    if (formData.pnl.trim() === "" || !Number.isFinite(parsedPnl)) return
     onAddTrade(
       {
         date: formData.date,
         symbol: formData.symbol.toUpperCase(),
-        pnl: parseFloat(formData.pnl) || 0,
+        pnl: parsedPnl,
         notes: formData.notes.trim() || undefined,
       },
       meta,
@@ -141,9 +144,9 @@ export function AddTradeModal({
         </Button>
       </DialogTrigger>
 
-      <DialogContent className={TRADE_MODAL_CONTENT}>
+      <DialogContent className={`${TRADE_MODAL_CONTENT} rounded-[14px] border-[#303034] bg-[#111113]`}>
         <div className="px-4 pt-4 pb-2.5 sm:px-6 sm:pt-5 sm:pb-3 border-b border-white/[0.06] shrink-0">
-          <DialogTitle className="text-base font-semibold">Add New Trade</DialogTitle>
+          <DialogTitle className="text-base font-medium">Add trade</DialogTitle>
         </div>
 
         <form id="add-trade-form" onSubmit={handleSubmit} className={TRADE_MODAL_FORM}>

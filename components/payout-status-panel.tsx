@@ -83,6 +83,8 @@ interface PayoutEligibility {
   bufferLine?: number
   aboveBuffer?: number
   continuityMax?: number
+  payoutsThisMonth?: number
+  maxPayoutsPerMonth?: number
 }
 
 interface PayoutStatusPanelProps {
@@ -106,7 +108,7 @@ function ChecklistRow({
   tooltip?: string
 }) {
   return (
-    <div className="flex items-center justify-between py-1.5 px-3 rounded-xl bg-slate-900/50 border border-white/5" title={tooltip}>
+    <div className="flex items-center justify-between rounded-[8px] border border-[#2A2A2D] bg-[#171719] px-3 py-2" title={tooltip}>
       <span className="text-sm">{label}</span>
       <div className="flex items-center gap-2">
         <span className={cn("text-xs font-mono", isComplete ? "text-emerald-500" : "text-amber-500")}>
@@ -238,9 +240,67 @@ export function PayoutStatusPanel({ account, eligibility, payouts, onAddPayout }
   if (eligibility.firm === "Topstep") {
     return <TopstepPayoutPanel account={account} eligibility={eligibility} payouts={payouts} onAddPayout={onAddPayout} />
   }
-  // Alpha still falls through to the Apex-shaped panel below — same known
-  // gap as Topstep was until this pass, not yet rebuilt.
+  if (eligibility.firm === "Alpha") {
+    return <AlphaPayoutPanel account={account} eligibility={eligibility} payouts={payouts} onAddPayout={onAddPayout} />
+  }
   return <ApexPayoutPanel account={account} eligibility={eligibility} payouts={payouts} onAddPayout={onAddPayout} />
+}
+
+function AlphaPayoutPanel({ account, eligibility, payouts, onAddPayout }: PayoutStatusPanelProps) {
+  const rules = getAccountRules(account)
+  const [open, setOpen] = useState(false)
+  const [amount, setAmount] = useState("")
+  const [error, setError] = useState<string | null>(null)
+  const conditions = eligibility.conditions ?? {}
+  const parsedAmount = Number(amount)
+
+  const submit = (event: React.FormEvent) => {
+    event.preventDefault()
+    if (!eligibility.isEligible) return setError("Account is not yet eligible for payout")
+    if (!Number.isFinite(parsedAmount) || parsedAmount < rules.minPayoutAmount) return setError(`Minimum payout is $${rules.minPayoutAmount}`)
+    if (parsedAmount > eligibility.maxWithdrawable) return setError(`Maximum available is $${eligibility.maxWithdrawable.toLocaleString()}`)
+    onAddPayout({ date: localTodayKey(), amount: parsedAmount })
+    setAmount("")
+    setOpen(false)
+  }
+
+  return (
+    <Card className="payout-panel h-full rounded-[14px] border-[#262629] bg-[#101012] p-4 sm:p-6">
+      <div className="mb-5 flex items-start justify-between gap-4">
+        <div>
+          <p className="text-[10px] font-medium uppercase tracking-[0.16em] text-[var(--muted)]">Withdrawal readiness</p>
+          <h2 className="mt-1 text-lg font-medium">Payout status</h2>
+          <p className="mt-1 text-xs text-[var(--muted)]">Alpha Qualified · cycle-based payout</p>
+        </div>
+        <Dialog open={open} onOpenChange={(value) => { setOpen(value); setError(null) }}>
+          <DialogTrigger asChild><Button size="sm">Log payout</Button></DialogTrigger>
+          <DialogContent className="rounded-[2px] border-[var(--hairline)] bg-[var(--surface)] sm:max-w-[400px]">
+            <DialogHeader><DialogTitle>Log Alpha payout</DialogTitle></DialogHeader>
+            <form onSubmit={submit} className="mt-4 space-y-4">
+              <div className="space-y-2"><Label>Gross payout amount</Label><Input type="number" step="0.01" value={amount} onChange={(e) => { setAmount(e.target.value); setError(null) }} className="font-mono" /></div>
+              {error && <p className="text-sm text-[var(--text)]">{error}</p>}
+              <Button type="submit" className="w-full">Log payout</Button>
+            </form>
+          </DialogContent>
+        </Dialog>
+      </div>
+      <div className="mb-3 border-l-2 border-[var(--text)] bg-[var(--raised)] p-3">
+        <p className="text-sm font-medium">{eligibility.isEligible ? "Ready to request" : "Requirements remaining"}</p>
+        {!eligibility.isEligible && <p className="mt-1 text-xs text-[var(--muted)]">{eligibility.missingConditions.join(" · ")}</p>}
+      </div>
+      <div className="space-y-1">
+        <ChecklistRow label="Winning days" value={`${eligibility.winningDays ?? 0} / ${rules.minProfitDays}`} isComplete={conditions.hasEnoughWinningDays ?? false} />
+        {rules.hasConsistency && eligibility.consistencyInfo && <ChecklistRow label="Consistency" value={`${rules.consistencyPercent}% max day`} isComplete={conditions.isConsistent ?? false} />}
+        <ChecklistRow label="Monthly requests" value={`${eligibility.payoutsThisMonth ?? 0} / ${rules.maxPayoutsPerMonth}`} isComplete={conditions.hasPayoutsRemainingThisMonth ?? false} />
+      </div>
+      <div className="mt-4 border-t border-[var(--hairline)] pt-4">
+        <p className="text-[10px] uppercase tracking-[0.14em] text-[var(--muted)]">Available to withdraw</p>
+        <p className="mt-1 font-mono text-2xl font-medium">${eligibility.maxWithdrawable.toLocaleString()}</p>
+        <p className="mt-1 text-xs text-[var(--muted)]">{Math.round(rules.payoutMaxPercent * 100)}% of cycle profit, capped at ${rules.payoutAbsoluteCap.toLocaleString()}</p>
+      </div>
+      <PayoutHistory payouts={payouts} showSplit />
+    </Card>
+  )
 }
 
 // ─── Apex Payout Panel ────────────────────────────────────────────────────────
@@ -287,7 +347,7 @@ function ApexPayoutPanel({ account, eligibility, payouts, onAddPayout }: PayoutS
   })()
 
   return (
-    <Card className="p-2.5 sm:p-4 rounded-[20px] sm:rounded-[24px] glass-card h-fit">
+    <Card className="payout-panel h-full rounded-[14px] border-[#262629] bg-[#101012] p-4 sm:p-6">
       {/* Header */}
       <div className="flex items-center justify-between mb-1.5 sm:mb-2.5">
         <h2 className="text-sm sm:text-lg font-semibold">Payout Status</h2>
@@ -542,7 +602,7 @@ function LucidPayoutPanel({ account, eligibility, payouts, onAddPayout }: Payout
   const previewFirm   = previewAmount * (1 - rules.payoutSplit)
 
   return (
-    <Card className="p-2.5 sm:p-4 rounded-[20px] sm:rounded-[24px] glass-card h-fit">
+    <Card className="payout-panel h-full rounded-[14px] border-[#262629] bg-[#101012] p-4 sm:p-6">
       {/* Header */}
       <div className="flex items-center justify-between mb-1.5 sm:mb-2.5">
         <div>
@@ -794,7 +854,7 @@ function TopstepPayoutPanel({ account, eligibility, payouts, onAddPayout }: Payo
   }
 
   return (
-    <Card className="p-2.5 sm:p-4 rounded-[20px] sm:rounded-[24px] glass-card h-fit">
+    <Card className="payout-panel h-full rounded-[14px] border-[#262629] bg-[#101012] p-4 sm:p-6">
       <div className="flex items-center justify-between mb-2">
         <div>
           <h2 className="text-sm sm:text-lg font-semibold">Payout Status</h2>
@@ -997,7 +1057,7 @@ function TradeifyFlexPayoutPanel({ account, eligibility, payouts, onAddPayout }:
   }
 
   return (
-    <Card className="p-2.5 sm:p-4 rounded-[20px] sm:rounded-[24px] glass-card h-fit">
+    <Card className="payout-panel h-full rounded-[14px] border-[#262629] bg-[#101012] p-4 sm:p-6">
       <div className="flex items-center justify-between mb-2">
         <div>
           <h2 className="text-sm sm:text-lg font-semibold">Payout Status</h2>
@@ -1120,7 +1180,7 @@ function TradeifyDailyPayoutPanel({ account, eligibility, payouts, onAddPayout }
   }
 
   return (
-    <Card className="p-2.5 sm:p-4 rounded-[20px] sm:rounded-[24px] glass-card h-fit">
+    <Card className="payout-panel h-full rounded-[14px] border-[#262629] bg-[#101012] p-4 sm:p-6">
       <div className="flex items-center justify-between mb-2">
         <div>
           <h2 className="text-sm sm:text-lg font-semibold">Payout Status</h2>

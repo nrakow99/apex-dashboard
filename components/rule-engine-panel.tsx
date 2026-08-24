@@ -77,7 +77,7 @@ function RuleCard({
 }) {
   return (
     <div className={cn(
-      "p-2.5 sm:p-4 rounded-xl sm:rounded-2xl border transition-all border-[var(--hairline)] bg-[var(--raised)]",
+      "rounded-[10px] border border-[#2A2A2D] bg-[#171719] p-4",
       status === "danger" && "border-l-4 border-l-[var(--text)]",
       status === "warning" && "border-l-2 border-l-[var(--text)]",
       className
@@ -104,8 +104,7 @@ function countVisibleRuleCards(
   hasApexPaScaling: boolean,
   hasTradeifyScaling: boolean,
 ): number {
-  const effectiveProfitTarget =
-    account.profitTarget ?? (rules.hasProfitTarget ? rules.profitTarget : null)
+  const effectiveProfitTarget = rules.hasProfitTarget ? rules.profitTarget : null
 
   let n = 1 // drawdown / floor
   if (rules.hasDLL) n++
@@ -148,8 +147,7 @@ export function RuleEnginePanel({
     stats.drawdownRemaining,
     resolveRiskProfile(account, userDefaultRiskProfile, instrumentSpecs),
   )
-  const effectiveProfitTarget =
-    account.profitTarget ?? (rules.hasProfitTarget ? rules.profitTarget : null)
+  const effectiveProfitTarget = rules.hasProfitTarget ? rules.profitTarget : null
   const lucidQualifyingDaysInCycle =
     (account.firm === "Lucid" || account.firm === "Tradeify") &&
     account.type === "PA" &&
@@ -204,25 +202,28 @@ export function RuleEnginePanel({
           : "danger"
 
   // Drawdown / floor
-  const drawdownPercent = (stats.drawdownRemaining / account.maxDrawdown) * 100
+  const drawdownPercent = rules.maxDrawdown > 0
+    ? (stats.drawdownRemaining / rules.maxDrawdown) * 100
+    : 0
   const drawdownStatus: "good" | "warning" | "danger" =
     drawdownPercent > 50 ? "good" : drawdownPercent > 20 ? "warning" : "danger"
 
   const firmLabel = account.firm ?? "Apex"
 
   return (
-    <Card className="p-2.5 sm:p-5 rounded-[22px] sm:rounded-[26px] glass-card">
-      <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-2 mb-2 sm:mb-5">
+    <Card className="h-full rounded-[14px] border-[#262629] bg-[#101012] p-4 sm:p-6">
+      <div className="mb-5 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div>
-          <h2 className="text-base sm:text-lg font-semibold">Rule Status</h2>
-          <p className="text-[11px] text-muted-foreground mt-0.5 max-w-md">{ruleStatusSubtitle(account, rules)}</p>
+          <p className="text-[10px] font-medium uppercase tracking-[0.16em] text-[var(--muted)]">Compliance</p>
+          <h2 className="mt-1 text-lg font-medium tracking-[-0.02em]">Rule status</h2>
+          <p className="mt-1 max-w-md text-xs text-[var(--muted)]">{ruleStatusSubtitle(account, rules)}</p>
         </div>
         {/* Firm / type — neutral surface, no per-firm or per-type hue */}
         <div className="flex items-center gap-2 shrink-0">
-          <span className="text-xs font-medium px-2.5 py-1 rounded-full border border-[var(--hairline)] bg-[var(--raised)] text-[var(--muted-foreground)]">
+          <span className="rounded-[7px] border border-[#2A2A2D] bg-[#171719] px-2.5 py-1 text-xs font-medium text-[var(--muted)]">
             {firmLabel}
           </span>
-          <span className="text-xs font-medium px-2.5 py-1 rounded-full border border-[var(--hairline)] bg-[var(--raised)] text-[var(--muted-foreground)]">
+          <span className="rounded-[7px] border border-[#2A2A2D] bg-[#171719] px-2.5 py-1 text-xs font-medium text-[var(--muted)]">
             {account.type}
           </span>
         </div>

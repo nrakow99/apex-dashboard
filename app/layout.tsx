@@ -17,7 +17,7 @@ const jetbrainsMono = JetBrains_Mono({
 
 export const metadata = {
   title: "PropDash — Prop Trading Dashboard",
-  description: "Track your prop trading performance across Apex and Lucid Eval, PA, and Live accounts. Rule engine, payout tracking, and session analytics.",
+  description: "Protect funded accounts, track prop-firm rules, and know exactly when you are ready to request a payout.",
   icons: {
     icon: [
       { url: "/icon-dark-32x32.png", sizes: "32x32", type: "image/png" },

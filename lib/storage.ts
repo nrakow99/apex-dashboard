@@ -100,7 +100,8 @@ export function calculateAccountStats(
   const totalPayouts = accountPayouts.reduce((sum, p) => sum + p.amount, 0)
 
   const startingBalance = getRuleStartingBalance(account)
-  const maxDrawdown = account.maxDrawdown
+  const rules = getAccountRules(account)
+  const maxDrawdown = rules.maxDrawdown
   const currentBalance = startingBalance + totalPnL - totalPayouts
 
   const dailyData = calculateDailyPnLData(account.id, trades, account, payouts)
@@ -128,8 +129,6 @@ export function calculateAccountStats(
   const peakBalance = isIntraday
     ? Math.max(highestCompletedEodBalance, currentBalance)
     : highestCompletedEodBalance
-
-  const rules = getAccountRules(account)
 
   let activeEodFloor = peakBalance - maxDrawdown
   const projectedHighest = Math.max(highestCompletedEodBalance, currentBalance)
@@ -1028,7 +1027,7 @@ export function initializeStorage(): { accounts: Account[]; trades: Trade[]; pay
   if (accounts.length === 0) {
     accounts = INITIAL_ACCOUNTS
     saveAccounts(accounts)
-    trades = [{ id: "trade-1", date: getTodayDate(), accountId: "apex-50k-pa", symbol: "NQM6", pnl: 670 }]
+    trades = [{ id: "trade-1", date: getTodayDate(), accountId: "apex-50k-pa", symbol: "NQ", pnl: 670 }]
     saveTrades(trades)
     payouts = []
     savePayouts(payouts)

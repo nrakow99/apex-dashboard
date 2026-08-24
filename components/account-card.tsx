@@ -174,8 +174,7 @@ export function AccountCard({
     ? getConsistencyInfo(account.id, trades, account, payouts)
     : null
 
-  const effectiveProfitTarget =
-    account.profitTarget ?? (rules.hasProfitTarget ? rules.profitTarget : undefined)
+  const effectiveProfitTarget = rules.hasProfitTarget ? rules.profitTarget : undefined
 
   const evalPassed =
     account.type === "Eval" &&
@@ -195,34 +194,25 @@ export function AccountCard({
   const remainingToMinPayoutBalance =
     minPayoutBalanceTarget != null ? Math.max(0, minPayoutBalanceTarget - stats.currentBalance) : null
 
-  const lucidEligibility =
-    (account.firm === "Lucid" || account.firm === "Tradeify") &&
-    account.type === "PA" &&
-    rules.hasPayouts
+  const payoutEligibility =
+    account.type === "PA" && rules.hasPayouts
       ? getPayoutEligibility(account.id, trades, account, payouts)
       : null
 
-  const apexPayoutEligibility =
-    account.firm === "Apex" && account.type === "PA" && rules.hasPayouts
-      ? getPayoutEligibility(account.id, trades, account, payouts)
-      : null
-
-  const isPayoutEligible =
-    (lucidEligibility?.isEligible ?? false) ||
-    (apexPayoutEligibility?.isEligible ?? false)
+  const isPayoutEligible = payoutEligibility?.isEligible ?? false
 
   const health = getAccountHealth({
     account,
     isSafe: stats.isSafe,
     drawdownRemaining: stats.drawdownRemaining,
-    maxDrawdown: account.maxDrawdown,
+    maxDrawdown: rules.maxDrawdown,
     totalPnL: stats.totalPnL,
     evalPassed,
     evalProfitProgress,
     consistencyValid: consistencyInfo ? consistencyInfo.isValid : null,
     hasConsistency: rules.hasConsistency,
     remainingToMinPayout: remainingToMinPayoutBalance,
-    lucidEligible: lucidEligibility?.isEligible ?? false,
+    lucidEligible: payoutEligibility?.isEligible ?? false,
     hasPayouts: rules.hasPayouts,
     isPayoutEligible,
   })
@@ -239,7 +229,7 @@ export function AccountCard({
   })
 
   const floorVal = stats.activeEodFloor ?? stats.minBalance
-  const maxDrawdown = account.maxDrawdown
+  const maxDrawdown = rules.maxDrawdown
   const isBreached = isAccountBreached(account, stats.isSafe)
   const startingBalance = getRuleStartingBalance(account)
   const evalTargetBalance =
@@ -267,59 +257,43 @@ export function AccountCard({
   return (
     <Card
       className={cn(
-        "relative p-3.5 sm:p-6 glass-card glass-card-hover account-card-hover rounded-[2px] cursor-pointer group",
-        "transition-all active:scale-[0.992] active:shadow-none",
+        "group relative h-full cursor-pointer rounded-[14px] border-[#262629] bg-[#101012] p-5 transition-colors hover:border-[#3A3A3E] hover:bg-[#121214] sm:p-6",
+        "active:bg-[#151517]",
         health.severity === "critical" && "border-l-4 border-l-[var(--text)]",
         health.severity === "elevated" && "border-l-2 border-l-[var(--text)]",
       )}
       onClick={onClick}
     >
-      <ChevronRight
-        className="absolute top-5 right-5 h-5 w-5 text-[var(--faint)] group-hover:text-[var(--muted-foreground)] transition-colors pointer-events-none"
-        aria-hidden
-      />
-
-      {/* One badge — structural health only. Identity is text, not pills. */}
-      <span
-        className={cn(
-          "absolute top-12 right-5 inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded-[2px] border tabular-nums pointer-events-none",
-          "border-[var(--hairline)] bg-[var(--raised)]",
-          health.severity === "critical" && "font-bold uppercase tracking-wider text-[var(--text)]",
-          health.severity === "elevated" && "font-semibold tracking-wide text-[var(--text)]",
-          health.severity === "positive" && "font-medium tracking-wide text-[var(--text)]",
-          health.severity === "neutral" && "font-normal tracking-wide text-[var(--muted-foreground)]",
-        )}
-      >
-        {health.severity === "critical" && <AlertTriangle className="h-2.5 w-2.5" aria-hidden />}
-        {health.severity === "elevated" && <AlertTriangle className="h-2.5 w-2.5 opacity-60" aria-hidden />}
-        {health.severity === "positive" && <CheckCircle2 className="h-2.5 w-2.5" aria-hidden />}
-        {health.label}
-      </span>
-
-      {menuSlot && (
-        <div
-          className="absolute top-4 right-12 z-10 opacity-0 pointer-events-none group-hover:opacity-100 group-hover:pointer-events-auto transition-opacity"
-          onClick={(e) => e.stopPropagation()}
-        >
-          {menuSlot}
-        </div>
-      )}
-
-      <div className="mb-4 pr-[76px]">
-        <h3 className="font-semibold text-base sm:text-lg truncate text-[var(--text)]">{account.name}</h3>
-        <p className="mt-1 flex items-center gap-1 text-[11px] text-[var(--muted-foreground)]">
-          {showIdentity && (
-            <span className="truncate">
-              {accountIdentity(account)}
-              {" · "}
+      <div className="mb-6 flex items-start justify-between gap-4">
+        <div className="min-w-0">
+          <div className="flex items-center gap-2">
+            <h3 className="truncate text-base font-semibold tracking-[-0.02em] text-[var(--text)] sm:text-lg">{account.name}</h3>
+            <span className={cn(
+              "inline-flex shrink-0 items-center gap-1 rounded-[6px] border border-[#2B2B2E] bg-[#171719] px-2 py-1 text-[9px] tracking-[0.08em]",
+              health.severity === "critical" && "font-bold uppercase text-white",
+              health.severity === "elevated" && "font-semibold text-white",
+              health.severity === "positive" && "font-medium text-white",
+              health.severity === "neutral" && "text-[var(--muted-foreground)]",
+            )}>
+              {health.severity === "critical" && <AlertTriangle className="h-2.5 w-2.5" aria-hidden />}
+              {health.severity === "elevated" && <AlertTriangle className="h-2.5 w-2.5 opacity-60" aria-hidden />}
+              {health.severity === "positive" && <CheckCircle2 className="h-2.5 w-2.5" aria-hidden />}
+              {health.label}
             </span>
-          )}
-          <span>{account.drawdownType ?? "EOD"}</span>
-          <InfoHint topic="drawdownType" firm={account.firm} />
-        </p>
+          </div>
+          <p className="mt-1.5 flex items-center gap-1 text-[11px] text-[var(--muted-foreground)]">
+            {showIdentity && <span className="truncate">{accountIdentity(account)} · </span>}
+            <span>{account.drawdownType ?? "EOD"}</span>
+            <InfoHint topic="drawdownType" firm={account.firm} />
+          </p>
+        </div>
+        <div className="flex shrink-0 items-center gap-1">
+          {menuSlot && <span onClick={(event) => event.stopPropagation()}>{menuSlot}</span>}
+          <ChevronRight className="h-4 w-4 text-[var(--faint)] transition-colors group-hover:text-white" aria-hidden />
+        </div>
       </div>
 
-      <div className="space-y-4">
+      <div className="space-y-5">
         {isBreached ? (
           <p className="text-sm leading-relaxed text-[var(--text)]">
             This account is breached — stop trading it and contact {account.firm ?? "Apex"}.
@@ -328,7 +302,7 @@ export function AccountCard({
           <>
         {/* Headroom hero — trade count when a profile resolves, dollars otherwise.
             Never invent a trade count. Net PnL is the only signed/colored figure. */}
-        <div className="flex items-end justify-between gap-4">
+        <div className="grid grid-cols-2 gap-5">
           <div className="min-w-0">
             <div className="mb-1 flex items-center gap-1">
               <span className="text-[10px] uppercase tracking-wider text-[var(--muted-foreground)]">
@@ -339,7 +313,7 @@ export function AccountCard({
             {headroom.trades != null ? (
               <>
                 <div className="flex items-baseline gap-1.5">
-                  <span className="font-mono text-3xl sm:text-4xl font-semibold tabular-nums tracking-tight text-[var(--text)]">
+                  <span className="font-mono text-3xl font-medium tabular-nums tracking-[-0.05em] text-[var(--text)]">
                     {headroom.trades}
                   </span>
                   <span className="text-sm text-[var(--muted-foreground)]">
@@ -351,17 +325,17 @@ export function AccountCard({
                 </p>
               </>
             ) : (
-              <div className="font-mono text-3xl sm:text-4xl font-semibold tabular-nums tracking-tight text-[var(--text)]">
+              <div className="font-mono text-3xl font-medium tabular-nums tracking-[-0.05em] text-[var(--text)]">
                 {formatCurrency(headroom.dollars)}
               </div>
             )}
           </div>
-          <div className="shrink-0 text-right">
+          <div className="min-w-0 border-l border-[#29292C] pl-5">
             <div className="mb-1 text-[10px] uppercase tracking-wider text-[var(--muted-foreground)]">
               Net PnL
             </div>
             <div
-              className="font-mono text-base sm:text-lg font-semibold tabular-nums tracking-tight"
+              className="font-mono text-xl font-medium tabular-nums tracking-[-0.04em]"
               style={{ color: pnlColor(stats.totalPnL) }}
             >
               {formatPnL(stats.totalPnL)}
@@ -387,18 +361,18 @@ export function AccountCard({
           {evalTargetBalance != null ? (
             <>
               <div
-                className="relative h-1.5 rounded-[2px] bg-[var(--raised)] ring-1 ring-[var(--hairline)]"
+                className="relative h-1.5 rounded-full bg-[#252528]"
                 role="img"
                 aria-label={`Floor ${formatCurrency(floorVal)}, balance ${formatCurrency(stats.currentBalance)}, target ${formatCurrency(evalTargetBalance)}`}
               >
                 <div
-                  className="absolute inset-y-0 left-0 bg-[var(--text)]/20"
+                  className="absolute inset-y-0 left-0 rounded-full bg-white/30"
                   style={{ width: `${evalBalancePct}%` }}
                 />
                 <div className="absolute left-0 top-1/2 h-2.5 w-px -translate-y-1/2 bg-[var(--text)]" />
                 <div className="absolute right-0 top-1/2 h-2.5 w-px -translate-y-1/2 bg-[var(--text)]" />
                 <div
-                  className="absolute top-1/2 h-2 w-2 -translate-x-1/2 -translate-y-1/2 rounded-[2px] bg-[var(--text)]"
+                  className="absolute top-1/2 h-2 w-2 -translate-x-1/2 -translate-y-1/2 rounded-full bg-[var(--text)]"
                   style={{ left: `${evalBalancePct}%` }}
                 />
               </div>
@@ -410,17 +384,17 @@ export function AccountCard({
           ) : (
             <>
               <div
-                className="relative h-1.5 rounded-[2px] bg-[var(--raised)] ring-1 ring-[var(--hairline)]"
+                className="relative h-1.5 rounded-full bg-[#252528]"
                 role="img"
                 aria-label={`Floor ${formatCurrency(floorVal)}, balance ${formatCurrency(stats.currentBalance)}`}
               >
                 <div
-                  className="absolute inset-y-0 left-0 bg-[var(--text)]/20"
+                  className="absolute inset-y-0 left-0 rounded-full bg-white/30"
                   style={{ width: `${fundedFillPct}%` }}
                 />
                 <div className="absolute left-0 top-1/2 h-2.5 w-px -translate-y-1/2 bg-[var(--text)]" />
                 <div
-                  className="absolute top-1/2 h-2 w-2 -translate-x-1/2 -translate-y-1/2 rounded-[2px] bg-[var(--text)]"
+                  className="absolute top-1/2 h-2 w-2 -translate-x-1/2 -translate-y-1/2 rounded-full bg-[var(--text)]"
                   style={{ left: `${fundedFillPct}%` }}
                 />
               </div>
@@ -434,7 +408,7 @@ export function AccountCard({
           </>
         )}
 
-        <div className="space-y-1.5">
+        <div className="space-y-2 border-t border-[#29292C] pt-4">
           <AccountCardInsightBanner insight={insight} />
           <p className="text-[10px] font-medium tabular-nums tracking-wide text-[var(--faint)]">
             {tenure.daysOwned != null ? `Owned ${tenure.daysOwned}d` : "Owned —"}

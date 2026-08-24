@@ -1,8 +1,9 @@
 "use client"
 
 import { useState, useEffect, useMemo, useCallback } from "react"
+import { AppShell } from "@/components/app-shell"
 import { MetricsCard } from "@/components/metrics-card"
-import { PerformanceChart } from "@/components/performance-chart"
+import { AccountTrajectory } from "@/components/account-trajectory"
 import { TradeHistoryTable } from "@/components/trade-history-table"
 import { TradingCalendar } from "@/components/trading-calendar"
 import { RuleEnginePanel } from "@/components/rule-engine-panel"
@@ -10,6 +11,7 @@ import { AccountCard } from "@/components/account-card"
 import { AccountsOverviewRow } from "@/components/accounts-overview-row"
 import { PayoutStatusPanel } from "@/components/payout-status-panel"
 import { AddTradeModal } from "@/components/add-trade-modal"
+import { ScreenshotImportModal } from "@/components/screenshot-import-modal"
 import { AddAccountModal } from "@/components/add-account-modal"
 import { EditTradeModal } from "@/components/edit-trade-modal"
 import { EditAccountModal } from "@/components/edit-account-modal"
@@ -38,7 +40,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
-import { ArrowLeft, LogOut, Loader2, AlertCircle, RefreshCw, MoreHorizontal, Pencil, Trash2 } from "lucide-react"
+import { ArrowLeft, Loader2, AlertCircle, RefreshCw, MoreHorizontal, Pencil, Trash2 } from "lucide-react"
 import { cn, formatCurrency, formatPnL, pnlColorClass } from "@/lib/utils"
 import { formatRepresentativeTrackingHelper } from "@/lib/account-quantity"
 import { AccountQuantityBadge } from "@/components/account-quantity-badge"
@@ -75,10 +77,8 @@ import {
   getEvalActivationStats,
   isEvalEligibleForPaActivation,
 } from "@/lib/pa-activation"
-import { createClient } from "@/lib/supabase/client"
 import type { Trade, Payout, Account, AccountType, DrawdownType, Firm, DailyPnL, TradeifyProgram, TopstepPayoutPath, AlphaTier, InstrumentSpec, RiskProfile } from "@/lib/types"
 import { migrateLocalTradeMetadata, type TradeMeta } from "@/lib/trade-meta"
-import { RiskMetricsCard } from "@/components/risk-metrics-card"
 import { SettingsModal } from "@/components/settings-modal"
 import { BUILTIN_INSTRUMENTS } from "@/lib/instrument-specs"
 import { resolveRiskProfile, getHeadroom, tradesSuffix, lossEndsAccountText } from "@/lib/headroom"
@@ -118,12 +118,16 @@ export default function Dashboard() {
     setError(null)
 
     try {
-      const [accountsResult, tradesResult, payoutsResult, instrumentsResult, userSettingsResult] = await Promise.all([
+      // Instrument settings and legacy metadata maintenance are optional.
+      // They must never hold the entire Accounts screen on its loading state.
+      const optionalSettings = Promise.all([
+        fetchInstrumentSpecs(),
+        fetchUserSettings(),
+      ])
+      const [accountsResult, tradesResult, payoutsResult] = await Promise.all([
         fetchAccounts(),
         fetchTrades(),
         fetchPayouts(),
-        fetchInstrumentSpecs(),
-        fetchUserSettings(),
       ])
 
       if (accountsResult.error) throw accountsResult.error
@@ -134,16 +138,24 @@ export default function Dashboard() {
       setAccounts(accountsResult.data ?? [])
       setAllTrades(loadedTrades)
       setAllPayouts(payoutsResult.data ?? [])
-      // Instrument table / user settings failures shouldn't block the rest
-      // of the dashboard from loading — headroom just degrades to
-      // dollars-only display, which is the same safe fallback as any other
-      // incomplete risk profile.
-      if (!instrumentsResult.error && instrumentsResult.data) setInstrumentSpecs(instrumentsResult.data)
-      if (!userSettingsResult.error) setUserRiskProfile(userSettingsResult.data)
 
+      // Headroom safely starts with the verified built-in instrument table.
+      // User overrides can hydrate independently once Supabase responds.
+      void optionalSettings.then(([instrumentsResult, userSettingsResult]) => {
+        if (!instrumentsResult.error && instrumentsResult.data) {
+          setInstrumentSpecs(instrumentsResult.data)
+        }
+        if (!userSettingsResult.error) setUserRiskProfile(userSettingsResult.data)
+      })
+
+      // Legacy localStorage migration is maintenance, not page-critical data.
+      // Run it after first render so a stale browser lock cannot trap the UI.
       if (loadedTrades.length > 0) {
-        const migrated = await migrateLocalTradeMetadata(loadedTrades, updateTrade)
-        if (migrated.length > 0) setAllTrades(migrated)
+        void migrateLocalTradeMetadata(loadedTrades, updateTrade)
+          .then((migrated) => {
+            if (migrated.length > 0) setAllTrades(migrated)
+          })
+          .catch(() => undefined)
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to load data")
@@ -156,12 +168,14 @@ export default function Dashboard() {
     loadData()
   }, [loadData])
 
-  // Sign out handler
-  const handleSignOut = async () => {
-    const supabase = createClient()
-    await supabase.auth.signOut()
-    window.location.href = "/auth/login"
-  }
+  useEffect(() => {
+    if (accounts.length === 0 || typeof window === "undefined") return
+    const accountId = new URLSearchParams(window.location.search).get("account")
+    if (!accountId || !accounts.some((account) => account.id === accountId)) return
+    setSelectedAccountId(accountId)
+    setViewMode("detail")
+    window.history.replaceState({}, "", "/")
+  }, [accounts])
 
   // Get selected account
   const selectedAccount = useMemo(() => {
@@ -228,6 +242,79 @@ export default function Dashboard() {
     return getPayoutEligibility(selectedAccount.id, allTrades, selectedAccount, allPayouts)
   }, [selectedAccount, allTrades, allPayouts])
 
+  const accountDirective = useMemo(() => {
+    if (!selectedAccount || !accountStats || !displayAccountStats) return null
+    const rules = getAccountRules(selectedAccount)
+    const room = Math.max(0, displayAccountStats.drawdownRemaining)
+    const roomFraction = rules.maxDrawdown > 0 ? room / rules.maxDrawdown : 1
+
+    if (selectedAccount.status === "Breached" || !displayAccountStats.isSafe) {
+      return {
+        eyebrow: "Trading decision",
+        title: "Do not trade this account",
+        body: `The active floor has been breached. Keep it out of today’s rotation and confirm next steps with ${selectedAccount.firm}.`,
+        action: "Review rule status",
+        target: "rule-status",
+        critical: true,
+      }
+    }
+
+    if (roomFraction <= 0.25) {
+      return {
+        eyebrow: "Protect first",
+        title: `${formatCurrency(room)} of loss room remains`,
+        body: "This is the tightest constraint on the account. Reduce exposure before pursuing another objective.",
+        action: "Review risk limits",
+        target: "rule-status",
+        critical: true,
+      }
+    }
+
+    if (payoutEligibility?.isEligible) {
+      return {
+        eyebrow: "Best next move",
+        title: "Payout request is ready",
+        body: `${formatCurrency(payoutEligibility.maxWithdrawable)} is currently available within this account’s verified payout rules.`,
+        action: "Review payout",
+        target: "payout-status",
+        critical: false,
+      }
+    }
+
+    if (selectedAccount.type === "PA" && payoutEligibility) {
+      return {
+        eyebrow: "Next payout gate",
+        title: payoutEligibility.missingConditions[0] ?? "Continue building the payout buffer",
+        body: `${formatCurrency(room)} of loss room remains while this requirement is completed.`,
+        action: "See payout checklist",
+        target: "payout-status",
+        critical: false,
+      }
+    }
+
+    if (selectedAccount.type === "Eval" && rules.hasProfitTarget) {
+      const target = rules.profitTarget
+      const remaining = Math.max(0, target - accountStats.totalPnL)
+      return {
+        eyebrow: "Evaluation objective",
+        title: remaining > 0 ? `${formatCurrency(remaining)} to the profit target` : "Profit target reached",
+        body: `${formatCurrency(room)} of loss room remains. The objective is progress without compressing the floor buffer.`,
+        action: "Review pass rules",
+        target: "rule-status",
+        critical: false,
+      }
+    }
+
+    return {
+      eyebrow: "Account posture",
+      title: "Within current limits",
+      body: `${formatCurrency(room)} of loss room remains. No more specific verified objective is available for this account.`,
+      action: "Review account rules",
+      target: "rule-status",
+      critical: false,
+    }
+  }, [selectedAccount, accountStats, displayAccountStats, payoutEligibility])
+
   const selectedEvalEligible = useMemo(() => {
     if (!selectedAccount || selectedAccount.type !== "Eval") return false
     const at = allTrades.filter((t) => t.accountId === selectedAccount.id)
@@ -290,9 +377,7 @@ export default function Dashboard() {
     }
 
     if (selectedAccount.type === "Eval") {
-      const pt =
-        selectedAccount.profitTarget ??
-        (rules.hasProfitTarget ? rules.profitTarget : null)
+      const pt = rules.hasProfitTarget ? rules.profitTarget : null
 
       if (rules.hasProfitTarget && pt != null && pt > 0) {
         return {
@@ -745,9 +830,9 @@ export default function Dashboard() {
   if (isLoading) {
     return (
       <div className="min-h-screen premium-shell flex items-center justify-center">
-        <div className="glass-card rounded-3xl px-8 py-7 flex flex-col items-center gap-3">
-            <div className="rounded-full border border-[#536878]/25 bg-[#536878]/[0.08] p-3 shadow-[0_0_28px_-16px_rgba(83,104,120,0.45)]">
-            <Loader2 className="h-7 w-7 animate-spin text-emerald-400" />
+        <div className="flex flex-col items-center gap-3 rounded-[2px] border border-[var(--hairline)] bg-[var(--surface)] px-8 py-7">
+            <div className="rounded-[2px] border border-[var(--hairline)] bg-[var(--raised)] p-3">
+            <Loader2 className="h-7 w-7 animate-spin text-[var(--text)]" />
           </div>
           <p className="text-sm text-slate-300">Loading your accounts...</p>
         </div>
@@ -905,7 +990,7 @@ export default function Dashboard() {
 
       {/* Error toast */}
       {error && accounts.length > 0 && (
-        <div className="fixed top-4 right-4 z-50 bg-red-500/10 border border-red-400/30 text-red-300 px-4 py-3 rounded-2xl backdrop-blur-xl flex items-center gap-3">
+        <div className="fixed right-4 top-4 z-50 flex items-center gap-3 rounded-[2px] border border-[var(--hairline)] bg-[var(--raised)] px-4 py-3 text-[var(--text)]">
           <AlertCircle className="h-4 w-4" />
           <span className="text-sm">{error}</span>
           <button onClick={() => setError(null)} className="text-red-500/70 hover:text-red-500">
@@ -916,70 +1001,166 @@ export default function Dashboard() {
 
       {/* Saving indicator */}
       {isSaving && (
-        <div className="fixed top-4 left-1/2 -translate-x-1/2 z-50 bg-slate-950/80 border border-white/10 px-4 py-2 rounded-2xl backdrop-blur-xl flex items-center gap-2 shadow-lg">
+        <div className="fixed left-1/2 top-4 z-50 flex -translate-x-1/2 items-center gap-2 rounded-[2px] border border-[var(--hairline)] bg-[var(--raised)] px-4 py-2">
           <Loader2 className="h-4 w-4 animate-spin" />
           <span className="text-sm">Saving...</span>
         </div>
       )}
 
-      <div className="max-w-[1680px] mx-auto px-3 sm:px-5 lg:px-6 py-3 sm:py-4 lg:py-3">
+      <AppShell
+        eyebrow={viewMode === "accounts" ? "Portfolio control" : `${selectedAccount?.firm ?? "Account"} · ${selectedAccount?.type ?? ""}`}
+        title={viewMode === "accounts" ? "Accounts" : selectedAccount?.name ?? "Account"}
+        description={
+          viewMode === "accounts"
+            ? "Know which accounts can be traded, protected, or paid out."
+            : selectedAccount
+              ? `${selectedAccount.drawdownType ?? "EOD"} drawdown · live rule and payout position`
+              : undefined
+        }
+        leading={viewMode === "detail" ? (
+          <Button variant="ghost" size="icon" onClick={handleBack} className="h-10 w-10 shrink-0 rounded-[10px] border border-[#2A2A2D] bg-[#141416]">
+            <ArrowLeft className="h-4 w-4" />
+          </Button>
+        ) : undefined}
+        actions={viewMode === "accounts" ? <>
+          {totalCashWithdrawn > 0 && (
+            <div className="mr-1 hidden border-r border-[var(--hairline)] pr-4 sm:block">
+              <p className="text-[9px] uppercase tracking-[0.15em] text-[var(--muted)]">Withdrawn</p>
+              <p className="mt-1 font-mono text-sm font-medium">{formatCurrency(totalCashWithdrawn)}</p>
+            </div>
+          )}
+          {accounts.length > 0 && (
+            <>
+              <ScreenshotImportModal
+                accounts={accounts}
+                selectedAccountId={accounts[0]?.id ?? ""}
+                existingTrades={allTrades}
+                onImported={async (result) => {
+                  const refreshed = await fetchTrades()
+                  if (refreshed.error) throw refreshed.error
+                  setAllTrades(refreshed.data ?? [])
+                  toast({
+                    title: result.insertedCount > 0 ? "Trading history imported" : "No new rows imported",
+                    description: [
+                      result.insertedCount > 0
+                        ? `${result.insertedCount} reviewed row${result.insertedCount === 1 ? "" : "s"} added.`
+                        : null,
+                      result.duplicateCount > 0
+                        ? `${result.duplicateCount} duplicate${result.duplicateCount === 1 ? " was" : "s were"} skipped.`
+                        : null,
+                      result.usedCompatibilityMode
+                        ? "Core P&L was saved; apply the latest database migration to retain full import metadata."
+                        : null,
+                    ]
+                      .filter(Boolean)
+                      .join(" "),
+                  })
+                }}
+              />
+              <AddTradeModal
+                accounts={accounts}
+                selectedAccountId={accounts[0]?.id ?? ""}
+                userDefaultRiskProfile={userRiskProfile}
+                onAddTrade={handleAddTrade}
+              />
+            </>
+          )}
+          <AddAccountModal onAddAccount={handleAddAccount} />
+          <SettingsModal
+            specs={instrumentSpecs}
+            userDefault={userRiskProfile}
+            onSaveDefault={handleSaveUserRiskProfile}
+            onAddInstrument={handleAddInstrument}
+            onDeleteInstrument={handleDeleteInstrument}
+            isSaving={isSaving}
+          />
+        </> : selectedAccount ? <>
+          <select
+            aria-label="Select account"
+            value={selectedAccount.id}
+            onChange={(event) => setSelectedAccountId(event.target.value)}
+            className="h-10 max-w-[220px] rounded-[9px] border border-[#2A2A2D] bg-[#141416] px-3 text-xs text-white outline-none focus:border-[#48484D]"
+          >
+            {accounts.map((account) => <option key={account.id} value={account.id}>{account.name}</option>)}
+          </select>
+          <div className="hidden xl:block"><LiveClock /></div>
+          {selectedAccount.type === "Eval" && selectedEvalEligible && (
+            <Button
+              size="sm"
+              className="rounded-[9px] bg-white text-black hover:bg-white/90"
+              onClick={() => {
+                setActivatePaEval(selectedAccount)
+                setActivatePaOpen(true)
+              }}
+            >
+              Activate PA
+            </Button>
+          )}
+          <ScreenshotImportModal
+            accounts={accounts}
+            selectedAccountId={selectedAccount.id}
+            existingTrades={allTrades}
+            onImported={async (result) => {
+              const refreshed = await fetchTrades()
+              if (refreshed.error) throw refreshed.error
+              setAllTrades(refreshed.data ?? [])
+              toast({
+                title: result.insertedCount > 0 ? "Trading history imported" : "No new rows imported",
+                description: [
+                  result.insertedCount > 0
+                    ? `${result.insertedCount} reviewed row${result.insertedCount === 1 ? "" : "s"} added.`
+                    : null,
+                  result.duplicateCount > 0
+                    ? `${result.duplicateCount} duplicate${result.duplicateCount === 1 ? " was" : "s were"} skipped.`
+                    : null,
+                  result.usedCompatibilityMode
+                    ? "Core P&L was saved; apply the latest database migration to retain full import metadata."
+                    : null,
+                ]
+                  .filter(Boolean)
+                  .join(" "),
+              })
+            }}
+          />
+          <AddTradeModal
+            accounts={accounts}
+            selectedAccountId={selectedAccount.id}
+            userDefaultRiskProfile={userRiskProfile}
+            onAddTrade={handleAddTrade}
+          />
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="ghost" size="icon" className="h-10 w-10 rounded-[9px] border border-[#2A2A2D] bg-[#141416]">
+                <MoreHorizontal className="h-4 w-4" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-40">
+              <DropdownMenuItem onClick={() => setEditingAccount(selectedAccount)}><Pencil className="mr-2 h-4 w-4" />Edit Account</DropdownMenuItem>
+              <DropdownMenuItem onClick={() => setDeletingAccount(selectedAccount)} className="text-red-500 focus:text-red-500"><Trash2 className="mr-2 h-4 w-4" />Delete Account</DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        </> : undefined}
+      >
         {viewMode === "accounts" ? (
           <>
-            {/* Header */}
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 sm:gap-3 mb-3 sm:mb-5">
-              <h1 className="text-2xl sm:text-3xl font-semibold tracking-tight text-slate-100">Accounts</h1>
-              <div className="flex items-center gap-1.5 sm:gap-4 flex-wrap w-full sm:w-auto [&_button]:h-9">
-                {/* Total Cash Withdrawn */}
-                {totalCashWithdrawn > 0 && (
-                  <div className="text-right pr-3 sm:pr-4 border-r border-white/10">
-                    <div className="text-[10px] sm:text-[11px] text-muted-foreground uppercase tracking-wider">Withdrawn</div>
-                    <div className="text-base sm:text-lg font-semibold font-mono text-emerald-500">
-                      {formatCurrency(totalCashWithdrawn)}
-                    </div>
-                  </div>
-                )}
-                {accounts.length > 0 && (
-                  <AddTradeModal
-                    accounts={accounts}
-                    selectedAccountId={accounts[0]?.id ?? ""}
-                    userDefaultRiskProfile={userRiskProfile}
-                    onAddTrade={handleAddTrade}
-                  />
-                )}
-                <AddAccountModal onAddAccount={handleAddAccount} />
-                <SettingsModal
-                  specs={instrumentSpecs}
-                  userDefault={userRiskProfile}
-                  onSaveDefault={handleSaveUserRiskProfile}
-                  onAddInstrument={handleAddInstrument}
-                  onDeleteInstrument={handleDeleteInstrument}
-                  isSaving={isSaving}
-                />
-                <Button variant="ghost" size="icon" onClick={handleSignOut} title="Sign out" className="h-9 w-9 shrink-0 border border-white/10 bg-slate-900/55 hover:bg-slate-800/80">
-                  <LogOut className="h-4 w-4" />
-                </Button>
-              </div>
-            </div>
-
             {/* Account Type Tabs */}
-            <Tabs
-              value={accountFilter}
-              onValueChange={(v) => setAccountFilter(v as AccountType | "All")}
-              className="mb-3 sm:mb-4"
-            >
-              <TabsList>
-                <TabsTrigger value="All">All</TabsTrigger>
-                <TabsTrigger value="Eval">Eval</TabsTrigger>
-                <TabsTrigger value="PA">PA</TabsTrigger>
-                <TabsTrigger value="Live">Live</TabsTrigger>
-              </TabsList>
-            </Tabs>
+            <div className="mb-4 flex items-center justify-between gap-4">
+              <Tabs value={accountFilter} onValueChange={(v) => setAccountFilter(v as AccountType | "All")}>
+                <TabsList>
+                  <TabsTrigger value="All">All</TabsTrigger>
+                  <TabsTrigger value="Eval">Eval</TabsTrigger>
+                  <TabsTrigger value="PA">Funded</TabsTrigger>
+                  <TabsTrigger value="Live">Live</TabsTrigger>
+                </TabsList>
+              </Tabs>
+              <p className="text-xs text-[var(--muted)]">{filteredAccounts.length} account{filteredAccounts.length === 1 ? "" : "s"}</p>
+            </div>
 
             {accountsOverview && <AccountsOverviewRow overview={accountsOverview} />}
 
             {/* Account Cards Grid */}
             {filteredAccounts.length > 0 ? (
-              <div className="grid gap-2.5 sm:gap-5 md:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">
+              <div className="grid gap-4 md:grid-cols-2 2xl:grid-cols-3">
                 {filteredAccounts.map((account) => {
                   const tradesForAccount = allTrades.filter((t) => t.accountId === account.id)
                   const payoutsForAccount = allPayouts.filter((p) => p.accountId === account.id)
@@ -1010,7 +1191,7 @@ export default function Dashboard() {
                           <Button
                             variant="ghost"
                             size="icon"
-                            className="h-7 w-7 rounded-lg border border-white/[0.10] bg-[rgba(10,12,16,0.80)] backdrop-blur-sm text-slate-500 hover:text-[#E5E4E2] hover:border-[#536878]/30"
+                            className="h-8 w-8 rounded-[8px] border border-[#2B2B2E] bg-[#171719] text-slate-500 hover:border-[#424247] hover:text-white"
                           >
                             <MoreHorizontal className="h-3.5 w-3.5" />
                           </Button>
@@ -1035,10 +1216,10 @@ export default function Dashboard() {
                 })}
               </div>
             ) : (
-              <div className="text-center py-14 sm:py-20 glass-card rounded-[28px] border border-[rgba(83,104,120,0.12)]">
+              <div className="rounded-[14px] border border-[#262629] bg-[#101012] py-14 text-center sm:py-20">
                 <div className="mb-3 flex justify-center">
-                  <div className="h-10 w-10 rounded-2xl bg-[rgba(83,104,120,0.10)] border border-[rgba(83,104,120,0.20)] flex items-center justify-center">
-                    <span className="text-lg font-bold text-[#536878]">P</span>
+                  <div className="flex h-10 w-10 items-center justify-center rounded-[10px] border border-[#2B2B2E] bg-[#171719]">
+                    <span className="text-lg font-bold text-white">P</span>
                   </div>
                 </div>
                 <p className="text-lg font-semibold text-[#E5E4E2]/70 mb-1">No accounts yet</p>
@@ -1053,82 +1234,40 @@ export default function Dashboard() {
           selectedAccount &&
           accountStats && (
             <>
-              {/* Detail Header */}
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 sm:gap-3 mb-3 sm:mb-4 lg:mb-2">
-                <div className="flex items-center gap-3 sm:gap-4">
-                  <Button variant="ghost" size="icon" onClick={handleBack} className="h-9 w-9 sm:h-10 sm:w-10 lg:h-9 lg:w-9 shrink-0 border border-white/10 bg-slate-900/70">
-                    <ArrowLeft className="h-5 w-5" />
-                  </Button>
-                  <div className="min-w-0">
-                    <div className="flex items-center gap-2 flex-wrap">
-                      <h1 className="text-xl sm:text-3xl lg:text-2xl font-semibold tracking-tight truncate">{selectedAccount.name}</h1>
-                      <AccountQuantityBadge account={selectedAccount} className="text-xs" />
-                    </div>
-                    <p className="text-sm sm:text-base text-muted-foreground">
-                      {selectedAccount.type} Account
-                      {formatRepresentativeTrackingHelper(selectedAccount) && (
-                        <span className="block text-[11px] text-[#94AAB8]/90 mt-0.5">
-                          {formatRepresentativeTrackingHelper(selectedAccount)}
-                        </span>
-                      )}
-                    </p>
-                  </div>
-                </div>
-                <div className="flex items-center gap-2 sm:gap-4 flex-wrap justify-end mt-1 sm:mt-0">
-                  <div className="hidden sm:block">
-                    <LiveClock />
-                  </div>
-                  {selectedAccount.type === "Eval" && selectedEvalEligible && (
-                      <Button
-                        size="sm"
-                        className="bg-gradient-to-r from-emerald-600/90 to-[#536878]/90 hover:from-emerald-500 hover:to-[#536878] shadow-sm shadow-emerald-900/20"
-                        onClick={() => {
-                          setActivatePaEval(selectedAccount)
-                          setActivatePaOpen(true)
-                        }}
-                      >
-                        Activate PA
-                      </Button>
-                    )}
-                  <AddTradeModal
-                    accounts={accounts}
-                    selectedAccountId={selectedAccount.id}
-                    userDefaultRiskProfile={userRiskProfile}
-                    onAddTrade={handleAddTrade}
-                  />
-                  {/* Account Actions Menu */}
-                  <DropdownMenu>
-                    <DropdownMenuTrigger asChild>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className="h-8 w-8 border border-white/[0.10] bg-[rgba(10,12,16,0.70)] text-slate-500 hover:text-[#E5E4E2] hover:border-[#536878]/30"
-                      >
-                        <MoreHorizontal className="h-4 w-4" />
-                      </Button>
-                    </DropdownMenuTrigger>
-                    <DropdownMenuContent align="end" className="w-40">
-                      <DropdownMenuItem onClick={() => setEditingAccount(selectedAccount)}>
-                        <Pencil className="h-4 w-4 mr-2" />
-                        Edit Account
-                      </DropdownMenuItem>
-                      <DropdownMenuItem 
-                        onClick={() => setDeletingAccount(selectedAccount)}
-                        className="text-red-500 focus:text-red-500"
-                      >
-                        <Trash2 className="h-4 w-4 mr-2" />
-                        Delete Account
-                      </DropdownMenuItem>
-                    </DropdownMenuContent>
-                  </DropdownMenu>
-                  <Button variant="ghost" size="icon" onClick={handleSignOut} title="Sign out" className="border border-white/10 bg-slate-900/55 hover:bg-slate-800/80">
-                    <LogOut className="h-4 w-4" />
-                  </Button>
-                </div>
+              <div className="mb-5 flex flex-wrap items-center gap-2">
+                <AccountQuantityBadge account={selectedAccount} className="text-xs" />
+                {formatRepresentativeTrackingHelper(selectedAccount) && (
+                  <span className="text-[11px] text-[var(--muted)]">{formatRepresentativeTrackingHelper(selectedAccount)}</span>
+                )}
               </div>
 
+              {accountDirective && (
+                <div className="mb-5 grid gap-4 xl:grid-cols-[minmax(0,1.65fr)_minmax(300px,.7fr)]">
+                  <AccountTrajectory account={selectedAccount} data={accountDailyData} stats={displayAccountStats!} />
+                  <div className={cn(
+                    "flex min-h-[280px] flex-col justify-between rounded-[14px] border border-[#262629] bg-[#101012] p-6",
+                    accountDirective.critical && "border-l-4 border-l-white",
+                  )}>
+                    <div>
+                      <p className="text-[9px] font-medium uppercase tracking-[0.17em] text-[var(--muted)]">{accountDirective.eyebrow}</p>
+                      <h2 className="mt-3 text-2xl font-medium leading-tight tracking-[-0.035em]">{accountDirective.title}</h2>
+                      <p className="mt-3 text-sm leading-relaxed text-[var(--muted)]">{accountDirective.body}</p>
+                    </div>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      className="mt-8 w-full justify-between rounded-[9px]"
+                      onClick={() => document.getElementById(accountDirective.target)?.scrollIntoView({ behavior: "smooth", block: "start" })}
+                    >
+                      {accountDirective.action}
+                      <ArrowLeft className="h-4 w-4 rotate-180" />
+                    </Button>
+                  </div>
+                </div>
+              )}
+
               {/* TOP ROW: Stats Cards */}
-              <div className="grid gap-1.5 sm:gap-3 lg:gap-2 grid-cols-1 lg:grid-cols-5 mb-2 sm:mb-4 lg:mb-2">
+              <div className="mb-5 grid grid-cols-2 gap-px overflow-hidden rounded-[12px] border border-[var(--hairline)] bg-[var(--hairline)] lg:grid-cols-5 [&>*]:border-0">
                 <MetricsCard
                   className="order-1 lg:order-none"
                   title="Account Balance"
@@ -1200,10 +1339,10 @@ export default function Dashboard() {
                   title="Drawdown Remaining"
                   value={formatCurrency(Math.max(0, displayAccountStats!.drawdownRemaining))}
                   change={{
-                    value: `of ${formatCurrency(selectedAccount.maxDrawdown)}${selectedAccountHeadroom ? tradesSuffix(selectedAccountHeadroom) : ""}`,
+                    value: `of ${formatCurrency(getAccountRules(selectedAccount).maxDrawdown)}${selectedAccountHeadroom ? tradesSuffix(selectedAccountHeadroom) : ""}`,
                     isPositive:
                       displayAccountStats!.drawdownRemaining >
-                      selectedAccount.maxDrawdown * 0.5,
+                      getAccountRules(selectedAccount).maxDrawdown * 0.5,
                   }}
                   subValue={
                     selectedAccount.drawdownType === "Intraday" && hasIntradayManualDrawdown(selectedAccount)
@@ -1230,35 +1369,12 @@ export default function Dashboard() {
                 />
               </div>
 
-              {shouldShowAccountRangeCard(selectedAccount) && (
-                <div className="mb-2 sm:mb-4 lg:mb-2">
-                  <AccountRangeCard
-                    account={selectedAccount}
-                    stats={displayAccountStats!}
-                    instrumentSpecs={instrumentSpecs}
-                    userDefaultRiskProfile={userRiskProfile}
-                  />
-                </div>
-              )}
-
-              {/* ROW 1.5: Risk Metrics */}
-              {accountTrades.length > 0 && (
-                <div className="mb-2 sm:mb-4 lg:mb-2">
-                  <RiskMetricsCard trades={accountTrades} />
-                </div>
-              )}
-
-              {/* ROW 2: Full Width Chart */}
-              <div className="mb-3 sm:mb-8 lg:mb-[4.25rem]">
-                <PerformanceChart
-                  data={accountDailyData}
-                  account={selectedAccount}
-                  stats={displayAccountStats!}
-                />
-              </div>
-
-              {/* ROW 3: Full Width Rule Status */}
-              <div className="mb-2 sm:mb-4">
+              <div id="rule-status" className={cn(
+                "mb-6 grid items-start gap-4",
+                selectedAccount.type === "PA" && payoutEligibility && getAccountRules(selectedAccount).hasPayouts
+                  ? "xl:grid-cols-[minmax(0,1.55fr)_minmax(340px,.75fr)]"
+                  : "grid-cols-1",
+              )}>
                 <RuleEnginePanel
                   account={selectedAccount}
                   dailyData={accountDailyData}
@@ -1278,38 +1394,32 @@ export default function Dashboard() {
                         : undefined
                   }
                 />
-              </div>
-
-              {/* ROW 4: Full Width Calendar */}
-              <div className="mb-2.5 sm:mb-6 lg:mb-10">
-                <TradingCalendar account={selectedAccount} dailyData={accountDailyData} trades={accountTrades} />
-              </div>
-
-              {/* ROW 5: Trade History + Payout Status (PA only) */}
-              <div className={cn(
-                "grid gap-2.5 sm:gap-5",
-                selectedAccount.type === "PA" && payoutEligibility ? "lg:grid-cols-[minmax(0,2.2fr)_minmax(320px,1fr)]" : ""
-              )}>
-                <TradeHistoryTable 
-                  trades={accountTrades}
-                  onEditTrade={setEditingTrade}
-                  onDeleteTrade={setDeletingTrade}
-                />
-                {selectedAccount.type === "PA" &&
-                  payoutEligibility &&
-                  getAccountRules(selectedAccount).hasPayouts && (
-                  <PayoutStatusPanel
-                    account={selectedAccount}
-                    eligibility={payoutEligibility}
-                    payouts={accountPayouts}
-                    onAddPayout={handleAddPayout}
-                  />
+                {selectedAccount.type === "PA" && payoutEligibility && getAccountRules(selectedAccount).hasPayouts && (
+                  <div id="payout-status">
+                    <PayoutStatusPanel
+                      account={selectedAccount}
+                      eligibility={payoutEligibility}
+                      payouts={accountPayouts}
+                      onAddPayout={handleAddPayout}
+                    />
+                  </div>
                 )}
+              </div>
+
+              {shouldShowAccountRangeCard(selectedAccount) && (
+                <div className="mb-6">
+                  <AccountRangeCard account={selectedAccount} stats={displayAccountStats!} instrumentSpecs={instrumentSpecs} userDefaultRiskProfile={userRiskProfile} />
+                </div>
+              )}
+
+              <div className="space-y-4">
+                <TradingCalendar account={selectedAccount} dailyData={accountDailyData} trades={accountTrades} />
+                <TradeHistoryTable trades={accountTrades} onEditTrade={setEditingTrade} onDeleteTrade={setDeletingTrade} />
               </div>
             </>
           )
         )}
-      </div>
+      </AppShell>
     </div>
   )
 }

@@ -32,7 +32,7 @@ export default function LoginPage() {
       setError(error.message)
       setIsLoading(false)
     } else {
-      window.location.href = "/"
+      window.location.href = "/today"
     }
   }
 

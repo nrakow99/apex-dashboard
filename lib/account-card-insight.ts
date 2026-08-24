@@ -91,8 +91,7 @@ function avgPositiveDayPnl(account: Account, trades: Trade[], payouts: Payout[])
 function buildEvalInsight(ctx: AccountInsightContext): AccountCardInsight {
   const { account, trades, payouts, tradingDays, totalPnL } = ctx
   const rules = getAccountRules(account)
-  const effectiveProfitTarget =
-    account.profitTarget ?? (rules.hasProfitTarget ? rules.profitTarget : null)
+  const effectiveProfitTarget = rules.hasProfitTarget ? rules.profitTarget : null
 
   const consistencyInfo = rules.hasConsistency
     ? getConsistencyInfo(account.id, trades, account, payouts)
@@ -199,13 +198,16 @@ function getQualifyingDaysRemaining(
   if (eligibility.firm === "Tradeify" && eligibility.tradeifyProgram === "select_flex") {
     return Math.max(0, rules.minProfitDays - (eligibility.winningDays ?? 0))
   }
+  if (eligibility.firm === "Topstep" || eligibility.firm === "Alpha") {
+    return Math.max(0, (eligibility.minProfitDays ?? 0) - (eligibility.cycleProfitDays ?? 0))
+  }
   return Math.max(0, rules.minProfitDays - (eligibility.consistencyInfo?.daysWithMinProfit ?? 0))
 }
 
 function buildPaInsight(ctx: AccountInsightContext): AccountCardInsight {
   const { account, trades, payouts, tradingDays, drawdownRemaining } = ctx
   const rules = getAccountRules(account)
-  const maxDrawdown = account.maxDrawdown
+  const maxDrawdown = rules.maxDrawdown
 
   if (tradingDays === 0) {
     return { message: "No trades logged yet", tone: "muted" }

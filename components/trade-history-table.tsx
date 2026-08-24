@@ -13,8 +13,8 @@ import {
 import { cn, formatPnL, pnlColorClass } from "@/lib/utils"
 import { ChevronRight, MoreHorizontal, Pencil, Trash2 } from "lucide-react"
 import type { Trade } from "@/lib/types"
-import { buildMetaMapFromTrades, GRADE_STYLES, DISCIPLINE_POSITIVE, DIRECTION_BADGE_STYLES, DIRECTION_LABELS, type TradeMeta } from "@/lib/trade-meta"
-import { resolveSession, SESSION_LABELS, SESSION_BADGE_STYLES } from "@/lib/sessions"
+import { buildMetaMapFromTrades, DISCIPLINE_POSITIVE, DIRECTION_LABELS, type TradeMeta } from "@/lib/trade-meta"
+import { resolveSession, SESSION_LABELS } from "@/lib/sessions"
 
 interface TradeHistoryTableProps {
   trades: Trade[]
@@ -47,7 +47,7 @@ function SessionBadge({ meta }: { meta: TradeMeta }) {
   const session = resolveSession(meta)
   if (!session) return null
   return (
-    <span className={cn("text-[10px] font-semibold uppercase tracking-wider px-1.5 py-0.5 rounded border", SESSION_BADGE_STYLES[session])}>
+    <span className="rounded-[6px] border border-[#303034] bg-[#1B1B1E] px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-[var(--muted)]">
       {SESSION_LABELS[session]}
     </span>
   )
@@ -57,10 +57,8 @@ function SessionBadge({ meta }: { meta: TradeMeta }) {
 
 function GradePill({ grade }: { grade?: string }) {
   if (!grade) return null
-  const s = GRADE_STYLES[grade as keyof typeof GRADE_STYLES]
-  if (!s) return null
   return (
-    <span className={cn("text-[10px] font-bold px-1.5 py-0.5 rounded-md border", s.activeClassName)}>
+    <span className="rounded-[6px] border border-[#303034] bg-[#1B1B1E] px-1.5 py-0.5 text-[10px] font-bold text-[var(--muted)]">
       {grade}
     </span>
   )
@@ -70,11 +68,10 @@ function GradePill({ grade }: { grade?: string }) {
 
 function DirectionBadge({ direction }: { direction?: string }) {
   if (!direction) return null
-  const style = DIRECTION_BADGE_STYLES[direction as keyof typeof DIRECTION_BADGE_STYLES]
   const label = DIRECTION_LABELS[direction as keyof typeof DIRECTION_LABELS]
-  if (!style || !label) return null
+  if (!label) return null
   return (
-    <span className={cn("text-[10px] font-semibold uppercase tracking-wider px-1.5 py-0.5 rounded border", style)}>
+    <span className="rounded-[6px] border border-[#303034] bg-[#1B1B1E] px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-[var(--muted)]">
       {label}
     </span>
   )
@@ -94,7 +91,7 @@ function TradeDetailPanel({ trade, meta, colSpan }: { trade: Trade; meta: TradeM
     <TableRow className="border-none hover:bg-transparent">
       <TableCell colSpan={colSpan} className="p-0">
         <div className="overflow-hidden animate-in slide-in-from-top-1 fade-in duration-200">
-          <div className="mx-2.5 mb-2 mt-0.5 rounded-xl bg-[rgba(83,104,120,0.05)] border border-[rgba(83,104,120,0.12)] p-2 sm:p-3">
+          <div className="mx-2.5 mb-2 mt-0.5 rounded-[9px] border border-[#2A2A2D] bg-[#171719] p-2 sm:p-3">
             {!hasMeta ? (
               <p className="text-[11px] text-[#E5E4E2]/25 italic">No details recorded.</p>
             ) : (
@@ -138,7 +135,7 @@ function TradeDetailPanel({ trade, meta, colSpan }: { trade: Trade; meta: TradeM
                     {meta.setupTags.map((tag) => (
                       <span
                         key={tag}
-                        className="text-[10px] font-medium px-1.5 py-0.5 rounded border bg-[rgba(83,104,120,0.10)] border-[rgba(83,104,120,0.22)] text-[#94AAB8]/80"
+                        className="rounded-[6px] border border-[#303034] bg-[#1B1B1E] px-1.5 py-0.5 text-[10px] font-medium text-[var(--muted)]"
                       >
                         {tag}
                       </span>
@@ -154,12 +151,7 @@ function TradeDetailPanel({ trade, meta, colSpan }: { trade: Trade; meta: TradeM
                       return (
                         <span
                           key={tag}
-                          className={cn(
-                            "text-[10px] font-medium px-1.5 py-0.5 rounded border",
-                            isPositive
-                              ? "bg-teal-500/[0.08] border-teal-500/22 text-teal-300/70"
-                              : "bg-amber-500/[0.07] border-amber-500/20 text-amber-400/65",
-                          )}
+                          className={cn("rounded-[6px] border border-[#303034] bg-[#1B1B1E] px-1.5 py-0.5 text-[10px] font-medium text-[var(--muted)]", isPositive && "font-semibold text-white")}
                         >
                           {tag}
                         </span>
@@ -227,7 +219,7 @@ export function TradeHistoryTable({ trades, onEditTrade, onDeleteTrade }: TradeH
 
   if (trades.length === 0) {
     return (
-      <Card className="rounded-[20px] sm:rounded-[24px] glass-card overflow-hidden">
+      <Card className="activity-panel overflow-hidden rounded-[14px] border-[#262629] bg-[#101012]">
         <div className="px-3 sm:px-[18px] py-2.5 sm:py-3.5 border-b border-white/[0.07]">
           <h2 className="text-sm sm:text-lg font-semibold">Trade History</h2>
         </div>
@@ -241,7 +233,7 @@ export function TradeHistoryTable({ trades, onEditTrade, onDeleteTrade }: TradeH
   }
 
   return (
-    <Card className="rounded-[20px] sm:rounded-[24px] glass-card overflow-hidden">
+    <Card className="activity-panel overflow-hidden rounded-[14px] border-[#262629] bg-[#101012]">
       <div className="px-3 sm:px-[18px] py-2.5 sm:py-3.5 border-b border-white/[0.07] flex items-center justify-between">
         <h2 className="text-sm sm:text-lg font-semibold">Trade History</h2>
         <span className="text-[11px] text-muted-foreground tabular-nums">
@@ -335,7 +327,7 @@ export function TradeHistoryTable({ trades, onEditTrade, onDeleteTrade }: TradeH
                   <TableCell className="px-2 sm:px-3 hidden sm:table-cell">
                     <div className="flex gap-1 flex-wrap items-center">
                       {group.symbols.slice(0, 3).map((sym) => (
-                        <span key={sym} className="font-mono text-[11px] font-semibold px-1.5 py-0.5 rounded-md bg-[rgba(83,104,120,0.13)] text-[#94AAB8] border border-[rgba(83,104,120,0.18)]">
+                        <span key={sym} className="rounded-[6px] border border-[#303034] bg-[#1B1B1E] px-1.5 py-0.5 font-mono text-[11px] font-semibold text-[var(--muted)]">
                           {sym}
                         </span>
                       ))}
@@ -365,9 +357,7 @@ export function TradeHistoryTable({ trades, onEditTrade, onDeleteTrade }: TradeH
 
                   {/* Win rate */}
                   <TableCell className="text-right px-2 sm:px-3 hidden md:table-cell">
-                    <span className={cn("text-xs font-medium tabular-nums",
-                      group.winRate >= 60 ? "text-emerald-500" : group.winRate >= 40 ? "text-amber-400" : "text-red-500",
-                    )}>
+                    <span className="text-xs font-medium tabular-nums text-[var(--muted)]">
                       {group.winRate}%
                     </span>
                   </TableCell>
@@ -385,7 +375,7 @@ export function TradeHistoryTable({ trades, onEditTrade, onDeleteTrade }: TradeH
                           </DropdownMenuTrigger>
                           <DropdownMenuContent align="end" className="w-40">
                             {onEditTrade && <DropdownMenuItem onClick={() => onEditTrade(singleTrade)}><Pencil className="h-4 w-4 mr-2" />Edit Trade</DropdownMenuItem>}
-                            {onDeleteTrade && <DropdownMenuItem onClick={() => onDeleteTrade(singleTrade)} className="text-red-500 focus:text-red-500"><Trash2 className="h-4 w-4 mr-2" />Delete Trade</DropdownMenuItem>}
+                            {onDeleteTrade && <DropdownMenuItem onClick={() => onDeleteTrade(singleTrade)} className="font-semibold"><Trash2 className="h-4 w-4 mr-2" />Delete Trade</DropdownMenuItem>}
                           </DropdownMenuContent>
                         </DropdownMenu>
                       )}
@@ -467,7 +457,7 @@ export function TradeHistoryTable({ trades, onEditTrade, onDeleteTrade }: TradeH
                       </DropdownMenuTrigger>
                       <DropdownMenuContent align="end" className="w-40">
                               {onEditTrade && <DropdownMenuItem onClick={() => onEditTrade(trade)}><Pencil className="h-4 w-4 mr-2" />Edit Trade</DropdownMenuItem>}
-                              {onDeleteTrade && <DropdownMenuItem onClick={() => onDeleteTrade(trade)} className="text-red-500 focus:text-red-500"><Trash2 className="h-4 w-4 mr-2" />Delete Trade</DropdownMenuItem>}
+                              {onDeleteTrade && <DropdownMenuItem onClick={() => onDeleteTrade(trade)} className="font-semibold"><Trash2 className="h-4 w-4 mr-2" />Delete Trade</DropdownMenuItem>}
                       </DropdownMenuContent>
                     </DropdownMenu>
                   </TableCell>

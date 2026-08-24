@@ -8,6 +8,7 @@ import { applyIntradayManualDrawdownToStats } from "@/lib/intraday-manual-drawdo
 import { getAccountQuantity } from "@/lib/account-quantity"
 import { getAccountDaysOwned } from "@/lib/account-card-insight"
 import { localTodayKey } from "@/lib/date-utils"
+import { getAccountRules } from "@/lib/rules"
 
 /** Same cutoff as the account-card "At Risk" badge. */
 export const AT_RISK_DRAWDOWN_FRACTION = 0.18
@@ -47,6 +48,7 @@ export function getAccountsOverview(
   let needsUpdate = 0
 
   for (const account of accounts) {
+    const rules = getAccountRules(account)
     const qty = getAccountQuantity(account)
     const stats = applyIntradayManualDrawdownToStats(
       account,
@@ -59,8 +61,8 @@ export function getAccountsOverview(
     roomToday += Math.max(0, stats.drawdownRemaining) * qty
 
     if (
-      account.maxDrawdown > 0 &&
-      stats.drawdownRemaining < account.maxDrawdown * AT_RISK_DRAWDOWN_FRACTION
+      rules.maxDrawdown > 0 &&
+      stats.drawdownRemaining < rules.maxDrawdown * AT_RISK_DRAWDOWN_FRACTION
     ) {
       atRisk += qty
     }
