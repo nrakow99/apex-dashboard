@@ -7,30 +7,35 @@ import { AddTradeModal } from "@/components/add-trade-modal"
 import { AppShell } from "@/components/app-shell"
 import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
-import { fetchAccounts, fetchPayouts, fetchTrades, createTrade } from "@/lib/supabase/database"
+import { fetchAccounts, fetchInstrumentSpecs, fetchPayouts, fetchTrades, fetchUserSettings, createTrade } from "@/lib/supabase/database"
 import { localTodayKey } from "@/lib/date-utils"
 import { formatCurrency, formatPnL, pnlColorClass, cn } from "@/lib/utils"
-import type { Account, Payout, Trade } from "@/lib/types"
+import type { Account, InstrumentSpec, Payout, RiskProfile, Trade } from "@/lib/types"
 import type { TradeMeta } from "@/lib/trade-meta"
 import { buildTodayAccounts } from "@/lib/today-dashboard"
+import { buildComplianceItems } from "@/lib/compliance-center"
 
 export default function TodayPage() {
   const [accounts, setAccounts] = useState<Account[]>([])
   const [trades, setTrades] = useState<Trade[]>([])
   const [payouts, setPayouts] = useState<Payout[]>([])
+  const [instrumentSpecs, setInstrumentSpecs] = useState<InstrumentSpec[]>([])
+  const [userRiskProfile, setUserRiskProfile] = useState<RiskProfile | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
   const load = useCallback(async () => {
     setLoading(true)
     setError(null)
-    const [accountResult, tradeResult, payoutResult] = await Promise.all([fetchAccounts(), fetchTrades(), fetchPayouts()])
+    const [accountResult, tradeResult, payoutResult, specsResult, settingsResult] = await Promise.all([fetchAccounts(), fetchTrades(), fetchPayouts(), fetchInstrumentSpecs(), fetchUserSettings()])
     const failure = accountResult.error ?? tradeResult.error ?? payoutResult.error
     if (failure) setError(failure.message)
     else {
       setAccounts(accountResult.data ?? [])
       setTrades(tradeResult.data ?? [])
       setPayouts(payoutResult.data ?? [])
+      setInstrumentSpecs(specsResult.data ?? [])
+      setUserRiskProfile(settingsResult.data ?? null)
     }
     setLoading(false)
   }, [])
@@ -41,17 +46,22 @@ export default function TodayPage() {
     () => buildTodayAccounts(accounts, trades, payouts, localTodayKey()),
     [accounts, trades, payouts],
   )
+  const complianceItems = useMemo(
+    () => buildComplianceItems({ accounts, trades, payouts, instrumentSpecs, userRiskProfile }),
+    [accounts, instrumentSpecs, payouts, trades, userRiskProfile],
+  )
+  const attentionItems = complianceItems.filter((entry) => entry.kind !== "ready")
 
   const todayPnl = rows.reduce((sum, row) => sum + row.todayPnl, 0)
   const readyCount = rows.filter((row) => row.payoutReady).length
   const breachedCount = rows.filter((row) => row.breached).length
   const configurationCount = rows.filter((row) => !row.rulesAvailable).length
   const activeTodayCount = rows.filter((row) => row.tradeCountToday > 0).length
-  const needsAttention = rows.filter(
-    (row) => row.breached || !row.rulesAvailable || (row.drawdownPercent != null && row.drawdownPercent <= 0.25),
-  ).length
+  const needsAttention = attentionItems.length
   const briefing = breachedCount > 0
     ? `${breachedCount} account${breachedCount === 1 ? " is" : "s are"} off limits. Keep risk on the healthy accounts.`
+    : complianceItems.some((entry) => entry.kind === "blocker")
+      ? complianceItems.find((entry) => entry.kind === "blocker")!.title + "."
     : configurationCount > 0
       ? `${configurationCount} account${configurationCount === 1 ? " needs" : "s need"} rule configuration before its risk can be trusted.`
     : readyCount > 0
@@ -104,7 +114,7 @@ export default function TodayPage() {
             <p className="mt-3 text-lg font-medium">{posture}</p>
             <p className="mt-1 text-sm leading-relaxed text-[var(--muted)]">
               {needsAttention > 0
-                ? `${needsAttention} account${needsAttention === 1 ? " needs" : "s need"} protection today.`
+                ? `${needsAttention} compliance item${needsAttention === 1 ? " needs" : "s need"} attention today.`
                 : activeTodayCount === 0
                   ? "Waiting for the first reviewed result."
                   : "No urgent risk flags detected."}
@@ -127,16 +137,25 @@ export default function TodayPage() {
               {rows.map((row) => <Link href={`/?account=${row.account.id}`} key={row.account.id} className={cn("grid grid-cols-[minmax(0,1fr)_auto] gap-5 border-b border-[var(--hairline)] p-4 transition-colors last:border-0 hover:bg-[var(--raised)] sm:grid-cols-[minmax(0,1fr)_120px_170px] sm:items-center sm:px-5", (row.breached || !row.rulesAvailable) && "border-l-2 border-l-[var(--text)]")}>
                 <div><p className="font-medium">{row.account.name}</p><p className="mt-1 text-xs text-[var(--muted)]">{row.breached ? "Do not trade · breached" : !row.rulesAvailable ? "Rules unavailable · update account" : `${row.account.firm} · ${row.account.type}`}</p></div>
                 <div className="text-right"><p className="text-[10px] uppercase tracking-[0.12em] text-[var(--muted)]">Today</p><p className={cn("mt-1 font-mono text-sm", pnlColorClass(row.todayPnl))}>{formatPnL(row.todayPnl)}</p></div>
-                <div className="col-span-2 sm:col-span-1"><div className="flex justify-between text-[10px] text-[var(--muted)]"><span>Loss room</span><span className="font-mono text-[var(--text)]">{row.drawdownRemaining == null ? "Unavailable" : formatCurrency(row.drawdownRemaining)}</span></div>{row.drawdownPercent != null && <div className="mt-2 h-1 rounded-full bg-[var(--hairline)]"><div className="h-full rounded-full bg-[var(--text)]" style={{ width: `${Math.min(100, row.drawdownPercent * 100)}%` }} /></div>}{row.dailyRemaining != null && <p className="mt-2 text-[10px] text-[var(--muted)]">Daily room {formatCurrency(row.dailyRemaining)}</p>}</div>
+                <div className="col-span-2 sm:col-span-1"><div className="flex justify-between text-[10px] text-[var(--muted)]"><span>Loss room</span><span className="font-mono text-[var(--text)]">{row.drawdownRemaining == null ? "Unavailable" : formatCurrency(row.drawdownRemaining)}</span></div>{row.drawdownPercent != null && <div className="mt-2 h-1 rounded-[2px] bg-[var(--hairline)]"><div className="h-full rounded-[2px] bg-[var(--text)]" style={{ width: `${Math.min(100, row.drawdownPercent * 100)}%` }} /></div>}{row.dailyRemaining != null && <p className="mt-2 text-[10px] text-[var(--muted)]">Daily room {formatCurrency(row.dailyRemaining)}</p>}</div>
               </Link>)}
             </div>
           </section>
-          <aside>
-            <p className="text-[10px] uppercase tracking-[0.16em] text-[var(--muted)]">Next payout</p><h2 className="mb-3 mt-1 text-xl font-medium">Readiness</h2>
-            <div className="space-y-2">
+          <aside className="space-y-7">
+            <section>
+              <div className="mb-3 flex items-end justify-between"><div><p className="text-[10px] uppercase tracking-[0.16em] text-[var(--muted)]">Action center</p><h2 className="mt-1 text-xl font-medium">Next moves</h2></div><Link href="/compliance" className="text-xs text-[var(--muted)] hover:text-white">View all</Link></div>
+              <div className="space-y-2">
+                {complianceItems.length === 0 && <Card className="rounded-[2px] border-[var(--hairline)] bg-[var(--surface)] p-4"><p className="text-sm">No open compliance actions</p><p className="mt-1 text-xs text-[var(--muted)]">Continue checking the firm portal before requests.</p></Card>}
+                {complianceItems.slice(0, 3).map((entry) => <Link href={entry.href} key={entry.id} className="block"><Card className={cn("rounded-[2px] border-[var(--hairline)] bg-[var(--surface)] p-4 transition-colors hover:border-[var(--faint)] hover:bg-[var(--raised)]", entry.kind === "blocker" && "border-l-2 border-l-white")}><div className="flex items-start justify-between gap-3"><div><p className="text-sm font-medium">{entry.title}</p><p className="mt-1 text-xs leading-relaxed text-[var(--muted)]">{entry.accountName ? `${entry.accountName} · ` : ""}{entry.description}</p></div><ArrowUpRight className="h-4 w-4 shrink-0 text-[var(--muted)]" /></div></Card></Link>)}
+              </div>
+            </section>
+            <section>
+              <p className="text-[10px] uppercase tracking-[0.16em] text-[var(--muted)]">Next payout</p><h2 className="mb-3 mt-1 text-xl font-medium">Readiness</h2>
+              <div className="space-y-2">
               {rows.filter((row) => row.account.type === "PA").length === 0 && <Card className="rounded-[2px] border-[var(--hairline)] bg-[var(--surface)] p-4"><p className="text-sm text-[var(--muted)]">No funded accounts to review.</p></Card>}
               {rows.filter((row) => row.account.type === "PA").map((row) => <Link href={`/?account=${row.account.id}`} key={row.account.id} className="block"><Card className="rounded-[2px] border-[var(--hairline)] bg-[var(--surface)] p-4 transition-colors hover:border-[var(--faint)] hover:bg-[var(--raised)]"><div className="flex items-start justify-between gap-3"><div><p className="text-sm font-medium">{row.account.name}</p><p className="mt-1 text-xs leading-relaxed text-[var(--muted)]">{row.payoutReady ? "Ready to request" : row.payoutMissing[0] ?? "Payout tracking unavailable"}</p></div><ArrowUpRight className="h-4 w-4 text-[var(--muted)]" /></div></Card></Link>)}
-            </div>
+              </div>
+            </section>
           </aside>
         </div>
       </>}

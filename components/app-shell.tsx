@@ -3,9 +3,10 @@
 import type { ReactNode } from "react"
 import Link from "next/link"
 import { usePathname, useRouter } from "next/navigation"
-import { BarChart3, BookOpen, Layers3, LayoutDashboard, LogOut, Settings, ShieldCheck, WalletCards } from "lucide-react"
+import { BarChart3, BookOpen, Layers3, LayoutDashboard, LogOut, Settings, ShieldAlert, ShieldCheck, WalletCards } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { createClient } from "@/lib/supabase/client"
+import { OnboardingGuide } from "@/components/onboarding-guide"
 
 interface AppShellProps {
   eyebrow?: string
@@ -19,6 +20,7 @@ interface AppShellProps {
 const navigation = [
   { section: "Command", items: [
     { href: "/today", label: "Today", icon: LayoutDashboard },
+    { href: "/compliance", label: "Compliance", icon: ShieldAlert },
     { href: "/", label: "Accounts", icon: Layers3 },
   ] },
   { section: "Review", items: [
@@ -90,6 +92,8 @@ export function AppShell({ eyebrow, title, description, leading, actions, childr
           </button>
         </div>
       </aside>
+
+      <OnboardingGuide />
 
       <div className="lg:pl-[248px]">
         <div className="border-b border-[var(--hairline)] bg-black lg:hidden">
