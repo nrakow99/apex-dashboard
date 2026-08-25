@@ -484,6 +484,27 @@ export async function createTrade(
   return { data: rowToTrade(data as TradeRow), error: null }
 }
 
+export async function createCsvTrades(
+  rows: Array<{ accountId: string; date: string; symbol: string; pnl: number; contracts: number | null; filename: string }>,
+): Promise<{ data: Trade[] | null; error: Error | null }> {
+  const supabase = createClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) return { data: null, error: new Error("Not authenticated") }
+  if (rows.length === 0) return { data: [], error: null }
+
+  const { data, error } = await supabase.from("trades").insert(rows.map((row) => ({
+    user_id: user.id,
+    account_id: row.accountId,
+    date: row.date,
+    symbol: normalizeSymbol(row.symbol),
+    pnl: row.pnl,
+    notes: `Imported from CSV: ${row.filename}`,
+    ...metaToDbPayload({ contracts: row.contracts ?? undefined }),
+  }))).select()
+  if (error) return { data: null, error: new Error(error.message) }
+  return { data: (data as TradeRow[]).map(rowToTrade), error: null }
+}
+
 export async function createPayout(payout: {
   accountId: string
   date: string

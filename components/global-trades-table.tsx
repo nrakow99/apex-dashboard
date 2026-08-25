@@ -61,7 +61,7 @@ export function GlobalTradesTable({ trades, accounts, onEdit, onDelete }: Global
                   <td className="px-4 py-3.5"><span className="border border-[var(--hairline)] bg-[var(--raised)] px-2 py-1 font-mono text-[11px]">{trade.symbol}</span></td>
                   <td className={cn("px-4 py-3.5 text-right font-mono text-sm", pnlColorClass(trade.pnl))}>{formatPnL(trade.pnl)}</td>
                   <td className="px-4 py-3.5"><ReviewContext trade={trade} /></td>
-                  <td className="px-4 py-3.5 text-[10px] uppercase tracking-[0.12em] text-[var(--muted)]">{trade.importSource === "screenshot" ? "Screenshot" : "Manual"}</td>
+                  <td className="px-4 py-3.5 text-[10px] uppercase tracking-[0.12em] text-[var(--muted)]">{trade.importSource === "screenshot" ? "Screenshot" : trade.notes?.startsWith("Imported from CSV:") ? "CSV" : "Manual"}</td>
                   <td className="px-3 py-3.5">
                     <div className="flex justify-end gap-1">
                       <Button variant="ghost" size="icon" aria-label={`Edit ${trade.symbol} trade`} onClick={() => onEdit(trade)}><Pencil className="h-3.5 w-3.5" /></Button>

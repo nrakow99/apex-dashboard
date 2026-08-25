@@ -6,6 +6,7 @@ import { Search } from "lucide-react"
 import { AppShell } from "@/components/app-shell"
 import { AddTradeModal } from "@/components/add-trade-modal"
 import { ScreenshotImportModal } from "@/components/screenshot-import-modal"
+import { CsvImportModal } from "@/components/csv-import-modal"
 import { GlobalTradesTable } from "@/components/global-trades-table"
 import { EditTradeModal } from "@/components/edit-trade-modal"
 import { DeleteConfirmationModal } from "@/components/delete-confirmation-modal"
@@ -86,7 +87,7 @@ export default function TradesPage() {
       eyebrow="Journal"
       title="Trades"
       description="Search every account record, finish reviews, and keep imported history clean."
-      actions={accounts.length > 0 ? <><ScreenshotImportModal accounts={accounts} selectedAccountId={defaultAccountId} existingTrades={trades} onImported={async (result) => { await reload(); toast({ title: result.insertedCount ? "History imported" : "No new rows imported", description: `${result.insertedCount} added · ${result.duplicateCount} duplicates skipped.` }) }} /><AddTradeModal accounts={activeAccounts.length ? activeAccounts : accounts} selectedAccountId={defaultAccountId} userDefaultRiskProfile={userRiskProfile} onAddTrade={handleAdd} /></> : <Button asChild><Link href="/">Add an account</Link></Button>}
+      actions={accounts.length > 0 ? <><CsvImportModal accounts={accounts} selectedAccountId={defaultAccountId} existingTrades={trades} onImported={async (saved, duplicates) => { setTrades((current) => [...current, ...saved]); toast({ title: "CSV history imported", description: `${saved.length} added · ${duplicates} duplicates skipped.` }) }} /><ScreenshotImportModal accounts={accounts} selectedAccountId={defaultAccountId} existingTrades={trades} onImported={async (result) => { await reload(); toast({ title: result.insertedCount ? "History imported" : "No new rows imported", description: `${result.insertedCount} added · ${result.duplicateCount} duplicates skipped.` }) }} /><AddTradeModal accounts={activeAccounts.length ? activeAccounts : accounts} selectedAccountId={defaultAccountId} userDefaultRiskProfile={userRiskProfile} onAddTrade={handleAdd} /></> : <Button asChild><Link href="/">Add an account</Link></Button>}
     >
       {error && <div role="alert" className="mb-5 border-l-2 border-white bg-[var(--raised)] px-4 py-3 text-sm">Some workspace data could not load: {error}</div>}
 
