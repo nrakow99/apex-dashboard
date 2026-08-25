@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest"
-import { exportPayoutsCsv, exportTradesCsv, exportWorkspaceJson } from "./data-export"
+import { exportAccountCostsCsv, exportPayoutsCsv, exportTradesCsv, exportWorkspaceJson } from "./data-export"
 import type { Account } from "./types"
 
 const account: Account = {
@@ -14,7 +14,12 @@ describe("data export", () => {
   })
 
   it("labels the JSON backup format and version", () => {
-    const parsed = JSON.parse(exportWorkspaceJson([account], [], [], "2026-08-24T00:00:00.000Z"))
-    expect(parsed).toMatchObject({ format: "propdash-workspace", version: 1 })
+    const parsed = JSON.parse(exportWorkspaceJson([account], [], [], [], "2026-08-24T00:00:00.000Z"))
+    expect(parsed).toMatchObject({ format: "propdash-workspace", version: 2, accountCosts: [] })
+  })
+
+  it("exports tracked account costs without inventing notes", () => {
+    const contents = exportAccountCostsCsv([{ id: "c1", accountId: "a1", date: "2026-08-24", category: "evaluation", amount: 99 }], [account])
+    expect(contents).toContain('2026-08-24,"Comma, Account",a1,evaluation,99,')
   })
 })

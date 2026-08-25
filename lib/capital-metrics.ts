@@ -1,5 +1,5 @@
 import { parseLocalDate } from "./date-utils"
-import type { Account, Payout } from "./types"
+import type { Account, AccountCost, Payout } from "./types"
 
 export interface CapitalMetrics {
   grossPayouts: number
@@ -10,6 +10,9 @@ export interface CapitalMetrics {
   trackedConversionRate: number | null
   fundedAccountsWithPayout: number
   averageDaysToFirstPayout: number | null
+  trackedCosts: number | null
+  trackedNetProceeds: number | null
+  returnOnCosts: number | null
 }
 
 function wholeDaysBetween(start: string, end: string): number | null {
@@ -19,7 +22,11 @@ function wholeDaysBetween(start: string, end: string): number | null {
   return value >= 0 ? value : null
 }
 
-export function buildCapitalMetrics(accounts: Account[], payouts: Payout[]): CapitalMetrics {
+export function buildCapitalMetrics(
+  accounts: Account[],
+  payouts: Payout[],
+  costs: AccountCost[] | null = null,
+): CapitalMetrics {
   const grossPayouts = payouts.reduce((sum, payout) => sum + payout.amount, 0)
   const proceedsKnown = payouts.every((payout) => payout.traderReceived != null)
   const sharesKnown = payouts.every((payout) => payout.firmSplit != null)
@@ -37,10 +44,17 @@ export function buildCapitalMetrics(accounts: Account[], payouts: Payout[]): Cap
     const days = wholeDaysBetween(start, first.date)
     return days == null ? [] : [days]
   })
+  const traderProceeds = proceedsKnown
+    ? payouts.reduce((sum, payout) => sum + (payout.traderReceived ?? 0), 0)
+    : null
+  const trackedCosts = costs == null ? null : costs.reduce((sum, cost) => sum + cost.amount, 0)
+  const trackedNetProceeds = traderProceeds == null || trackedCosts == null
+    ? null
+    : traderProceeds - trackedCosts
 
   return {
     grossPayouts,
-    traderProceeds: proceedsKnown ? payouts.reduce((sum, payout) => sum + (payout.traderReceived ?? 0), 0) : null,
+    traderProceeds,
     firmShare: sharesKnown ? payouts.reduce((sum, payout) => sum + (payout.firmSplit ?? 0), 0) : null,
     trackedEvaluations,
     trackedFundedConversions,
@@ -49,5 +63,11 @@ export function buildCapitalMetrics(accounts: Account[], payouts: Payout[]): Cap
     averageDaysToFirstPayout: firstPayoutDays.length > 0
       ? firstPayoutDays.reduce((sum, days) => sum + days, 0) / firstPayoutDays.length
       : null,
+    trackedCosts,
+    trackedNetProceeds,
+    returnOnCosts:
+      trackedNetProceeds != null && trackedCosts != null && trackedCosts > 0
+        ? trackedNetProceeds / trackedCosts
+        : null,
   }
 }

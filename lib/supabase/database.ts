@@ -12,6 +12,9 @@ import type {
   AlphaTier,
   InstrumentSpec,
   RiskProfile,
+  AccountCost,
+  AccountCostCategory,
+  DailySessionPlan,
 } from "@/lib/types"
 import { metaToDbPayload, type TradeMeta } from "@/lib/trade-meta"
 import { normalizeSymbol } from "@/lib/instrument-specs"
@@ -70,6 +73,34 @@ interface UserSettingsRow {
   risk_symbol: string | null
   risk_contracts: number | null
   risk_stop_ticks: number | null
+  onboarding_started?: boolean | null
+  onboarding_dismissed?: boolean | null
+  onboarding_visited_paths?: string[] | null
+}
+
+interface AccountCostRow {
+  id: string
+  account_id: string
+  cost_date: string
+  category: AccountCostCategory
+  amount: number
+  notes: string | null
+}
+
+interface DailySessionPlanRow {
+  plan_date: string
+  reviewed_risk_queue: boolean
+  confirmed_firm_portal: boolean
+  checked_news_events: boolean
+  personal_loss_limit: number | null
+  max_trades: number | null
+  notes: string | null
+}
+
+export interface UserOnboardingSettings {
+  started: boolean
+  dismissed: boolean
+  visitedPaths: string[]
 }
 
 interface TradeRow {
@@ -367,6 +398,30 @@ function rowToPayout(row: PayoutRow): Payout {
   }
 }
 
+function rowToAccountCost(row: AccountCostRow): AccountCost {
+  return {
+    id: row.id,
+    accountId: row.account_id,
+    date: row.cost_date,
+    category: row.category,
+    amount: Number(row.amount),
+    notes: row.notes ?? undefined,
+  }
+}
+
+function rowToDailySessionPlan(row: DailySessionPlanRow): DailySessionPlan {
+  return {
+    date: row.plan_date,
+    reviewedRiskQueue: row.reviewed_risk_queue,
+    confirmedFirmPortal: row.confirmed_firm_portal,
+    checkedNewsEvents: row.checked_news_events,
+    personalLossLimit:
+      row.personal_loss_limit == null ? null : Number(row.personal_loss_limit),
+    maxTrades: row.max_trades == null ? null : Number(row.max_trades),
+    notes: row.notes ?? "",
+  }
+}
+
 export async function fetchAccounts(): Promise<{ data: Account[] | null; error: Error | null }> {
   const supabase = createClient()
   const { data, error } = await supabase
@@ -395,6 +450,89 @@ export async function fetchPayouts(): Promise<{ data: Payout[] | null; error: Er
     .order("created_at", { ascending: true })
   if (error) return { data: null, error: new Error(error.message) }
   return { data: (data as PayoutRow[]).map(rowToPayout), error: null }
+}
+
+export async function fetchAccountCosts(): Promise<{ data: AccountCost[] | null; error: Error | null }> {
+  const supabase = createClient()
+  const { data, error } = await supabase
+    .from("account_costs")
+    .select("*")
+    .order("cost_date", { ascending: false })
+  if (error) return { data: null, error: new Error(error.message) }
+  return { data: (data as AccountCostRow[]).map(rowToAccountCost), error: null }
+}
+
+export async function createAccountCost(input: {
+  accountId: string
+  date: string
+  category: AccountCostCategory
+  amount: number
+  notes?: string
+}): Promise<{ data: AccountCost | null; error: Error | null }> {
+  const supabase = createClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) return { data: null, error: new Error("Not authenticated") }
+
+  const { data, error } = await supabase
+    .from("account_costs")
+    .insert({
+      user_id: user.id,
+      account_id: input.accountId,
+      cost_date: input.date,
+      category: input.category,
+      amount: input.amount,
+      notes: input.notes?.trim() || null,
+    })
+    .select()
+    .single()
+  if (error) return { data: null, error: new Error(error.message) }
+  return { data: rowToAccountCost(data as AccountCostRow), error: null }
+}
+
+export async function deleteAccountCost(costId: string): Promise<{ error: Error | null }> {
+  const supabase = createClient()
+  const { error } = await supabase.from("account_costs").delete().eq("id", costId)
+  return { error: error ? new Error(error.message) : null }
+}
+
+export async function fetchDailySessionPlan(
+  date: string,
+): Promise<{ data: DailySessionPlan | null; error: Error | null }> {
+  const supabase = createClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) return { data: null, error: new Error("Not authenticated") }
+  const { data, error } = await supabase
+    .from("daily_session_plans")
+    .select("*")
+    .eq("user_id", user.id)
+    .eq("plan_date", date)
+    .maybeSingle()
+  if (error) return { data: null, error: new Error(error.message) }
+  return { data: data ? rowToDailySessionPlan(data as DailySessionPlanRow) : null, error: null }
+}
+
+export async function saveDailySessionPlan(
+  plan: DailySessionPlan,
+): Promise<{ data: DailySessionPlan | null; error: Error | null }> {
+  const supabase = createClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) return { data: null, error: new Error("Not authenticated") }
+  const { data, error } = await supabase
+    .from("daily_session_plans")
+    .upsert({
+      user_id: user.id,
+      plan_date: plan.date,
+      reviewed_risk_queue: plan.reviewedRiskQueue,
+      confirmed_firm_portal: plan.confirmedFirmPortal,
+      checked_news_events: plan.checkedNewsEvents,
+      personal_loss_limit: plan.personalLossLimit,
+      max_trades: plan.maxTrades,
+      notes: plan.notes.trim() || null,
+    }, { onConflict: "user_id,plan_date" })
+    .select()
+    .single()
+  if (error) return { data: null, error: new Error(error.message) }
+  return { data: rowToDailySessionPlan(data as DailySessionPlanRow), error: null }
 }
 
 export async function createAccount(account: {
@@ -774,4 +912,46 @@ export async function saveUserSettings(
   )
   if (error) return { error: new Error(error.message) }
   return { error: null }
+}
+
+export async function fetchOnboardingSettings(): Promise<{
+  data: UserOnboardingSettings | null
+  error: Error | null
+}> {
+  const supabase = createClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) return { data: null, error: new Error("Not authenticated") }
+  const { data, error } = await supabase
+    .from("user_settings")
+    .select("onboarding_started,onboarding_dismissed,onboarding_visited_paths")
+    .eq("user_id", user.id)
+    .maybeSingle()
+  if (error) return { data: null, error: new Error(error.message) }
+  const row = data as UserSettingsRow | null
+  if (!row) return { data: null, error: null }
+  return {
+    data: {
+      started: Boolean(row.onboarding_started),
+      dismissed: Boolean(row.onboarding_dismissed),
+      visitedPaths: Array.isArray(row.onboarding_visited_paths)
+        ? row.onboarding_visited_paths.filter((path): path is string => typeof path === "string")
+        : [],
+    },
+    error: null,
+  }
+}
+
+export async function saveOnboardingSettings(
+  state: UserOnboardingSettings,
+): Promise<{ error: Error | null }> {
+  const supabase = createClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) return { error: new Error("Not authenticated") }
+  const { error } = await supabase.from("user_settings").upsert({
+    user_id: user.id,
+    onboarding_started: state.started,
+    onboarding_dismissed: state.dismissed,
+    onboarding_visited_paths: [...new Set(state.visitedPaths)],
+  }, { onConflict: "user_id" })
+  return { error: error ? new Error(error.message) : null }
 }

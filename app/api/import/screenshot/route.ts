@@ -162,6 +162,40 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "The selected screenshots exceed 30 MB total." }, { status: 400 })
   }
 
+  const { data: reservationData, error: reservationError } = await supabase.rpc(
+    "reserve_screenshot_scan",
+    { p_image_count: files.length },
+  )
+  if (reservationError) {
+    const limited = /safety limit reached/i.test(reservationError.message)
+    return NextResponse.json(
+      {
+        error: limited
+          ? "Screenshot scanning is temporarily limited for this account. Try again later."
+          : "Screenshot usage could not be verified. Try again after the database update is applied.",
+        code: limited ? "SCREENSHOT_IMPORT_RATE_LIMITED" : "SCREENSHOT_USAGE_UNAVAILABLE",
+      },
+      { status: limited ? 429 : 503 },
+    )
+  }
+
+  const reservation = Array.isArray(reservationData) ? reservationData[0] : reservationData
+  const requestId = (reservation as { request_id?: string } | null)?.request_id
+  if (!requestId) {
+    return NextResponse.json(
+      { error: "Screenshot usage could not be reserved. Try again.", code: "SCREENSHOT_USAGE_UNAVAILABLE" },
+      { status: 503 },
+    )
+  }
+
+  const finishScan = async (status: "succeeded" | "failed", rowCount: number | null = null) => {
+    await supabase.rpc("finish_screenshot_scan", {
+      p_request_id: requestId,
+      p_status: status,
+      p_extracted_row_count: rowCount,
+    })
+  }
+
   const imageContent = await Promise.all(
     files.map(async (file) => ({
       type: "input_image" as const,
@@ -200,6 +234,7 @@ export async function POST(request: Request) {
       }),
     })
   } catch {
+    await finishScan("failed")
     return NextResponse.json(
       { error: "The screenshot reader could not be reached. Try again." },
       { status: 502 },
@@ -208,6 +243,7 @@ export async function POST(request: Request) {
 
   const payload: unknown = await upstream.json().catch(() => null)
   if (!upstream.ok) {
+    await finishScan("failed")
     const message =
       payload && typeof payload === "object" && "error" in payload
         ? (payload as { error?: { message?: string } }).error?.message
@@ -220,6 +256,7 @@ export async function POST(request: Request) {
 
   const outputText = readOutputText(payload)
   if (!outputText) {
+    await finishScan("failed")
     return NextResponse.json(
       { error: "No verified table data was returned. Try a clearer screenshot." },
       { status: 422 },
@@ -230,6 +267,7 @@ export async function POST(request: Request) {
   try {
     parsed = JSON.parse(outputText)
   } catch {
+    await finishScan("failed")
     return NextResponse.json(
       { error: "The extracted table could not be verified. Try again." },
       { status: 422 },
@@ -238,17 +276,20 @@ export async function POST(request: Request) {
 
   const extraction = sanitizeScreenshotExtraction(parsed)
   if (extraction.rows.length === 0) {
+    await finishScan("failed", 0)
     return NextResponse.json(
       { error: "No visible trade-history rows were found in these screenshots." },
       { status: 422 },
     )
   }
   if (extraction.rows.length > 500) {
+    await finishScan("failed")
     return NextResponse.json(
       { error: "More than 500 visible rows were found. Split the screenshots into smaller imports." },
       { status: 422 },
     )
   }
 
+  await finishScan("succeeded", extraction.rows.length)
   return NextResponse.json({ extraction })
 }

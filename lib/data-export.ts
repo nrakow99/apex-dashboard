@@ -1,4 +1,4 @@
-import type { Account, Payout, Trade } from "./types"
+import type { Account, AccountCost, Payout, Trade } from "./types"
 
 function csvCell(value: unknown): string {
   if (value == null) return ""
@@ -26,6 +26,14 @@ export function exportPayoutsCsv(payouts: Payout[], accounts: Account[]): string
   ])
 }
 
-export function exportWorkspaceJson(accounts: Account[], trades: Trade[], payouts: Payout[], generatedAt: string): string {
-  return JSON.stringify({ format: "propdash-workspace", version: 1, generatedAt, accounts, trades, payouts }, null, 2)
+export function exportAccountCostsCsv(costs: AccountCost[], accounts: Account[]): string {
+  const names = new Map(accounts.map((account) => [account.id, account.name]))
+  return csv([
+    ["date", "account", "account_id", "category", "amount", "notes"],
+    ...costs.map((cost) => [cost.date, names.get(cost.accountId) ?? "Unavailable account", cost.accountId, cost.category, cost.amount, cost.notes ?? ""]),
+  ])
+}
+
+export function exportWorkspaceJson(accounts: Account[], trades: Trade[], payouts: Payout[], accountCosts: AccountCost[] | null, generatedAt: string): string {
+  return JSON.stringify({ format: "propdash-workspace", version: 2, generatedAt, accounts, trades, payouts, accountCosts }, null, 2)
 }

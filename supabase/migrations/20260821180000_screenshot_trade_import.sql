@@ -19,6 +19,9 @@ create table if not exists public.trade_import_batches (
 
 alter table public.trade_import_batches enable row level security;
 
+revoke all on table public.trade_import_batches from anon;
+grant select, insert on table public.trade_import_batches to authenticated;
+
 drop policy if exists "Users can view their own trade import batches" on public.trade_import_batches;
 create policy "Users can view their own trade import batches" on public.trade_import_batches
   for select using (auth.uid() = user_id);

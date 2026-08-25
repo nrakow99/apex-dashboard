@@ -135,6 +135,34 @@ export interface Payout {
   payoutSplitPercent?: number // trader's %, e.g. 0.9
 }
 
+export type AccountCostCategory =
+  | "evaluation"
+  | "activation"
+  | "reset"
+  | "platform"
+  | "data"
+  | "other"
+
+export interface AccountCost {
+  id: string
+  accountId: string
+  date: string
+  category: AccountCostCategory
+  amount: number
+  notes?: string
+}
+
+/** User-authored controls for a session. These are never prop-firm rules. */
+export interface DailySessionPlan {
+  date: string
+  reviewedRiskQueue: boolean
+  confirmedFirmPortal: boolean
+  checkedNewsEvents: boolean
+  personalLossLimit: number | null
+  maxTrades: number | null
+  notes: string
+}
+
 // EOD Drawdown Constants
 export const EOD_CONSTANTS = {
   CLOSE_HOUR: 14,

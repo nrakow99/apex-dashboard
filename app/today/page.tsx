@@ -14,6 +14,7 @@ import type { Account, InstrumentSpec, Payout, RiskProfile, Trade } from "@/lib/
 import type { TradeMeta } from "@/lib/trade-meta"
 import { buildTodayAccounts } from "@/lib/today-dashboard"
 import { buildComplianceItems } from "@/lib/compliance-center"
+import { DailySessionPlanCard } from "@/components/daily-session-plan"
 
 export default function TodayPage() {
   const [accounts, setAccounts] = useState<Account[]>([])
@@ -128,6 +129,8 @@ export default function TodayPage() {
           <Summary label="Payout ready" value={String(readyCount)} />
           <Summary label="Needs attention" value={String(needsAttention)} />
         </section>
+
+        <DailySessionPlanCard date={localTodayKey()} />
 
         <div className="grid gap-6 xl:grid-cols-[minmax(0,1.65fr)_minmax(320px,.8fr)]">
           <section>

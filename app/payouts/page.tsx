@@ -16,6 +16,7 @@ import { getAccountRules } from "@/lib/rules"
 import type { Payout } from "@/lib/types"
 import { cn, formatCurrency } from "@/lib/utils"
 import { buildCapitalMetrics } from "@/lib/capital-metrics"
+import { AccountCostLedger } from "@/components/account-cost-ledger"
 
 function Stat({ label, value, supporting }: { label: string; value: string; supporting: string }) {
   return <div className="bg-[var(--surface)] p-4"><p className="text-[9px] uppercase tracking-[0.15em] text-[var(--muted)]">{label}</p><p className="mt-2 font-mono text-xl font-medium">{value}</p><p className="mt-1 text-[10px] text-[var(--muted)]">{supporting}</p></div>
@@ -27,7 +28,7 @@ function localDate(value: string): string {
 }
 
 export default function PayoutsPage() {
-  const { accounts, trades, payouts, loading, error, setPayouts } = useDashboardData()
+  const { accounts, trades, payouts, accountCosts, accountCostsAvailable, loading, error, setPayouts, setAccountCosts } = useDashboardData()
   const { toast } = useToast()
   const [requestedAccountId, setRequestedAccountId] = useState<string | null>(null)
   const [deleting, setDeleting] = useState<Payout | null>(null)
@@ -35,7 +36,10 @@ export default function PayoutsPage() {
 
   const rows = useMemo(() => buildPayoutWorkspace(accounts, trades, payouts), [accounts, trades, payouts])
   const summary = useMemo(() => summarizePayoutWorkspace(rows, payouts), [rows, payouts])
-  const capital = useMemo(() => buildCapitalMetrics(accounts, payouts), [accounts, payouts])
+  const capital = useMemo(
+    () => buildCapitalMetrics(accounts, payouts, accountCostsAvailable ? accountCosts : null),
+    [accountCosts, accountCostsAvailable, accounts, payouts],
+  )
 
   const defaultSelection = rows.find((row) => row.isReady) ?? rows.find((row) => row.rulesAvailable) ?? rows[0] ?? null
   const selected = rows.find((row) => row.account.id === requestedAccountId) ?? defaultSelection
@@ -136,14 +140,19 @@ export default function PayoutsPage() {
       )}
 
       <section className="mt-8 border border-[var(--hairline)] bg-[var(--surface)]">
-        <div className="border-b border-[var(--hairline)] px-5 py-4"><p className="text-[9px] uppercase tracking-[0.15em] text-[var(--muted)]">Tracked capital</p><h2 className="mt-1 text-base font-medium">Payout economics</h2><p className="mt-1 text-xs text-[var(--muted)]">Only amounts present in saved payout records are included. Cost-based ROI remains unavailable until account fees are tracked.</p></div>
-        <div className="grid gap-px bg-[var(--hairline)] sm:grid-cols-2 xl:grid-cols-4">
+        <div className="border-b border-[var(--hairline)] px-5 py-4"><p className="text-[9px] uppercase tracking-[0.15em] text-[var(--muted)]">Tracked capital</p><h2 className="mt-1 text-base font-medium">Payout economics</h2><p className="mt-1 text-xs text-[var(--muted)]">Calculated only from saved payouts and user-entered costs. Missing split or cost data stays unavailable.</p></div>
+        <div className="grid gap-px bg-[var(--hairline)] sm:grid-cols-2 xl:grid-cols-3">
           <Stat label="Gross payouts" value={formatCurrency(capital.grossPayouts)} supporting={`${payouts.length} recorded requests`} />
           <Stat label="Trader proceeds" value={capital.traderProceeds == null ? "Unavailable" : formatCurrency(capital.traderProceeds)} supporting="Withheld if any split is missing" />
+          <Stat label="Tracked costs" value={loading || capital.trackedCosts == null ? "Unavailable" : formatCurrency(capital.trackedCosts)} supporting="Only fees entered below" />
+          <Stat label="Tracked net" value={capital.trackedNetProceeds == null ? "Unavailable" : formatCurrency(capital.trackedNetProceeds)} supporting="Trader proceeds minus tracked costs" />
+          <Stat label="Return on costs" value={capital.returnOnCosts == null ? "Unavailable" : `${capital.returnOnCosts.toFixed(2)}x`} supporting="Requires at least one tracked cost" />
           <Stat label="Tracked conversion" value={capital.trackedConversionRate == null ? "Unavailable" : `${Math.round(capital.trackedConversionRate * 100)}%`} supporting={`${capital.trackedFundedConversions} of ${capital.trackedEvaluations} tracked evaluations`} />
           <Stat label="Time to first payout" value={capital.averageDaysToFirstPayout == null ? "Unavailable" : `${Math.round(capital.averageDaysToFirstPayout)}d`} supporting={`${capital.fundedAccountsWithPayout} funded accounts paid`} />
         </div>
       </section>
+
+      <AccountCostLedger accounts={accounts} costs={accountCosts} available={accountCostsAvailable} onChange={setAccountCosts} />
 
       <section className="mt-8 border border-[var(--hairline)] bg-[var(--surface)]">
         <div className="flex items-center justify-between border-b border-[var(--hairline)] px-5 py-4"><div><p className="text-[9px] uppercase tracking-[0.15em] text-[var(--muted)]">Ledger</p><h2 className="mt-1 text-base font-medium">Payout history</h2></div><span className="font-mono text-xs text-[var(--muted)]">{payouts.length} records</span></div>

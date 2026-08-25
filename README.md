@@ -17,8 +17,24 @@ Add the Supabase values to `.env.local`. Screenshot trade import also requires a
 server-side `OPENAI_API_KEY`; never expose that value through a
 `NEXT_PUBLIC_...` variable.
 
-Apply the tracked Supabase migrations using the project's normal Supabase
-migration workflow, then start the dashboard:
+The Supabase CLI is pinned as a project dependency. Authenticate once, link
+the checkout to the existing project, inspect the migration history, and
+always dry-run before applying remote changes:
+
+```bash
+pnpm exec supabase login
+pnpm exec supabase link --project-ref YOUR_PROJECT_REF
+pnpm db:migrations
+pnpm db:push:dry
+pnpm db:push
+```
+
+Do not run `db reset` against a shared or production database. The current
+migrations add row-level security for every user-owned table. Screenshot source
+images are not stored; only request metadata and user-approved trade rows are
+persisted.
+
+Then start the dashboard:
 
 ```bash
 pnpm dev --port 3001

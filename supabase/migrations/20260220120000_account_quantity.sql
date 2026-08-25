@@ -3,4 +3,7 @@ alter table accounts
   add column if not exists quantity integer not null default 1;
 
 alter table accounts
+  drop constraint if exists accounts_quantity_range;
+
+alter table accounts
   add constraint accounts_quantity_range check (quantity >= 1 and quantity <= 20);
