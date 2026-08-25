@@ -38,11 +38,11 @@ const CELLS: {
 
 export function AccountsOverviewRow({ overview }: AccountsOverviewRowProps) {
   return (
-    <div className="mb-6 grid grid-cols-2 gap-px overflow-hidden rounded-[12px] border border-[var(--hairline)] bg-[var(--hairline)] lg:grid-cols-4">
+    <div className="mb-6 grid grid-cols-2 gap-px overflow-hidden rounded-[2px] border border-[var(--hairline)] bg-[var(--hairline)] lg:grid-cols-4">
       {CELLS.map((cell) => (
         <div
           key={cell.topic}
-          className="bg-[#101012] px-4 py-4 sm:px-5 sm:py-5"
+          className="bg-[var(--surface)] px-4 py-4 sm:px-5 sm:py-5"
         >
           <p className="flex items-center gap-1 text-[9px] font-medium uppercase tracking-[0.16em] text-[var(--muted-foreground)]">
             {cell.label}

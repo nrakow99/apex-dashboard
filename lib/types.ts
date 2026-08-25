@@ -117,6 +117,8 @@ export interface DailyPnL {
   date: string
   accountId: string
   pnl: number
+  /** Gross payout deducted from the account balance on this date. */
+  payoutAmount?: number
   balance: number
   tradesCount: number
 }

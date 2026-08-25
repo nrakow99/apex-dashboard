@@ -5,6 +5,7 @@ import { format } from "date-fns"
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
   DialogTitle,
 } from "@/components/ui/dialog"
 import { Button } from "@/components/ui/button"
@@ -16,7 +17,7 @@ import {
   type SetupTag,
   type TradeMeta,
 } from "@/lib/trade-meta"
-import { resolveSession, type SessionId } from "@/lib/sessions"
+import { resolveSession } from "@/lib/sessions"
 import {
   TRADE_MODAL_CONTENT,
   TRADE_MODAL_FORM,
@@ -34,8 +35,6 @@ function parseDateStr(dateStr: string): Date {
 function serializeDateStr(date: Date): string {
   return format(date, "yyyy-MM-dd")
 }
-
-const DEFAULT_SESSION: SessionId = "ny_am"
 
 interface EditTradeModalProps {
   trade: Trade | null
@@ -72,7 +71,7 @@ export function EditTradeModal({
         notes: trade.notes ?? "",
       })
       const existing = getTradeMeta(trade)
-      const resolvedSession = resolveSession(existing) ?? DEFAULT_SESSION
+      const resolvedSession = resolveSession(existing) ?? undefined
       setMeta({ ...existing, session: resolvedSession })
     }
   }, [trade])
@@ -99,25 +98,43 @@ export function EditTradeModal({
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    if (!trade) return
+    const parsedPnl = Number(formData.pnl)
+    if (
+      !trade ||
+      !formData.date ||
+      !formData.accountId ||
+      !formData.symbol.trim() ||
+      !formData.pnl.trim() ||
+      !Number.isFinite(parsedPnl)
+    ) return
     await onSave(
       trade.id,
       {
         date: formData.date,
         accountId: formData.accountId,
-        symbol: formData.symbol.toUpperCase(),
-        pnl: parseFloat(formData.pnl) || 0,
+        symbol: formData.symbol.trim().toUpperCase(),
+        pnl: parsedPnl,
         notes: formData.notes.trim() || undefined,
       },
       meta,
     )
   }
 
+  const parsedPnl = Number(formData.pnl)
+  const canSubmit =
+    !!trade &&
+    !!formData.date &&
+    !!formData.accountId &&
+    !!formData.symbol.trim() &&
+    !!formData.pnl.trim() &&
+    Number.isFinite(parsedPnl)
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className={TRADE_MODAL_CONTENT}>
-        <div className="px-4 pt-4 pb-2.5 sm:px-6 sm:pt-5 sm:pb-3 border-b border-white/[0.06] shrink-0">
+        <div className="shrink-0 border-b border-[var(--hairline)] px-4 pb-2.5 pt-4 sm:px-6 sm:pb-3 sm:pt-5">
           <DialogTitle className="text-base font-semibold">Edit Trade</DialogTitle>
+          <DialogDescription className="mt-1 text-xs text-[var(--muted)]">Update the record or add review context without changing firm rules.</DialogDescription>
         </div>
 
         <form id="edit-trade-form" onSubmit={handleSubmit} className={TRADE_MODAL_FORM}>
@@ -134,6 +151,17 @@ export function EditTradeModal({
             serializeDateStr={serializeDateStr}
             toggleDiscipline={toggleDiscipline}
             toggleSetup={toggleSetup}
+            defaultDetailsOpen={Boolean(
+              formData.notes.trim() ||
+              meta.session ||
+              meta.direction ||
+              meta.grade ||
+              meta.setupTags?.length ||
+              meta.disciplineTags?.length ||
+              meta.entryPrice != null ||
+              meta.exitPrice != null ||
+              meta.contracts != null
+            )}
           />
         </form>
 
@@ -143,7 +171,7 @@ export function EditTradeModal({
             variant="ghost"
             size="sm"
             onClick={() => onOpenChange(false)}
-            disabled={isSaving}
+            disabled={isSaving || !canSubmit}
           >
             Cancel
           </Button>
@@ -151,7 +179,6 @@ export function EditTradeModal({
             form="edit-trade-form"
             type="submit"
             size="sm"
-            className="bg-emerald-600 hover:bg-emerald-700"
             disabled={isSaving}
           >
             {isSaving ? (

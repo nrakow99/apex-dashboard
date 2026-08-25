@@ -38,8 +38,8 @@ export function AccountCardInsightBanner({ insight, className }: AccountCardInsi
   return (
     <div
       className={cn(
-        "flex min-h-0 items-center gap-2 rounded-[8px] border px-3 py-2.5",
-        "border-[#29292C] bg-[#171719]",
+        "flex min-h-0 items-center gap-2 rounded-[2px] border px-3 py-2.5",
+        "border-[var(--hairline)] bg-[var(--raised)]",
         className,
       )}
       role="status"

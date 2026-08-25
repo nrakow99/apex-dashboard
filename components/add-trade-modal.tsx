@@ -4,6 +4,7 @@ import { useState } from "react"
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog"
@@ -15,7 +16,6 @@ import {
   type SetupTag,
   type TradeMeta,
 } from "@/lib/trade-meta"
-import { type SessionId } from "@/lib/sessions"
 import {
   TRADE_MODAL_CONTENT,
   TRADE_MODAL_FORM,
@@ -23,7 +23,6 @@ import {
 } from "@/components/trade-modal-layout"
 import { TradeFormBody } from "@/components/trade-form-body"
 import { format } from "date-fns"
-import { TRADING_SYMBOLS } from "@/lib/trading-symbols"
 
 /** Parse a YYYY-MM-DD string as local midnight (avoids UTC day-shift). */
 function parseDateStr(dateStr: string): Date {
@@ -35,8 +34,6 @@ function parseDateStr(dateStr: string): Date {
 function serializeDateStr(date: Date): string {
   return format(date, "yyyy-MM-dd")
 }
-
-const DEFAULT_SESSION: SessionId = "ny_am"
 
 interface AddTradeModalProps {
   accounts: Account[]
@@ -50,8 +47,8 @@ interface AddTradeModalProps {
 }
 
 const emptyMeta = (): TradeMeta => ({
-  session: DEFAULT_SESSION,
-  direction: "long",
+  session: undefined,
+  direction: undefined,
   grade: undefined,
   disciplineTags: [],
   setupTags: [],
@@ -63,7 +60,7 @@ const emptyMeta = (): TradeMeta => ({
 const emptyForm = (accountId: string) => ({
   date: serializeDateStr(new Date()),
   accountId,
-  symbol: TRADING_SYMBOLS[0] ?? "NQ",
+  symbol: "",
   pnl: "",
   notes: "",
 })
@@ -124,6 +121,8 @@ export function AddTradeModal({
   }
 
   const n = accountIds.length
+  const parsedPnl = Number(formData.pnl)
+  const canSubmit = n > 0 && formData.symbol !== "" && formData.pnl.trim() !== "" && Number.isFinite(parsedPnl)
 
   return (
     <Dialog
@@ -144,9 +143,10 @@ export function AddTradeModal({
         </Button>
       </DialogTrigger>
 
-      <DialogContent className={`${TRADE_MODAL_CONTENT} rounded-[14px] border-[#303034] bg-[#111113]`}>
-        <div className="px-4 pt-4 pb-2.5 sm:px-6 sm:pt-5 sm:pb-3 border-b border-white/[0.06] shrink-0">
+      <DialogContent className={`${TRADE_MODAL_CONTENT} rounded-[2px] border-[var(--hairline)] bg-[var(--surface)]`}>
+        <div className="shrink-0 border-b border-[var(--hairline)] px-4 pb-3 pt-4 sm:px-6 sm:pt-5">
           <DialogTitle className="text-base font-medium">Add trade</DialogTitle>
+          <DialogDescription className="mt-1 text-xs text-[var(--muted)]">Account, date, symbol, and net P&amp;L are all you need. Journal details stay optional.</DialogDescription>
         </div>
 
         <form id="add-trade-form" onSubmit={handleSubmit} className={TRADE_MODAL_FORM}>
@@ -176,7 +176,7 @@ export function AddTradeModal({
             form="add-trade-form"
             type="submit"
             size="sm"
-            disabled={n === 0}
+            disabled={!canSubmit}
           >
             {n <= 1 ? "Add Trade" : `Add to ${n} accounts`}
           </Button>

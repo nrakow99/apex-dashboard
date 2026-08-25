@@ -257,8 +257,8 @@ export function AccountCard({
   return (
     <Card
       className={cn(
-        "group relative h-full cursor-pointer rounded-[14px] border-[#262629] bg-[#101012] p-5 transition-colors hover:border-[#3A3A3E] hover:bg-[#121214] sm:p-6",
-        "active:bg-[#151517]",
+        "group relative h-full cursor-pointer rounded-[2px] border-[var(--hairline)] bg-[var(--surface)] p-5 transition-colors hover:border-[var(--faint)] hover:bg-[var(--raised)] sm:p-6",
+        "active:bg-[var(--raised)]",
         health.severity === "critical" && "border-l-4 border-l-[var(--text)]",
         health.severity === "elevated" && "border-l-2 border-l-[var(--text)]",
       )}
@@ -269,7 +269,7 @@ export function AccountCard({
           <div className="flex items-center gap-2">
             <h3 className="truncate text-base font-semibold tracking-[-0.02em] text-[var(--text)] sm:text-lg">{account.name}</h3>
             <span className={cn(
-              "inline-flex shrink-0 items-center gap-1 rounded-[6px] border border-[#2B2B2E] bg-[#171719] px-2 py-1 text-[9px] tracking-[0.08em]",
+              "inline-flex shrink-0 items-center gap-1 rounded-[2px] border border-[var(--hairline)] bg-[var(--raised)] px-2 py-1 text-[9px] tracking-[0.08em]",
               health.severity === "critical" && "font-bold uppercase text-white",
               health.severity === "elevated" && "font-semibold text-white",
               health.severity === "positive" && "font-medium text-white",
@@ -330,7 +330,7 @@ export function AccountCard({
               </div>
             )}
           </div>
-          <div className="min-w-0 border-l border-[#29292C] pl-5">
+          <div className="min-w-0 border-l border-[var(--hairline)] pl-5">
             <div className="mb-1 text-[10px] uppercase tracking-wider text-[var(--muted-foreground)]">
               Net PnL
             </div>
@@ -361,7 +361,7 @@ export function AccountCard({
           {evalTargetBalance != null ? (
             <>
               <div
-                className="relative h-1.5 rounded-full bg-[#252528]"
+                className="relative h-1.5 rounded-full bg-[var(--hairline)]"
                 role="img"
                 aria-label={`Floor ${formatCurrency(floorVal)}, balance ${formatCurrency(stats.currentBalance)}, target ${formatCurrency(evalTargetBalance)}`}
               >
@@ -384,7 +384,7 @@ export function AccountCard({
           ) : (
             <>
               <div
-                className="relative h-1.5 rounded-full bg-[#252528]"
+                className="relative h-1.5 rounded-full bg-[var(--hairline)]"
                 role="img"
                 aria-label={`Floor ${formatCurrency(floorVal)}, balance ${formatCurrency(stats.currentBalance)}`}
               >
@@ -408,7 +408,7 @@ export function AccountCard({
           </>
         )}
 
-        <div className="space-y-2 border-t border-[#29292C] pt-4">
+        <div className="space-y-2 border-t border-[var(--hairline)] pt-4">
           <AccountCardInsightBanner insight={insight} />
           <p className="text-[10px] font-medium tabular-nums tracking-wide text-[var(--faint)]">
             {tenure.daysOwned != null ? `Owned ${tenure.daysOwned}d` : "Owned —"}

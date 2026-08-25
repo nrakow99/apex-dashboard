@@ -525,9 +525,11 @@ describe("Topstep — XFA dual consistencyBasis (differs from Eval)", () => {
 })
 
 describe("Topstep — no 25K tier", () => {
-  it("throws for any size under 50K instead of clamping to 50K", () => {
+  it("throws for every unsupported size instead of clamping to a real tier", () => {
     expect(() => toTopstepSizeKey(25000)).toThrow()
     expect(() => toTopstepSizeKey(49999)).toThrow()
+    expect(() => toTopstepSizeKey(75000)).toThrow()
+    expect(() => toTopstepSizeKey(200000)).toThrow()
     expect(() => getAccountRules(acct("Topstep", "Eval", "EOD", 25000))).toThrow()
     expect(() => getAccountRules(acct("Topstep", "PA", "EOD", 25000))).toThrow()
   })
@@ -538,9 +540,20 @@ describe("Topstep — no 25K tier", () => {
     expect(toTopstepSizeKey(150000)).toBe(150000)
   })
 
-  it("rounds sizes between tiers up to the next tier, same convention as toSizeKey", () => {
-    expect(toTopstepSizeKey(75000)).toBe(100000)
-    expect(toTopstepSizeKey(120000)).toBe(150000)
+})
+
+describe("Rule-size safety", () => {
+  it("rejects unsupported Apex and Lucid sizes instead of borrowing another tier", () => {
+    expect(() => getAccountRules(acct("Apex", "Eval", "EOD", 75000))).toThrow()
+    expect(() => getAccountRules(acct("Apex", "PA", "Intraday", 200000))).toThrow()
+    expect(() => getAccountRules(acct("Lucid", "Eval", "EOD", 30000))).toThrow()
+    expect(() => getAccountRules(acct("Lucid", "PA", "EOD", 250000))).toThrow()
+  })
+
+  it("rejects unsupported Tradeify sizes without changing verified tiers", () => {
+    expect(() => getAccountRules(acct("Tradeify", "Eval", "EOD", 75000))).toThrow()
+    expect(() => getAccountRules(acct("Tradeify", "PA", "EOD", 200000, { program: "select_flex" }))).toThrow()
+    expect(getAccountRules(acct("Tradeify", "Eval", "EOD", 100000)).profitTarget).toBe(6000)
   })
 })
 
@@ -762,21 +775,5 @@ describe("cross-firm invariants", () => {
         expect(r.payoutSplit).toBeLessThanOrEqual(1)
       }
     }
-  })
-})
-
-describe("known bug — size clamping", () => {
-  it("BUG: 250K silently resolves to the 150K rule set", () => {
-    const big = getAccountRules(acct("Apex", "Eval", "Intraday", 250000))
-    const oneFifty = getAccountRules(acct("Apex", "Eval", "Intraday", 150000))
-    expect(big.maxDrawdown).toBe(oneFifty.maxDrawdown)
-    // This test documents current behaviour, it does not endorse it.
-    // Fix toSizeKey to either support larger sizes or throw, then invert this.
-  })
-
-  it("sizes between tiers round down to the tier below", () => {
-    expect(getAccountRules(acct("Apex", "Eval", "Intraday", 75000)).maxDrawdown).toBe(
-      getAccountRules(acct("Apex", "Eval", "Intraday", 100000)).maxDrawdown,
-    )
   })
 })

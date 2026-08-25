@@ -127,10 +127,10 @@ export function ActivatePaModal({
         </DialogHeader>
 
         <form onSubmit={handleSubmit} className="space-y-4 mt-2">
-          <div className="rounded-xl border border-white/[0.07] bg-[#0F1115]/60 p-3 text-sm space-y-2">
+          <div className="space-y-2 rounded-[2px] border border-[var(--hairline)] bg-[var(--raised)] p-3 text-sm">
             <div className="flex justify-between gap-3">
               <span className="text-muted-foreground">Firm</span>
-              <span className="font-medium text-slate-100">{evalAccount.firm}</span>
+              <span className="font-medium text-[var(--text)]">{evalAccount.firm}</span>
             </div>
             <div className="flex justify-between gap-3">
               <span className="text-muted-foreground">Account size</span>
@@ -140,11 +140,11 @@ export function ActivatePaModal({
             </div>
             <div className="flex justify-between gap-3">
               <span className="text-muted-foreground">Drawdown type</span>
-              <span className="text-slate-200">{ddLabel}</span>
+              <span className="text-[var(--text)]">{ddLabel}</span>
             </div>
             <div className="flex justify-between gap-3">
               <span className="text-muted-foreground">Starting balance</span>
-              <span className="font-mono tabular-nums text-emerald-400/95">
+              <span className="font-mono tabular-nums text-[var(--text)]">
                 {formatCurrency(evalAccount.accountSize)}
               </span>
             </div>
@@ -153,7 +153,7 @@ export function ActivatePaModal({
           {isTradeify && (
             <div className="space-y-2">
               <Label>Choose payout policy (permanent)</Label>
-              <div className="flex gap-0 p-1 bg-[#0F1115]/80 border border-white/[0.08] rounded-xl">
+              <div className="flex gap-0 rounded-[2px] border border-[var(--hairline)] bg-[var(--surface)] p-1">
                 {(
                   [
                     { value: "select_flex" as const, label: "Select Flex" },
@@ -165,10 +165,10 @@ export function ActivatePaModal({
                     type="button"
                     onClick={() => setTradeifyPolicy(opt.value)}
                     className={cn(
-                      "flex-1 py-2 px-2 rounded-lg text-sm font-medium transition-all",
+                      "flex-1 rounded-[2px] px-2 py-2 text-sm font-medium transition-colors",
                       tradeifyPolicy === opt.value
-                        ? "bg-[#1E2229] text-[#E5E4E2] shadow-[inset_0_0_0_1px_rgba(83,104,120,0.40)]"
-                        : "text-slate-500 hover:text-[#E5E4E2]",
+                        ? "bg-[var(--text)] text-[var(--ground)]"
+                        : "text-[var(--muted)] hover:bg-[var(--raised)] hover:text-[var(--text)]",
                     )}
                   >
                     {opt.label}
@@ -179,7 +179,7 @@ export function ActivatePaModal({
                 This choice is permanent for this funded account.
               </p>
               <p className="text-[11px] text-muted-foreground">
-                Flex: 5 winning days · 50% profit cap. Daily: buffer + daily eligibility.
+                The resolved policy requirements appear below.
               </p>
             </div>
           )}
@@ -187,7 +187,7 @@ export function ActivatePaModal({
           {isTopstep && (
             <div className="space-y-2">
               <Label>Payout Path (permanent)</Label>
-              <div className="flex gap-0 p-1 bg-[#0F1115]/80 border border-white/[0.08] rounded-xl">
+              <div className="flex gap-0 rounded-[2px] border border-[var(--hairline)] bg-[var(--surface)] p-1">
                 {(
                   [
                     { value: "standard" as const, label: "Standard" },
@@ -199,10 +199,10 @@ export function ActivatePaModal({
                     type="button"
                     onClick={() => setTopstepPayoutPath(opt.value)}
                     className={cn(
-                      "flex-1 py-2 px-2 rounded-lg text-sm font-medium transition-all",
+                      "flex-1 rounded-[2px] px-2 py-2 text-sm font-medium transition-colors",
                       topstepPayoutPath === opt.value
-                        ? "bg-[#1E2229] text-[#E5E4E2] shadow-[inset_0_0_0_1px_rgba(83,104,120,0.40)]"
-                        : "text-slate-500 hover:text-[#E5E4E2]",
+                        ? "bg-[var(--text)] text-[var(--ground)]"
+                        : "text-[var(--muted)] hover:bg-[var(--raised)] hover:text-[var(--text)]",
                     )}
                   >
                     {opt.label}
@@ -213,9 +213,7 @@ export function ActivatePaModal({
                 This choice is permanent for this funded account.
               </p>
               <p className="text-[11px] text-muted-foreground">
-                {topstepPayoutPath === "consistency"
-                  ? "Higher payout ceiling. 40% consistency rule applies; 3 trading days required, no winning-day count."
-                  : "5 winning days of $150+ required. No consistency rule."}
+                The resolved payout-path requirements appear below.
               </p>
             </div>
           )}
@@ -230,7 +228,7 @@ export function ActivatePaModal({
               <div className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
                 {isTradeify || isTopstep ? "Funded rule summary" : "PA rule summary"}
               </div>
-              <ul className="rounded-xl border border-white/[0.07] bg-[#0F1115]/50 px-3 py-2.5 text-xs text-slate-400 space-y-1.5 list-disc list-inside">
+              <ul className="list-inside list-disc space-y-1.5 rounded-[2px] border border-[var(--hairline)] bg-[var(--raised)] px-3 py-2.5 text-xs text-[var(--muted)]">
                 {summary.lines.map((line) => (
                   <li key={line}>{line}</li>
                 ))}

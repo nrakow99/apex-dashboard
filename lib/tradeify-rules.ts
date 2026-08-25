@@ -4,10 +4,10 @@ import type { LucidFlexFloorParams } from "@/lib/lucid-flex-floor"
 export type TradeifySizeKey = 25000 | 50000 | 100000 | 150000
 
 export function toTradeifySizeKey(size: number): TradeifySizeKey {
-  if (size <= 25000) return 25000
-  if (size <= 50000) return 50000
-  if (size <= 100000) return 100000
-  return 150000
+  if (size === 25000 || size === 50000 || size === 100000 || size === 150000) {
+    return size
+  }
+  throw new Error(`Tradeify does not offer a ${size} account — valid sizes are 25K/50K/100K/150K.`)
 }
 
 export const TRADEIFY_EVAL: Record<

@@ -1,6 +1,6 @@
 "use client"
 
-import { useMemo, useState, useEffect } from "react"
+import { useMemo, useState } from "react"
 import { parseLocalDate } from "@/lib/date-utils"
 import { Card } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -29,11 +29,10 @@ interface DayStats {
 export function TradingCalendar({ account, dailyData, trades }: TradingCalendarProps) {
   const [currentDate, setCurrentDate] = useState(new Date())
   const [selectedDate, setSelectedDate] = useState<string | null>(null)
-  const [allMeta, setAllMeta] = useState<Record<string, TradeMeta>>({})
-
-  useEffect(() => {
-    setAllMeta(buildMetaMapFromTrades(trades))
-  }, [trades])
+  const allMeta = useMemo<Record<string, TradeMeta>>(
+    () => buildMetaMapFromTrades(trades),
+    [trades],
+  )
 
   const rules = getAccountRules(account)
   const tradeifyProgram = resolveTradeifyProgram(account)
@@ -41,6 +40,7 @@ export function TradingCalendar({ account, dailyData, trades }: TradingCalendarP
   const isTradeifyEval =
     account.firm === "Tradeify" &&
     (tradeifyProgram === "select_eval" || account.type === "Eval")
+  const consistencyPercent = rules.consistencyPercent
 
   const isEvalAccount = account.type === "Eval"
   const showQualifyingStars =
@@ -60,17 +60,19 @@ export function TradingCalendar({ account, dailyData, trades }: TradingCalendarP
 
   const tradeifyConsistencyWarnDates = useMemo(() => {
     if (!isTradeifyEval) return new Set<string>()
+    const consistencyFraction = consistencyPercent / 100
+    if (consistencyFraction <= 0) return new Set<string>()
     const sorted = [...dailyData].sort((a, b) => a.date.localeCompare(b.date))
     let cumulative = 0
     const warn = new Set<string>()
     for (const d of sorted) {
       cumulative += d.pnl
-      if (cumulative > 0 && d.pnl > 0 && d.pnl > cumulative * 0.4) {
+      if (cumulative > 0 && d.pnl > 0 && d.pnl > cumulative * consistencyFraction) {
         warn.add(d.date)
       }
     }
     return warn
-  }, [dailyData, isTradeifyEval])
+  }, [consistencyPercent, dailyData, isTradeifyEval])
 
   const startingBalance = getRuleStartingBalance(account)
   const bufferLine =
@@ -142,13 +144,13 @@ export function TradingCalendar({ account, dailyData, trades }: TradingCalendarP
   const selectedDayStats = selectedDate ? getDayStats(selectedDate) : null
 
   const cellShell = cn(
-    "relative flex flex-col items-center justify-center gap-0.5 rounded-[8px] transition-colors",
+    "relative flex flex-col items-center justify-center gap-0.5 rounded-[2px] transition-colors",
     "min-h-[32px] aspect-square sm:min-h-[58px] sm:aspect-square sm:min-w-0",
     "lg:aspect-auto lg:h-[72px] lg:w-full lg:justify-center lg:p-1.5 xl:h-[78px]",
   )
 
   return (
-    <Card className="activity-panel flex flex-col rounded-[14px] border-[#262629] bg-[#101012] p-3 sm:p-6">
+    <Card className="activity-panel flex flex-col rounded-[2px] border-[var(--hairline)] bg-[var(--surface)] p-3 sm:p-6">
       <div className="mb-1 flex flex-shrink-0 flex-col gap-0.5 sm:gap-2 lg:mb-2 lg:gap-2">
         <div className="flex items-center justify-between gap-2">
           <h2 className="text-base font-semibold sm:text-lg">Trading Calendar</h2>
@@ -217,38 +219,22 @@ export function TradingCalendar({ account, dailyData, trades }: TradingCalendarP
               className={cn(
                 cellShell,
                 "p-1 sm:p-1.5",
-                // profit day base
-                hasTrades &&
-                  dayStats.pnl > 0 &&
-                  !qualifiesForPayout &&
-                  "bg-emerald-500/[0.09] hover:bg-emerald-500/[0.14] border border-emerald-500/25 shadow-[0_0_14px_-12px_rgba(16,185,129,0.25)]",
-                // qualifying (gold) day
-                hasTrades &&
-                  dayStats.pnl > 0 &&
-                  qualifiesForPayout &&
-                  "bg-amber-500/[0.08] hover:bg-amber-500/[0.13] border border-amber-400/50 shadow-[0_0_16px_-12px_rgba(251,191,36,0.30)]",
-                // loss day
-                hasTrades &&
-                  dayStats.pnl < 0 &&
-                  "border border-red-500/25 bg-red-500/[0.09] hover:bg-red-500/[0.14]",
-                // flat day
-                hasTrades &&
-                  dayStats.pnl === 0 &&
-                  "border border-white/[0.07] bg-white/[0.025] hover:bg-white/[0.04]",
+                hasTrades && "border border-[var(--hairline)] bg-[var(--raised)] hover:border-[var(--faint)] hover:bg-[var(--surface)]",
+                (qualifiesForPayout || dailyPayoutReady) && "border-l-2 border-l-[var(--text)]",
                 // empty weekday
-                !hasTrades && !isWeekend && "cursor-default border border-white/[0.04] bg-[rgba(10,10,10,0.20)]",
+                !hasTrades && !isWeekend && "cursor-default border border-[var(--hairline)] bg-[var(--surface)]",
                 // empty weekend
-                !hasTrades && isWeekend && "cursor-default border border-white/[0.025] bg-[rgba(10,10,10,0.12)] opacity-60",
-                isSelected && "ring-2 ring-primary ring-offset-1 ring-offset-background sm:ring-offset-2",
+                !hasTrades && isWeekend && "cursor-default border border-[var(--hairline)] bg-[var(--ground)]",
+                isSelected && "ring-1 ring-[var(--text)] ring-offset-1 ring-offset-background",
                 consistencyWarn &&
-                  "ring-1 ring-white/60 ring-offset-1 ring-offset-background",
-                hasTrades && "cursor-pointer active:scale-[0.96] transition-transform",
+                  "border-l-4 border-l-[var(--text)]",
+                hasTrades && "cursor-pointer",
               )}
             >
               {consistencyWarn && !qualifiesForPayout && !dailyPayoutReady && (
                 <div
                   className="absolute left-0.5 top-0.5 h-1.5 w-1.5 rounded-full bg-white sm:h-2 sm:w-2"
-                  title="Day exceeds 40% consistency share"
+                  title={`Day exceeds ${rules.consistencyPercent}% consistency share`}
                 />
               )}
               {(qualifiesForPayout || dailyPayoutReady) && (
@@ -265,7 +251,7 @@ export function TradingCalendar({ account, dailyData, trades }: TradingCalendarP
                 className={cn(
                   "text-[13px] font-semibold leading-none sm:text-base lg:text-[15px] xl:text-[16px]",
                   hasTrades && "text-white",
-                  !hasTrades && "text-muted-foreground/40",
+                  !hasTrades && "text-[var(--faint)]",
                 )}
               >
                 {day}
@@ -276,9 +262,9 @@ export function TradingCalendar({ account, dailyData, trades }: TradingCalendarP
                     className={cn(
                       "mt-0 max-w-full truncate font-mono text-[9px] font-bold sm:mt-0.5 sm:text-[11px] lg:text-[12px]",
                       dayStats.pnl > 0
-                        ? "text-emerald-400"
+                        ? "text-[var(--gain)]"
                         : dayStats.pnl < 0
-                          ? "text-red-400"
+                          ? "text-[var(--loss)]"
                           : "text-muted-foreground",
                     )}
                   >
@@ -305,10 +291,10 @@ export function TradingCalendar({ account, dailyData, trades }: TradingCalendarP
       </div>
 
       {/* Empty month message */}
-      {dailyData.length === 0 && (
+      {!dailyData.some((day) => day.tradesCount > 0 && day.date.startsWith(`${currentDate.getFullYear()}-${String(currentDate.getMonth() + 1).padStart(2, "0")}`)) && (
         <div className="mt-2 py-5 text-center">
-          <p className="text-sm text-[#E5E4E2]/35">No trades this month.</p>
-          <p className="text-xs text-[#E5E4E2]/20 mt-0.5">Add a trade to see daily PnL and qualifying days.</p>
+          <p className="text-sm text-[var(--muted)]">No trades this month.</p>
+          <p className="mt-0.5 text-xs text-[var(--faint)]">Add a trade to see daily P&amp;L and qualifying days.</p>
         </div>
       )}
 
@@ -332,9 +318,9 @@ export function TradingCalendar({ account, dailyData, trades }: TradingCalendarP
                     className={cn(
                       "font-mono text-xs font-bold sm:text-sm",
                       selectedDayStats.pnl > 0
-                        ? "text-emerald-500"
+                        ? "text-[var(--gain)]"
                         : selectedDayStats.pnl < 0
-                          ? "text-red-500"
+                          ? "text-[var(--loss)]"
                           : "text-muted-foreground",
                     )}
                   >
@@ -380,12 +366,7 @@ export function TradingCalendar({ account, dailyData, trades }: TradingCalendarP
                 <div
                   key={trade.id}
                   className={cn(
-                    "rounded-xl border p-2.5 sm:p-3",
-                    trade.pnl > 0
-                      ? "border-emerald-500/20 bg-emerald-500/[0.04]"
-                      : trade.pnl < 0
-                        ? "border-red-500/20 bg-red-500/[0.04]"
-                        : "border-border/50 bg-muted/20",
+                    "rounded-[2px] border border-[var(--hairline)] bg-[var(--raised)] p-2.5 sm:p-3",
                   )}
                 >
                   {/* Top row: symbol + badges + PnL */}
@@ -393,17 +374,17 @@ export function TradingCalendar({ account, dailyData, trades }: TradingCalendarP
                     <div className="flex items-center gap-2 flex-wrap">
                       <span className="font-mono text-sm font-bold">{trade.symbol}</span>
                       {direction && (
-                        <span className="rounded-[6px] border border-[#303034] bg-[#1B1B1E] px-1.5 py-0.5 text-[10px] font-medium text-[var(--muted)]">
+                        <span className="rounded-[2px] border border-[var(--hairline)] bg-[var(--surface)] px-1.5 py-0.5 text-[10px] font-medium text-[var(--muted)]">
                           {DIRECTION_LABELS[direction]}
                         </span>
                       )}
                       {sessionLabel && (
-                        <span className="rounded-[6px] border border-[#303034] bg-[#1B1B1E] px-1.5 py-0.5 text-[10px] font-medium text-[var(--muted)]">
+                        <span className="rounded-[2px] border border-[var(--hairline)] bg-[var(--surface)] px-1.5 py-0.5 text-[10px] font-medium text-[var(--muted)]">
                           {sessionLabel}
                         </span>
                       )}
                       {grade && (
-                        <span className="rounded-[6px] border border-[#303034] bg-[#1B1B1E] px-1.5 py-0.5 text-[10px] font-semibold text-[var(--muted)]">
+                        <span className="rounded-[2px] border border-[var(--hairline)] bg-[var(--surface)] px-1.5 py-0.5 text-[10px] font-semibold text-[var(--muted)]">
                           {grade}
                         </span>
                       )}
@@ -411,7 +392,7 @@ export function TradingCalendar({ account, dailyData, trades }: TradingCalendarP
                     <span
                       className={cn(
                         "font-mono text-sm font-bold tabular-nums shrink-0",
-                        trade.pnl > 0 ? "text-emerald-500" : trade.pnl < 0 ? "text-red-500" : "text-muted-foreground",
+                        trade.pnl > 0 ? "text-[var(--gain)]" : trade.pnl < 0 ? "text-[var(--loss)]" : "text-muted-foreground",
                       )}
                     >
                       {trade.pnl > 0 ? "+" : ""}${trade.pnl.toLocaleString()}
@@ -421,7 +402,7 @@ export function TradingCalendar({ account, dailyData, trades }: TradingCalendarP
                   {setupTags.length > 0 && (
                     <div className="mt-1.5 flex gap-1 flex-wrap">
                       {setupTags.map((tag) => (
-                        <span key={tag} className="rounded-[6px] border border-[#303034] bg-[#1B1B1E] px-1 py-0.5 text-[9px] font-medium text-[var(--muted)]">
+                        <span key={tag} className="rounded-[2px] border border-[var(--hairline)] bg-[var(--surface)] px-1 py-0.5 text-[9px] font-medium text-[var(--muted)]">
                           {tag}
                         </span>
                       ))}
@@ -429,7 +410,7 @@ export function TradingCalendar({ account, dailyData, trades }: TradingCalendarP
                   )}
                   {/* Notes */}
                   {trade.notes && (
-                    <p className="mt-1 text-[10px] text-[#E5E4E2]/40 leading-snug">{trade.notes}</p>
+                    <p className="mt-1 text-[10px] leading-snug text-[var(--muted)]">{trade.notes}</p>
                   )}
                 </div>
               )

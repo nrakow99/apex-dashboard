@@ -110,10 +110,10 @@ export interface AccountRules {
 type SizeKey = 25000 | 50000 | 100000 | 150000
 
 function toSizeKey(size: number): SizeKey {
-  if (size <= 25000) return 25000
-  if (size <= 50000) return 50000
-  if (size <= 100000) return 100000
-  return 150000
+  if (size === 25000 || size === 50000 || size === 100000 || size === 150000) {
+    return size
+  }
+  throw new Error(`Unsupported account size ${size}. Valid sizes are 25K/50K/100K/150K.`)
 }
 
 // ─── Apex rules ──────────────────────────────────────────────────────────────
@@ -215,7 +215,6 @@ export function getAccountRules(account: {
   alphaTier?: AlphaTier | null
 }): AccountRules {
   const firm = account.firm ?? "Apex"
-  const size = toSizeKey(account.accountSize ?? 50000)
 
   const base: AccountRules = {
     maxDrawdown: account.maxDrawdown ?? 2000,
@@ -328,6 +327,7 @@ export function getAccountRules(account: {
   // ── Apex ──────────────────────────────────────────────────────────────────
 
   if (firm === "Apex") {
+    const size = toSizeKey(account.accountSize)
     if (account.type === "Eval") {
       if (account.drawdownType === "Intraday") {
         const r = APEX_INTRADAY_EVAL[size]
@@ -407,6 +407,7 @@ export function getAccountRules(account: {
   // ── Lucid ─────────────────────────────────────────────────────────────────
 
   if (firm === "Lucid") {
+    const size = toSizeKey(account.accountSize)
     if (account.type === "Eval") {
       const r = LUCID_EVAL[size]
       return {

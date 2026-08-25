@@ -1,6 +1,7 @@
 /**
  * Per-trade journal metadata — persisted on Trade rows in Supabase.
- * localStorage is used only as a legacy fallback / one-time migration source.
+ * Legacy localStorage is read only by the one-time migration at the bottom
+ * of this file; it never participates in normal display or editing.
  */
 
 import type { Trade } from "./types"
@@ -107,26 +108,20 @@ function hasMetaContent(meta: TradeMeta): boolean {
   )
 }
 
-/** Merge persisted trade fields with legacy localStorage (DB wins on conflict). */
+/** Read metadata from the persisted Trade row only. */
 export function getTradeMeta(tradeOrId: string | Trade, trades?: Trade[]): TradeMeta {
   const trade =
     typeof tradeOrId === "string"
       ? trades?.find((t) => t.id === tradeOrId)
       : tradeOrId
-  const id = typeof tradeOrId === "string" ? tradeOrId : tradeOrId.id
-  const local = loadAllTradeMeta()[id] ?? {}
-
-  if (!trade) return local
-
-  return { ...local, ...metaFromTrade(trade) }
+  return trade ? metaFromTrade(trade) : {}
 }
 
 /** Build id → meta map for analytics and tables. */
 export function buildMetaMapFromTrades(trades: Trade[]): Record<string, TradeMeta> {
-  const local = loadAllTradeMeta()
   const map: Record<string, TradeMeta> = {}
   for (const t of trades) {
-    map[t.id] = { ...local[t.id], ...metaFromTrade(t) }
+    map[t.id] = metaFromTrade(t)
   }
   return map
 }
@@ -154,27 +149,13 @@ export function metaToDbPayload(meta: TradeMeta): {
   }
 }
 
-export function loadAllTradeMeta(): Record<string, TradeMeta> {
+function loadLegacyTradeMeta(): Record<string, TradeMeta> {
   if (typeof window === "undefined") return {}
   try {
     return JSON.parse(localStorage.getItem(META_KEY) ?? "{}") as Record<string, TradeMeta>
   } catch {
     return {}
   }
-}
-
-export function saveTradeMeta(tradeId: string, meta: TradeMeta): void {
-  if (typeof window === "undefined") return
-  const all = loadAllTradeMeta()
-  all[tradeId] = { ...all[tradeId], ...meta }
-  localStorage.setItem(META_KEY, JSON.stringify(all))
-}
-
-export function deleteTradeMeta(tradeId: string): void {
-  if (typeof window === "undefined") return
-  const all = loadAllTradeMeta()
-  delete all[tradeId]
-  localStorage.setItem(META_KEY, JSON.stringify(all))
 }
 
 /** Push device-local metadata to Supabase for trades missing persisted fields. */
@@ -192,8 +173,9 @@ export async function migrateLocalTradeMetadata(
     meta: TradeMeta,
   ) => Promise<{ data: Trade | null; error: Error | null }>,
 ): Promise<Trade[]> {
-  const local = loadAllTradeMeta()
+  const local = loadLegacyTradeMeta()
   const byId = new Map(trades.map((t) => [t.id, t]))
+  let migrationFailed = false
 
   for (const trade of trades) {
     const legacy = local[trade.id]
@@ -210,12 +192,15 @@ export async function migrateLocalTradeMetadata(
       legacy,
     )
     if (result.data) byId.set(trade.id, result.data)
+    if (result.error) migrationFailed = true
+  }
+
+  if (!migrationFailed && typeof window !== "undefined") {
+    localStorage.removeItem(META_KEY)
   }
 
   return trades.map((t) => byId.get(t.id) ?? t)
 }
-
-// ── Grade display helpers ────────────────────────────────────────────────────
 
 // ── Direction display helpers ────────────────────────────────────────────────
 
@@ -224,40 +209,7 @@ export const DIRECTION_OPTIONS: { id: TradeDirection; label: string }[] = [
   { id: "short", label: "Short" },
 ]
 
-export const DIRECTION_SELECTOR_STYLES: Record<
-  TradeDirection,
-  { inactive: string; active: string }
-> = {
-  long:  {
-    inactive: "border-white/[0.08] text-[#E5E4E2]/28 hover:text-[#E5E4E2]/50 hover:border-[rgba(83,104,120,0.24)]",
-    active:   "bg-[rgba(83,104,120,0.18)] border-[rgba(83,104,120,0.38)] text-[#94AAB8]",
-  },
-  short: {
-    inactive: "border-white/[0.08] text-[#E5E4E2]/28 hover:text-[#E5E4E2]/50 hover:border-white/[0.14]",
-    active:   "bg-[rgba(229,228,226,0.07)] border-white/[0.18] text-[#E5E4E2]/80",
-  },
-}
-
-export const DIRECTION_BADGE_STYLES: Record<TradeDirection, string> = {
-  long:  "bg-[rgba(83,104,120,0.14)] text-[#94AAB8] border-[rgba(83,104,120,0.26)]",
-  short: "bg-[rgba(229,228,226,0.06)] text-[#E5E4E2]/55 border-white/[0.12]",
-}
-
 export const DIRECTION_LABELS: Record<TradeDirection, string> = {
   long:  "Long",
   short: "Short",
-}
-
-// ── Grade display helpers ────────────────────────────────────────────────────
-
-export const GRADE_STYLES: Record<
-  TradeGrade,
-  { className: string; activeClassName: string }
-> = {
-  "A+":      { className: "border-teal-500/25 text-teal-400/60",      activeClassName: "bg-teal-500/[0.13] border-teal-500/35 text-teal-300" },
-  "A":       { className: "border-emerald-500/22 text-emerald-400/60", activeClassName: "bg-emerald-500/[0.11] border-emerald-500/32 text-emerald-400" },
-  "B":       { className: "border-amber-500/20 text-amber-400/55",    activeClassName: "bg-amber-500/[0.10] border-amber-500/30 text-amber-400" },
-  "C":       { className: "border-orange-500/18 text-orange-400/50",  activeClassName: "bg-orange-500/[0.09] border-orange-500/26 text-orange-400" },
-  "FOMO":    { className: "border-red-500/16 text-red-400/50",        activeClassName: "bg-red-500/[0.08] border-red-500/22 text-red-400/80" },
-  "Revenge": { className: "border-red-500/20 text-red-400/55",        activeClassName: "bg-red-500/[0.10] border-red-500/28 text-red-400" },
 }

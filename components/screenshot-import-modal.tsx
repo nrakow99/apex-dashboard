@@ -140,7 +140,7 @@ function FieldInput({
       step={type === "number" ? "any" : undefined}
       onChange={(event) => onChange(event.target.value)}
       className={cn(
-        "h-9 w-full rounded-[8px] border border-[#2B2B2E] bg-[#111113] px-2.5 font-mono text-xs text-white outline-none transition focus:border-[#55555B]",
+        "h-9 w-full rounded-[2px] border border-[var(--hairline)] bg-[var(--raised)] px-2.5 font-mono text-xs text-[var(--text)] outline-none transition-colors focus:border-[var(--faint)]",
         className,
       )}
     />
@@ -166,18 +166,18 @@ function StatusBadge({
     <div>
       <span
         className={cn(
-          "inline-flex rounded-full border px-2 py-1 text-[9px] font-semibold uppercase tracking-[0.12em]",
+          "inline-flex rounded-[2px] border border-[var(--hairline)] bg-[var(--raised)] px-2 py-1 text-[9px] font-semibold uppercase tracking-[0.12em]",
           duplicate || !valid || confidence === "low"
-            ? "border-amber-400/20 bg-amber-400/[0.07] text-amber-200"
+            ? "border-l-2 border-l-[var(--text)] text-[var(--text)]"
             : confidence === "medium"
-              ? "border-blue-400/20 bg-blue-400/[0.07] text-blue-200"
-              : "border-emerald-400/20 bg-emerald-400/[0.07] text-emerald-200",
+              ? "text-[var(--text)]"
+              : "text-[var(--muted)]",
         )}
       >
         {label}
       </span>
       {row.extracted.warnings.length > 0 && (
-        <p className="mt-1 max-w-[180px] text-[10px] leading-4 text-[#77777D]">
+        <p className="mt-1 max-w-[180px] text-[10px] leading-4 text-[var(--muted)]">
           {row.extracted.warnings.join(" ")}
         </p>
       )}
@@ -336,15 +336,15 @@ export function ScreenshotImportModal({
       }}
     >
       <DialogTrigger asChild>
-        <Button variant="outline" className="gap-2 rounded-[9px]">
+        <Button variant="outline" className="gap-2">
           <ImageUp className="h-4 w-4" />
           <span className="hidden sm:inline">Import screenshot</span>
           <span className="sm:hidden">Import</span>
         </Button>
       </DialogTrigger>
 
-      <DialogContent className="flex max-h-[90vh] w-[calc(100vw-24px)] max-w-[1120px] flex-col gap-0 overflow-hidden rounded-[16px] border-[#303034] bg-[#0E0E10] p-0 sm:w-[calc(100vw-48px)]">
-        <header className="shrink-0 border-b border-white/[0.06] px-5 py-5 pr-14 sm:px-7 sm:py-6">
+      <DialogContent className="flex max-h-[90vh] w-[calc(100vw-24px)] max-w-[1120px] flex-col gap-0 overflow-hidden rounded-[2px] border-[var(--hairline)] bg-[var(--surface)] p-0 sm:w-[calc(100vw-48px)]">
+        <header className="shrink-0 border-b border-[var(--hairline)] px-5 py-5 pr-14 sm:px-7 sm:py-6">
           <div className="flex items-start gap-3">
             {step === "review" && (
               <button
@@ -353,21 +353,21 @@ export function ScreenshotImportModal({
                   setStep("upload")
                   setError(null)
                 }}
-                className="mt-0.5 grid h-9 w-9 shrink-0 place-items-center rounded-[9px] border border-[#2B2B2E] bg-[#171719] text-[#A1A1A7] hover:text-white"
+                className="mt-0.5 grid h-9 w-9 shrink-0 place-items-center rounded-[2px] border border-[var(--hairline)] bg-[var(--raised)] text-[var(--muted)] hover:border-[var(--faint)] hover:text-[var(--text)]"
                 aria-label="Back to screenshots"
               >
                 <ChevronLeft className="h-4 w-4" />
               </button>
             )}
             <div>
-              <div className="mb-2 flex items-center gap-2 text-[9px] font-semibold uppercase tracking-[0.18em] text-[#78787E]">
+              <div className="mb-2 flex items-center gap-2 text-[9px] font-semibold uppercase tracking-[0.18em] text-[var(--muted)]">
                 <ScanLine className="h-3.5 w-3.5" />
                 Screenshot import · {step === "upload" ? "1 of 2" : "2 of 2"}
               </div>
-              <DialogTitle className="text-lg font-medium tracking-[-0.02em] text-white sm:text-xl">
+              <DialogTitle className="text-lg font-medium tracking-[-0.02em] text-[var(--text)] sm:text-xl">
                 {step === "upload" ? "Bring your trading history with you" : "Verify every row before it counts"}
               </DialogTitle>
-              <DialogDescription className="mt-1.5 max-w-2xl text-xs leading-5 text-[#88888E] sm:text-sm">
+              <DialogDescription className="mt-1.5 max-w-2xl text-xs leading-5 text-[var(--muted)] sm:text-sm">
                 {step === "upload"
                   ? "Upload visible trading-history screenshots. We read the table, then you approve the exact rows added to this account."
                   : "Only selected rows with a confirmed date, symbol, and Net P&L affect balances or prop-firm rules."}
@@ -406,18 +406,18 @@ export function ScreenshotImportModal({
                     addFiles(Array.from(event.dataTransfer.files))
                   }}
                   className={cn(
-                    "flex min-h-[240px] w-full flex-col items-center justify-center rounded-[14px] border border-dashed bg-[#121214] px-6 text-center transition",
+                    "flex min-h-[240px] w-full flex-col items-center justify-center rounded-[2px] border border-dashed bg-[var(--raised)] px-6 text-center transition-colors",
                     isDragging
-                      ? "border-white/35 bg-white/[0.04]"
-                      : "border-[#343438] hover:border-[#505056] hover:bg-[#151517]",
+                      ? "border-[var(--text)]"
+                      : "border-[var(--faint)] hover:border-[var(--text)]",
                   )}
                 >
-                  <div className="grid h-12 w-12 place-items-center rounded-[12px] border border-[#323236] bg-[#1A1A1D] shadow-[0_12px_32px_rgba(0,0,0,0.35)]">
-                    <ImageUp className="h-5 w-5 text-white" />
+                  <div className="grid h-12 w-12 place-items-center rounded-[2px] border border-[var(--hairline)] bg-[var(--surface)]">
+                    <ImageUp className="h-5 w-5 text-[var(--text)]" />
                   </div>
-                  <p className="mt-4 text-sm font-medium text-white">Drop screenshots here</p>
-                  <p className="mt-1 text-xs text-[#77777D]">or click to choose up to 8 images</p>
-                  <p className="mt-4 text-[10px] uppercase tracking-[0.12em] text-[#55555B]">
+                  <p className="mt-4 text-sm font-medium text-[var(--text)]">Drop screenshots here</p>
+                  <p className="mt-1 text-xs text-[var(--muted)]">or click to choose up to 8 images</p>
+                  <p className="mt-4 text-[10px] uppercase tracking-[0.12em] text-[var(--faint)]">
                     PNG · JPEG · WebP · 10 MB each
                   </p>
                 </button>
@@ -427,12 +427,12 @@ export function ScreenshotImportModal({
                     {files.map((file) => (
                       <div
                         key={`${file.name}-${file.size}`}
-                        className="flex items-center gap-3 rounded-[10px] border border-[#29292D] bg-[#151517] px-3 py-2.5"
+                        className="flex items-center gap-3 rounded-[2px] border border-[var(--hairline)] bg-[var(--raised)] px-3 py-2.5"
                       >
-                        <FileImage className="h-4 w-4 shrink-0 text-[#8E8E93]" />
+                        <FileImage className="h-4 w-4 shrink-0 text-[var(--muted)]" />
                         <div className="min-w-0 flex-1">
-                          <p className="truncate text-xs text-[#E7E7EA]">{file.name}</p>
-                          <p className="mt-0.5 text-[10px] text-[#66666C]">{fileSize(file.size)}</p>
+                          <p className="truncate text-xs text-[var(--text)]">{file.name}</p>
+                          <p className="mt-0.5 text-[10px] text-[var(--muted)]">{fileSize(file.size)}</p>
                         </div>
                         <button
                           type="button"
@@ -440,7 +440,7 @@ export function ScreenshotImportModal({
                             setFiles((current) => current.filter((candidate) => candidate !== file))
                           }
                           aria-label={`Remove ${file.name}`}
-                          className="rounded-[7px] p-2 text-[#66666C] hover:bg-white/[0.04] hover:text-white"
+                          className="rounded-[2px] p-2 text-[var(--muted)] hover:bg-[var(--surface)] hover:text-[var(--text)]"
                         >
                           <Trash2 className="h-3.5 w-3.5" />
                         </button>
@@ -451,14 +451,14 @@ export function ScreenshotImportModal({
               </section>
 
               <aside className="space-y-3">
-                <div className="rounded-[12px] border border-[#29292D] bg-[#151517] p-4">
-                  <label className="text-[9px] font-semibold uppercase tracking-[0.15em] text-[#68686E]">
+                <div className="rounded-[2px] border border-[var(--hairline)] bg-[var(--raised)] p-4">
+                  <label className="text-[9px] font-semibold uppercase tracking-[0.15em] text-[var(--muted)]">
                     Import into
                   </label>
                   <select
                     value={accountId}
                     onChange={(event) => setAccountId(event.target.value)}
-                    className="mt-2 h-10 w-full rounded-[9px] border border-[#303034] bg-[#101012] px-3 text-xs text-white outline-none focus:border-[#55555B]"
+                    className="mt-2 h-10 w-full rounded-[2px] border border-[var(--hairline)] bg-[var(--surface)] px-3 text-xs text-[var(--text)] outline-none focus:border-[var(--faint)]"
                   >
                     {accounts.map((account) => (
                       <option key={account.id} value={account.id}>
@@ -468,12 +468,12 @@ export function ScreenshotImportModal({
                   </select>
                 </div>
 
-                <div className="rounded-[12px] border border-[#29292D] bg-[#151517] p-4">
-                  <div className="flex items-center gap-2 text-xs font-medium text-[#D7D7DA]">
-                    <ShieldCheck className="h-4 w-4 text-emerald-300" />
+                <div className="rounded-[2px] border border-[var(--hairline)] bg-[var(--raised)] p-4">
+                  <div className="flex items-center gap-2 text-xs font-medium text-[var(--text)]">
+                    <ShieldCheck className="h-4 w-4 text-[var(--muted)]" />
                     Review-first by design
                   </div>
-                  <ul className="mt-3 space-y-2.5 text-[11px] leading-4 text-[#818187]">
+                  <ul className="mt-3 space-y-2.5 text-[11px] leading-4 text-[var(--muted)]">
                     <li>Nothing is saved before you approve it.</li>
                     <li>Blank or unclear values stay unavailable.</li>
                     <li>Likely duplicates start excluded.</li>
@@ -485,23 +485,23 @@ export function ScreenshotImportModal({
           </div>
         ) : (
           <div className="min-h-0 flex-1 overflow-y-auto">
-            <div className="sticky top-0 z-10 grid grid-cols-2 gap-px border-b border-[#29292D] bg-[#29292D] sm:grid-cols-4">
+            <div className="sticky top-0 z-10 grid grid-cols-2 gap-px border-b border-[var(--hairline)] bg-[var(--hairline)] sm:grid-cols-4">
               {[
                 ["Selected rows", String(selectedRows.length)],
                 ["Net P&L", formatCurrency(selectedNetPnl)],
                 ["Needs attention", String(lowConfidenceCount)],
                 ["Likely duplicates", String(duplicateCount)],
               ].map(([label, value]) => (
-                <div key={label} className="bg-[#121214] px-4 py-3 sm:px-5">
-                  <p className="text-[8px] font-semibold uppercase tracking-[0.14em] text-[#5F5F65]">{label}</p>
-                  <p className="mt-1 font-mono text-sm font-medium text-[#ECECEF]">{value}</p>
+                <div key={label} className="bg-[var(--raised)] px-4 py-3 sm:px-5">
+                  <p className="text-[8px] font-semibold uppercase tracking-[0.14em] text-[var(--muted)]">{label}</p>
+                  <p className="mt-1 font-mono text-sm font-medium text-[var(--text)]">{value}</p>
                 </div>
               ))}
             </div>
 
             {(extraction?.warnings.length || extraction?.isLikelyComplete === false) && (
-              <div className="mx-4 mt-4 flex gap-2.5 rounded-[10px] border border-amber-400/15 bg-amber-400/[0.05] px-3 py-2.5 text-[11px] leading-4 text-amber-100/75 sm:mx-6">
-                <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0 text-amber-300" />
+              <div className="mx-4 mt-4 flex gap-2.5 rounded-[2px] border border-[var(--hairline)] border-l-2 border-l-[var(--text)] bg-[var(--raised)] px-3 py-2.5 text-[11px] leading-4 text-[var(--text)] sm:mx-6">
+                <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
                 <p>
                   {[
                     extraction?.isLikelyComplete === false
@@ -516,10 +516,10 @@ export function ScreenshotImportModal({
             )}
 
             <div className="hidden px-6 py-4 md:block">
-              <div className="overflow-x-auto rounded-[12px] border border-[#29292D]">
+              <div className="overflow-x-auto rounded-[2px] border border-[var(--hairline)]">
                 <table className="w-full min-w-[960px] border-collapse text-left">
-                  <thead className="bg-[#171719]">
-                    <tr className="text-[8px] font-semibold uppercase tracking-[0.14em] text-[#67676D]">
+                  <thead className="bg-[var(--raised)]">
+                    <tr className="text-[8px] font-semibold uppercase tracking-[0.14em] text-[var(--muted)]">
                       <th className="w-12 px-3 py-3">Use</th>
                       <th className="px-2 py-3">Date</th>
                       <th className="px-2 py-3">Contract</th>
@@ -532,7 +532,7 @@ export function ScreenshotImportModal({
                   </thead>
                   <tbody>
                     {rowState.map(({ row, valid, duplicate }) => (
-                      <tr key={row.id} className="border-t border-[#242427] bg-[#111113] align-top">
+                      <tr key={row.id} className="border-t border-[var(--hairline)] bg-[var(--surface)] align-top">
                         <td className="px-3 py-3">
                           <input
                             aria-label={`Include ${row.rawSymbol || "row"} on ${row.date || "unknown date"}`}
@@ -606,9 +606,9 @@ export function ScreenshotImportModal({
 
             <div className="space-y-3 px-4 py-4 md:hidden">
               {rowState.map(({ row, valid, duplicate }) => (
-                <section key={row.id} className="rounded-[12px] border border-[#29292D] bg-[#121214] p-3.5">
+                <section key={row.id} className="rounded-[2px] border border-[var(--hairline)] bg-[var(--raised)] p-3.5">
                   <div className="mb-3 flex items-start justify-between gap-3">
-                    <label className="flex items-center gap-2 text-xs font-medium text-white">
+                    <label className="flex items-center gap-2 text-xs font-medium text-[var(--text)]">
                       <input
                         type="checkbox"
                         checked={row.included}
@@ -636,14 +636,14 @@ export function ScreenshotImportModal({
         )}
 
         {error && (
-          <div className="mx-5 mb-3 flex gap-2 rounded-[9px] border border-red-400/15 bg-red-400/[0.05] px-3 py-2.5 text-xs text-red-200/80 sm:mx-7">
+          <div className="mx-5 mb-3 flex gap-2 rounded-[2px] border border-[var(--hairline)] border-l-2 border-l-[var(--text)] bg-[var(--raised)] px-3 py-2.5 text-xs text-[var(--text)] sm:mx-7">
             <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
             <span>{error}</span>
           </div>
         )}
 
-        <footer className="flex shrink-0 items-center justify-between gap-3 border-t border-white/[0.06] bg-[#111113] px-5 py-4 sm:px-7">
-          <p className="hidden text-[10px] text-[#64646A] sm:block">
+        <footer className="flex shrink-0 items-center justify-between gap-3 border-t border-[var(--hairline)] bg-[var(--raised)] px-5 py-4 sm:px-7">
+          <p className="hidden text-[10px] text-[var(--muted)] sm:block">
             {step === "upload"
               ? "Images are processed only to build the review."
               : `${rows.length} extracted row${rows.length === 1 ? "" : "s"} · ${selectedRows.length} selected`}
@@ -669,4 +669,3 @@ export function ScreenshotImportModal({
     </Dialog>
   )
 }
-

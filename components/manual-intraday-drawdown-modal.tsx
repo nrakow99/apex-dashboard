@@ -122,7 +122,7 @@ export function ManualIntradayDrawdownModal({
       <DialogContent className="sm:max-w-[400px]">
         <DialogHeader>
           <DialogTitle>Update intraday drawdown</DialogTitle>
-          <DialogDescription className="text-slate-400">
+          <DialogDescription className="text-[var(--muted)]">
             Enter values from Tradovate. Balance uses closed trades only; floor and distance reflect your live platform.
           </DialogDescription>
         </DialogHeader>
@@ -130,7 +130,7 @@ export function ManualIntradayDrawdownModal({
           <div className="space-y-2">
             <Label>Update using</Label>
             <Select value={mode} onValueChange={(v) => setMode(v as ManualDrawdownMode)}>
-              <SelectTrigger className="bg-[#0F1115]/80 border-white/[0.10]">
+              <SelectTrigger className="border-[var(--hairline)] bg-[var(--raised)]">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
@@ -148,7 +148,7 @@ export function ManualIntradayDrawdownModal({
               type="number"
               step="0.01"
               min={0}
-              className="font-mono bg-[#0F1115]/80 border-white/[0.10]"
+              className="border-[var(--hairline)] bg-[var(--raised)] font-mono"
               value={rawInput}
               onChange={(e) => {
                 setRawInput(e.target.value)
@@ -158,16 +158,16 @@ export function ManualIntradayDrawdownModal({
             />
             <p className="text-[11px] text-muted-foreground leading-snug">
               Current balance (closed trades):{" "}
-              <span className="font-mono text-slate-300">${currentBalance.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
+              <span className="font-mono text-[var(--text)]">${currentBalance.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
             </p>
           </div>
-          {error && <p className="text-sm text-red-400">{error}</p>}
+          {error && <p className="border-l-2 border-[var(--text)] pl-3 text-sm text-[var(--text)]">{error}</p>}
           <p className="text-[11px] text-muted-foreground/90 italic">Manually updated from Tradovate.</p>
           <DialogFooter className="flex-col gap-2 sm:flex-row sm:justify-between">
             <Button
               type="button"
               variant="outline"
-              className="border-white/[0.10] text-slate-400"
+              className="border-[var(--hairline)] text-[var(--muted)]"
               disabled={isSaving || !hasManualOverride}
               onClick={() => void handleClear()}
             >
@@ -177,7 +177,7 @@ export function ManualIntradayDrawdownModal({
               <Button type="button" variant="ghost" onClick={() => onOpenChange(false)}>
                 Cancel
               </Button>
-              <Button type="submit" disabled={isSaving} className="bg-emerald-600 hover:bg-emerald-700">
+              <Button type="submit" disabled={isSaving}>
                 Save
               </Button>
             </div>

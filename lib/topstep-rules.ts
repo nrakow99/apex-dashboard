@@ -4,18 +4,12 @@ import type { LucidFlexFloorParams } from "@/lib/lucid-flex-floor"
 export type TopstepSizeKey = 50000 | 100000 | 150000
 
 /**
- * Topstep has no 25K tier. A size below 50K is impossible account data, not
- * an edge case to absorb — throw rather than clamp (see toSizeKey/
- * toTradeifySizeKey, which clamp and can silently invent a rule set that
- * doesn't correspond to any real account).
+ * Account sizes must match a real Topstep tier exactly. Rounding an unknown
+ * size would attach a verified rule table to an account that does not exist.
  */
 export function toTopstepSizeKey(size: number): TopstepSizeKey {
-  if (size < 50000) {
-    throw new Error(`Topstep does not offer a ${size} account — the smallest tier is 50K.`)
-  }
-  if (size <= 50000) return 50000
-  if (size <= 100000) return 100000
-  return 150000
+  if (size === 50000 || size === 100000 || size === 150000) return size
+  throw new Error(`Topstep does not offer a ${size} account — valid sizes are 50K/100K/150K.`)
 }
 
 /**

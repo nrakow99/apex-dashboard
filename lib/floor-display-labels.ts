@@ -29,7 +29,7 @@ export function getFloorMetricStatusLabel(
     return `${prefix} ${formatCurrency(f.lockedFloor)} after ${formatCurrency(f.lockPeakThreshold)} peak · or at payout`
   }
   if (account.drawdownType === "EOD") {
-    return opts.isTradingDayComplete ? "Updated" : "Updates at 2PM"
+    return opts.isTradingDayComplete ? "Updated" : "Updates after the trading day closes"
   }
   if (hasIntradayManualDrawdown(account)) return "Manually updated from Tradovate"
   if (account.type === "Eval") return "Trails session peak"
@@ -67,7 +67,7 @@ export function getRuleEngineFloorRowHint(account: Account): string {
     const f = rules.lucidFlexFloor
     return `Locks at ${formatCurrency(f.lockedFloor)} once peak reaches ${formatCurrency(f.lockPeakThreshold)} (or payout)`
   }
-  if (account.drawdownType === "EOD") return "Updates at 2PM"
+  if (account.drawdownType === "EOD") return "Updates after the trading day closes"
   if (hasIntradayManualDrawdown(account)) return "Manually updated from Tradovate"
   if (account.type === "Eval") return "Trails session peak"
   return "Manual / live threshold"

@@ -16,34 +16,6 @@ export const SESSION_LABELS: Record<SessionId, string> = {
   ny_pm:    "NY PM",
 }
 
-// ── Pill badge styles for display ─────────────────────────────────────────────
-
-export const SESSION_BADGE_STYLES: Record<SessionId, string> = {
-  ny_am:    "bg-[rgba(83,104,120,0.14)] text-[#94AAB8] border-[rgba(83,104,120,0.24)]",
-  ny_lunch: "bg-amber-500/[0.09] text-amber-400/75 border-amber-500/20",
-  ny_pm:    "bg-[rgba(83,104,120,0.09)] text-[#7A96A4] border-[rgba(83,104,120,0.16)]",
-}
-
-// ── Selector pill styles (inactive / active) for the form ────────────────────
-
-export const SESSION_SELECTOR_STYLES: Record<
-  SessionId,
-  { inactive: string; active: string }
-> = {
-  ny_am:    {
-    inactive: "border-[rgba(83,104,120,0.20)] text-[#E5E4E2]/35 hover:text-[#E5E4E2]/55 hover:border-[rgba(83,104,120,0.32)]",
-    active:   "bg-[rgba(83,104,120,0.18)] border-[rgba(83,104,120,0.38)] text-[#94AAB8]",
-  },
-  ny_lunch: {
-    inactive: "border-amber-500/18 text-[#E5E4E2]/35 hover:text-amber-400/55 hover:border-amber-500/28",
-    active:   "bg-amber-500/[0.10] border-amber-500/28 text-amber-400/85",
-  },
-  ny_pm:    {
-    inactive: "border-[rgba(83,104,120,0.16)] text-[#E5E4E2]/30 hover:text-[#E5E4E2]/50 hover:border-[rgba(83,104,120,0.28)]",
-    active:   "bg-[rgba(83,104,120,0.13)] border-[rgba(83,104,120,0.30)] text-[#7A96A4]",
-  },
-}
-
 // ── Backward-compat: derive SessionId from an old "HH:MM" time string ─────────
 
 export function sessionFromTime(time: string): SessionId | null {

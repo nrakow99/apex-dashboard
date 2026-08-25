@@ -1,6 +1,6 @@
 "use client"
 
-import { useMemo, useState, useEffect } from "react"
+import { useMemo, useState } from "react"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Card } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -47,7 +47,7 @@ function SessionBadge({ meta }: { meta: TradeMeta }) {
   const session = resolveSession(meta)
   if (!session) return null
   return (
-    <span className="rounded-[6px] border border-[#303034] bg-[#1B1B1E] px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-[var(--muted)]">
+    <span className="rounded-[2px] border border-[var(--hairline)] bg-[var(--raised)] px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-[var(--muted)]">
       {SESSION_LABELS[session]}
     </span>
   )
@@ -58,7 +58,7 @@ function SessionBadge({ meta }: { meta: TradeMeta }) {
 function GradePill({ grade }: { grade?: string }) {
   if (!grade) return null
   return (
-    <span className="rounded-[6px] border border-[#303034] bg-[#1B1B1E] px-1.5 py-0.5 text-[10px] font-bold text-[var(--muted)]">
+    <span className="rounded-[2px] border border-[var(--hairline)] bg-[var(--raised)] px-1.5 py-0.5 text-[10px] font-bold text-[var(--muted)]">
       {grade}
     </span>
   )
@@ -71,7 +71,7 @@ function DirectionBadge({ direction }: { direction?: string }) {
   const label = DIRECTION_LABELS[direction as keyof typeof DIRECTION_LABELS]
   if (!label) return null
   return (
-    <span className="rounded-[6px] border border-[#303034] bg-[#1B1B1E] px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-[var(--muted)]">
+    <span className="rounded-[2px] border border-[var(--hairline)] bg-[var(--raised)] px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-[var(--muted)]">
       {label}
     </span>
   )
@@ -91,9 +91,9 @@ function TradeDetailPanel({ trade, meta, colSpan }: { trade: Trade; meta: TradeM
     <TableRow className="border-none hover:bg-transparent">
       <TableCell colSpan={colSpan} className="p-0">
         <div className="overflow-hidden animate-in slide-in-from-top-1 fade-in duration-200">
-          <div className="mx-2.5 mb-2 mt-0.5 rounded-[9px] border border-[#2A2A2D] bg-[#171719] p-2 sm:p-3">
+          <div className="mx-2.5 mb-2 mt-0.5 rounded-[2px] border border-[var(--hairline)] bg-[var(--raised)] p-2 sm:p-3">
             {!hasMeta ? (
-              <p className="text-[11px] text-[#E5E4E2]/25 italic">No details recorded.</p>
+              <p className="text-[11px] italic text-[var(--muted)]">No details recorded.</p>
             ) : (
               <div className="space-y-1.5 sm:space-y-2">
                 {/* Badges row */}
@@ -109,21 +109,21 @@ function TradeDetailPanel({ trade, meta, colSpan }: { trade: Trade; meta: TradeM
                 {(meta.entryPrice || meta.exitPrice || meta.contracts) && (
                   <div className="flex items-center gap-3 text-[11px]">
                     {meta.entryPrice != null && (
-                      <span className="text-[#E5E4E2]/40">
-                        <span className="text-[#E5E4E2]/25 mr-1">Entry</span>
-                        <span className="font-mono text-[#E5E4E2]/65">{meta.entryPrice.toFixed(2)}</span>
+                      <span className="text-[var(--muted)]">
+                        <span className="mr-1 text-[var(--faint)]">Entry</span>
+                        <span className="font-mono text-[var(--text)]">{meta.entryPrice.toFixed(2)}</span>
                       </span>
                     )}
                     {meta.exitPrice != null && (
-                      <span className="text-[#E5E4E2]/40">
-                        <span className="text-[#E5E4E2]/25 mr-1">Exit</span>
-                        <span className="font-mono text-[#E5E4E2]/65">{meta.exitPrice.toFixed(2)}</span>
+                      <span className="text-[var(--muted)]">
+                        <span className="mr-1 text-[var(--faint)]">Exit</span>
+                        <span className="font-mono text-[var(--text)]">{meta.exitPrice.toFixed(2)}</span>
                       </span>
                     )}
                     {meta.contracts != null && (
-                      <span className="text-[#E5E4E2]/40">
-                        <span className="text-[#E5E4E2]/25 mr-1">Qty</span>
-                        <span className="font-mono text-[#E5E4E2]/65">{meta.contracts}</span>
+                      <span className="text-[var(--muted)]">
+                        <span className="mr-1 text-[var(--faint)]">Qty</span>
+                        <span className="font-mono text-[var(--text)]">{meta.contracts}</span>
                       </span>
                     )}
                   </div>
@@ -135,7 +135,7 @@ function TradeDetailPanel({ trade, meta, colSpan }: { trade: Trade; meta: TradeM
                     {meta.setupTags.map((tag) => (
                       <span
                         key={tag}
-                        className="rounded-[6px] border border-[#303034] bg-[#1B1B1E] px-1.5 py-0.5 text-[10px] font-medium text-[var(--muted)]"
+                        className="rounded-[2px] border border-[var(--hairline)] bg-[var(--surface)] px-1.5 py-0.5 text-[10px] font-medium text-[var(--muted)]"
                       >
                         {tag}
                       </span>
@@ -151,7 +151,7 @@ function TradeDetailPanel({ trade, meta, colSpan }: { trade: Trade; meta: TradeM
                       return (
                         <span
                           key={tag}
-                          className={cn("rounded-[6px] border border-[#303034] bg-[#1B1B1E] px-1.5 py-0.5 text-[10px] font-medium text-[var(--muted)]", isPositive && "font-semibold text-white")}
+                          className={cn("rounded-[2px] border border-[var(--hairline)] bg-[var(--surface)] px-1.5 py-0.5 text-[10px] font-medium text-[var(--muted)]", isPositive && "font-semibold text-white")}
                         >
                           {tag}
                         </span>
@@ -162,7 +162,7 @@ function TradeDetailPanel({ trade, meta, colSpan }: { trade: Trade; meta: TradeM
 
                 {/* Notes */}
                 {trade.notes && (
-                  <p className="text-[11px] text-[#E5E4E2]/50 leading-relaxed">{trade.notes}</p>
+                  <p className="text-[11px] leading-relaxed text-[var(--muted)]">{trade.notes}</p>
                 )}
               </div>
             )}
@@ -178,18 +178,27 @@ function TradeDetailPanel({ trade, meta, colSpan }: { trade: Trade; meta: TradeM
 export function TradeHistoryTable({ trades, onEditTrade, onDeleteTrade }: TradeHistoryTableProps) {
   const [expandedDates, setExpandedDates] = useState<Set<string>>(new Set())
   const [expandedTradeIds, setExpandedTradeIds] = useState<Set<string>>(new Set())
-  const [allMeta, setAllMeta] = useState<Record<string, TradeMeta>>({})
-
-  useEffect(() => {
-    setAllMeta(buildMetaMapFromTrades(trades))
-  }, [trades])
+  const allMeta = useMemo<Record<string, TradeMeta>>(
+    () => buildMetaMapFromTrades(trades),
+    [trades],
+  )
 
   const toggleDate = (date: string) => {
-    setExpandedDates((prev) => { const n = new Set(prev); n.has(date) ? n.delete(date) : n.add(date); return n })
+    setExpandedDates((prev) => {
+      const next = new Set(prev)
+      if (next.has(date)) next.delete(date)
+      else next.add(date)
+      return next
+    })
   }
 
   const toggleTrade = (id: string) => {
-    setExpandedTradeIds((prev) => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n })
+    setExpandedTradeIds((prev) => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      return next
+    })
   }
 
   const groups = useMemo<DayGroup[]>(() => {
@@ -219,22 +228,22 @@ export function TradeHistoryTable({ trades, onEditTrade, onDeleteTrade }: TradeH
 
   if (trades.length === 0) {
     return (
-      <Card className="activity-panel overflow-hidden rounded-[14px] border-[#262629] bg-[#101012]">
-        <div className="px-3 sm:px-[18px] py-2.5 sm:py-3.5 border-b border-white/[0.07]">
+      <Card className="activity-panel overflow-hidden rounded-[2px] border-[var(--hairline)] bg-[var(--surface)]">
+        <div className="border-b border-[var(--hairline)] px-3 py-2.5 sm:px-[18px] sm:py-3.5">
           <h2 className="text-sm sm:text-lg font-semibold">Trade History</h2>
         </div>
         <div className="py-8 sm:py-12 px-6 text-center space-y-1">
-          <p className="text-sm font-medium text-[#E5E4E2]/45">No trades logged yet.</p>
-          <p className="text-xs text-[#E5E4E2]/25">Protecting capital is also progress.</p>
-          <p className="text-[11px] text-[#E5E4E2]/18 pt-1">Tag setups and sessions as you go to unlock edge analytics.</p>
+          <p className="text-sm font-medium text-[var(--text)]">No trades logged yet.</p>
+          <p className="text-xs text-[var(--muted)]">Add a trade manually or import a screenshot when you are ready.</p>
+          <p className="pt-1 text-[11px] text-[var(--faint)]">Optional setup and discipline details can be added later.</p>
         </div>
       </Card>
     )
   }
 
   return (
-    <Card className="activity-panel overflow-hidden rounded-[14px] border-[#262629] bg-[#101012]">
-      <div className="px-3 sm:px-[18px] py-2.5 sm:py-3.5 border-b border-white/[0.07] flex items-center justify-between">
+    <Card className="activity-panel overflow-hidden rounded-[2px] border-[var(--hairline)] bg-[var(--surface)]">
+      <div className="flex items-center justify-between border-b border-[var(--hairline)] px-3 py-2.5 sm:px-[18px] sm:py-3.5">
         <h2 className="text-sm sm:text-lg font-semibold">Trade History</h2>
         <span className="text-[11px] text-muted-foreground tabular-nums">
           {trades.length} trade{trades.length !== 1 ? "s" : ""} · {groups.length} day{groups.length !== 1 ? "s" : ""}
@@ -244,7 +253,7 @@ export function TradeHistoryTable({ trades, onEditTrade, onDeleteTrade }: TradeH
       <div className="overflow-x-auto">
         <Table>
           <TableHeader>
-            <TableRow className="border-white/[0.07] hover:bg-transparent">
+            <TableRow className="border-[var(--hairline)] hover:bg-transparent">
               <TableHead className="w-9 px-3 sm:px-4" />
               <TableHead className="px-2 sm:px-3">Date</TableHead>
               <TableHead className="px-2 sm:px-3 hidden sm:table-cell">Symbol(s)</TableHead>
@@ -259,8 +268,6 @@ export function TradeHistoryTable({ trades, onEditTrade, onDeleteTrade }: TradeH
             {groups.flatMap((group) => {
               const isGroupExpanded = expandedDates.has(group.date)
               const isMulti = group.trades.length > 1
-              const isProfit = group.dailyPnl > 0
-              const isLoss = group.dailyPnl < 0
               const singleTrade = group.trades.length === 1 ? group.trades[0] : null
               const singleTradeExpanded = singleTrade ? expandedTradeIds.has(singleTrade.id) : false
 
@@ -271,13 +278,8 @@ export function TradeHistoryTable({ trades, onEditTrade, onDeleteTrade }: TradeH
               <TableRow
                   key={group.date}
                   className={cn(
-                    "border-white/[0.07] transition-colors group cursor-pointer",
-                    isProfit && "hover:bg-emerald-500/[0.04]",
-                    isLoss && "hover:bg-red-500/[0.04]",
-                    !isProfit && !isLoss && "hover:bg-white/[0.02]",
-                    isGroupExpanded && isProfit && "bg-emerald-500/[0.03]",
-                    isGroupExpanded && isLoss && "bg-red-500/[0.03]",
-                    singleTradeExpanded && "bg-[rgba(83,104,120,0.04)]",
+                    "group cursor-pointer border-[var(--hairline)] transition-colors hover:bg-[var(--raised)]",
+                    (isGroupExpanded || singleTradeExpanded) && "bg-[var(--raised)]",
                   )}
                   onClick={() => isMulti ? toggleDate(group.date) : singleTrade ? toggleTrade(singleTrade.id) : undefined}
                 >
@@ -285,8 +287,7 @@ export function TradeHistoryTable({ trades, onEditTrade, onDeleteTrade }: TradeH
                   <TableCell className="py-1.5 sm:py-3 px-2 sm:px-4 w-9">
                     <div className="flex items-center gap-1.5">
                       <div className={cn(
-                        "w-0.5 h-4 sm:h-5 rounded-full shrink-0",
-                        isProfit ? "bg-emerald-500/50" : isLoss ? "bg-red-500/50" : "bg-white/10",
+                        "h-4 w-px shrink-0 bg-[var(--faint)] sm:h-5",
                       )} />
                       <ChevronRight
                         className={cn(
@@ -300,7 +301,7 @@ export function TradeHistoryTable({ trades, onEditTrade, onDeleteTrade }: TradeH
                   {/* Date */}
                   <TableCell className="py-1.5 sm:py-3.5 px-2 sm:px-3">
                     <div className="flex flex-col gap-0.5">
-                      <span className="text-xs sm:text-sm font-medium text-[#E5E4E2]/80">
+                      <span className="text-xs font-medium text-[var(--text)] sm:text-sm">
                         {formatGroupDate(group.date)}
                       </span>
                       {/* Session + Direction badges for single-trade rows */}
@@ -327,7 +328,7 @@ export function TradeHistoryTable({ trades, onEditTrade, onDeleteTrade }: TradeH
                   <TableCell className="px-2 sm:px-3 hidden sm:table-cell">
                     <div className="flex gap-1 flex-wrap items-center">
                       {group.symbols.slice(0, 3).map((sym) => (
-                        <span key={sym} className="rounded-[6px] border border-[#303034] bg-[#1B1B1E] px-1.5 py-0.5 font-mono text-[11px] font-semibold text-[var(--muted)]">
+                        <span key={sym} className="rounded-[2px] border border-[var(--hairline)] bg-[var(--raised)] px-1.5 py-0.5 font-mono text-[11px] font-semibold text-[var(--muted)]">
                           {sym}
                         </span>
                       ))}
@@ -405,13 +406,13 @@ export function TradeHistoryTable({ trades, onEditTrade, onDeleteTrade }: TradeH
                   rows.push(
                     <TableRow
                       key={`trade-${trade.id}`}
-                      className="border-white/[0.04] bg-[rgba(83,104,120,0.025)] hover:bg-[rgba(83,104,120,0.05)] transition-colors group cursor-pointer"
+                      className="group cursor-pointer border-[var(--hairline)] bg-[var(--surface)] transition-colors hover:bg-[var(--raised)]"
                       onClick={() => toggleTrade(trade.id)}
                     >
                       {/* Indent + chevron */}
                       <TableCell className="py-1.5 sm:py-2.5 px-3 sm:px-4 w-9">
                         <div className="flex items-center gap-0.5 pl-1">
-                          <div className={cn("w-0.5 h-3 rounded-full shrink-0", trade.pnl > 0 ? "bg-emerald-500/30" : trade.pnl < 0 ? "bg-red-500/30" : "bg-border/40")} />
+                          <div className="h-3 w-px shrink-0 bg-[var(--faint)]" />
                           <ChevronRight className={cn("h-3 w-3 text-muted-foreground/30 transition-transform duration-200 ml-0.5", isTradeExpanded && "rotate-90 text-muted-foreground/55")} />
                         </div>
                       </TableCell>
@@ -427,7 +428,7 @@ export function TradeHistoryTable({ trades, onEditTrade, onDeleteTrade }: TradeH
                       {/* Symbol chip + grade */}
                       <TableCell className="px-2 sm:px-3 hidden sm:table-cell">
                         <div className="flex items-center gap-1.5">
-                          <span className="font-mono text-xs font-semibold text-[#E5E4E2]/65">{trade.symbol}</span>
+                          <span className="font-mono text-xs font-semibold text-[var(--text)]">{trade.symbol}</span>
                           {tradeMeta.grade && <GradePill grade={tradeMeta.grade} />}
                           {trade.notes && !isTradeExpanded && (
                             <span className="text-[11px] text-muted-foreground/40 truncate max-w-[100px]">{trade.notes}</span>

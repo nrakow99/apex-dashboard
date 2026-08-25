@@ -24,7 +24,7 @@ interface MetricsCardProps {
 
 export function MetricsCard({ className, title, value, change, status, subValue, titleAction }: MetricsCardProps) {
   return (
-    <Card className={cn("h-full rounded-none border-[var(--hairline)] bg-[#101012] p-4 sm:p-5", className)}>
+    <Card className={cn("h-full rounded-none border-[var(--hairline)] bg-[var(--surface)] p-4 sm:p-5", className)}>
       <div className="space-y-2">
         <div className="flex items-start justify-between gap-1.5">
           <p className="min-w-0 flex-1 text-[10px] font-medium uppercase leading-tight tracking-[0.16em] text-[var(--muted)] line-clamp-2">

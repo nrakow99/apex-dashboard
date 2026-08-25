@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest"
-import { getPayoutEligibility, calculateAccountStats, getConsistencyInfo, getTodayDateStr } from "./storage"
+import { calculateDailyPnLData, getPayoutEligibility, calculateAccountStats, getConsistencyInfo, getTodayDateStr } from "./storage"
 import { getAccountRules } from "./rules"
 import type { Account, Trade, Payout, Firm, AccountType, AlphaTier, TopstepPayoutPath, TradeifyProgram } from "./types"
 
@@ -593,4 +593,60 @@ describe("Zero-activity fresh account — every firm × every type", () => {
       })
     }
   }
+})
+
+describe("Daily balance history includes payouts", () => {
+  it("deducts a payout on the same day after applying that day's trading P&L", () => {
+    const account = topstepAccount()
+    const rows = calculateDailyPnLData(
+      account.id,
+      [trade("2026-07-01", 700, account.id)],
+      account,
+      [payout("2026-07-01", 200, 1, account.id)],
+    )
+
+    expect(rows).toEqual([{
+      date: "2026-07-01",
+      accountId: account.id,
+      pnl: 700,
+      payoutAmount: 200,
+      balance: 50500,
+      tradesCount: 1,
+    }])
+  })
+
+  it("adds payout-only balance events without counting them as trading days", () => {
+    const account = topstepAccount()
+    const trades = [trade("2026-07-01", 700, account.id)]
+    const payouts = [payout("2026-07-02", 200, 1, account.id)]
+    const rows = calculateDailyPnLData(account.id, trades, account, payouts)
+
+    expect(rows.map((row) => ({
+      date: row.date,
+      pnl: row.pnl,
+      payoutAmount: row.payoutAmount,
+      balance: row.balance,
+      tradesCount: row.tradesCount,
+    }))).toEqual([
+      { date: "2026-07-01", pnl: 700, payoutAmount: 0, balance: 50700, tradesCount: 1 },
+      { date: "2026-07-02", pnl: 0, payoutAmount: 200, balance: 50500, tradesCount: 0 },
+    ])
+    expect(calculateAccountStats(account, trades, payouts).tradingDays).toBe(1)
+  })
+
+  it("excludes pre-activation payouts from a converted PA balance history", () => {
+    const account = topstepAccount({ activationStartDate: "2026-07-10" })
+    const rows = calculateDailyPnLData(
+      account.id,
+      [trade("2026-07-11", 300, account.id)],
+      account,
+      [
+        payout("2026-07-09", 100, 1, account.id),
+        payout("2026-07-12", 200, 2, account.id),
+      ],
+    )
+
+    expect(rows.map((row) => row.date)).toEqual(["2026-07-11", "2026-07-12"])
+    expect(rows.at(-1)?.balance).toBe(50100)
+  })
 })

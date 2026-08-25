@@ -1,6 +1,7 @@
 "use client"
 
 import { useState } from "react"
+import { useRouter } from "next/navigation"
 import { createClient } from "@/lib/supabase/client"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -9,6 +10,7 @@ import { Card } from "@/components/ui/card"
 import { Loader2 } from "lucide-react"
 
 export default function LoginPage() {
+  const router = useRouter()
   const [email, setEmail] = useState("")
   const [password, setPassword] = useState("")
   const [isLoading, setIsLoading] = useState(false)
@@ -32,7 +34,8 @@ export default function LoginPage() {
       setError(error.message)
       setIsLoading(false)
     } else {
-      window.location.href = "/today"
+      router.replace("/today")
+      router.refresh()
     }
   }
 

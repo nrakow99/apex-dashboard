@@ -17,8 +17,6 @@ import { EditTradeModal } from "@/components/edit-trade-modal"
 import { EditAccountModal } from "@/components/edit-account-modal"
 import { DeleteConfirmationModal } from "@/components/delete-confirmation-modal"
 import { ActivatePaModal } from "@/components/activate-pa-modal"
-import { LiveClock } from "@/components/live-clock"
-import { AccountRangeCard, shouldShowAccountRangeCard } from "@/components/account-range-card"
 import {
   ManualIntradayDrawdownModal,
   type ManualDrawdownMode,
@@ -61,9 +59,6 @@ import {
   fetchPayouts,
   fetchInstrumentSpecs,
   fetchUserSettings,
-  saveUserSettings,
-  upsertUserInstrumentSpec,
-  deleteUserInstrumentSpec,
   createAccount,
   createTrade,
   createPayout,
@@ -79,7 +74,6 @@ import {
 } from "@/lib/pa-activation"
 import type { Trade, Payout, Account, AccountType, DrawdownType, Firm, DailyPnL, TradeifyProgram, TopstepPayoutPath, AlphaTier, InstrumentSpec, RiskProfile } from "@/lib/types"
 import { migrateLocalTradeMetadata, type TradeMeta } from "@/lib/trade-meta"
-import { SettingsModal } from "@/components/settings-modal"
 import { BUILTIN_INSTRUMENTS } from "@/lib/instrument-specs"
 import { resolveRiskProfile, getHeadroom, tradesSuffix, lossEndsAccountText } from "@/lib/headroom"
 
@@ -170,11 +164,20 @@ export default function Dashboard() {
 
   useEffect(() => {
     if (accounts.length === 0 || typeof window === "undefined") return
-    const accountId = new URLSearchParams(window.location.search).get("account")
-    if (!accountId || !accounts.some((account) => account.id === accountId)) return
-    setSelectedAccountId(accountId)
-    setViewMode("detail")
-    window.history.replaceState({}, "", "/")
+    const syncViewFromUrl = () => {
+      const accountId = new URLSearchParams(window.location.search).get("account")
+      if (accountId && accounts.some((account) => account.id === accountId)) {
+        setSelectedAccountId(accountId)
+        setViewMode("detail")
+        return
+      }
+      setSelectedAccountId(null)
+      setViewMode("accounts")
+    }
+
+    syncViewFromUrl()
+    window.addEventListener("popstate", syncViewFromUrl)
+    return () => window.removeEventListener("popstate", syncViewFromUrl)
   }, [accounts])
 
   // Get selected account
@@ -182,11 +185,34 @@ export default function Dashboard() {
     return accounts.find((a) => a.id === selectedAccountId) ?? null
   }, [accounts, selectedAccountId])
 
+  const resolvedRulesByAccount = useMemo(() => {
+    const resolved = new Map<string, ReturnType<typeof getAccountRules> | null>()
+    for (const account of accounts) {
+      try {
+        resolved.set(account.id, getAccountRules(account))
+      } catch {
+        resolved.set(account.id, null)
+      }
+    }
+    return resolved
+  }, [accounts])
+
+  const selectedRules = selectedAccount
+    ? resolvedRulesByAccount.get(selectedAccount.id) ?? null
+    : null
+
   // Filter accounts by type
   const filteredAccounts = useMemo(() => {
     if (accountFilter === "All") return accounts
     return accounts.filter((a) => a.type === accountFilter)
   }, [accounts, accountFilter])
+
+  const filteredValidAccounts = useMemo(
+    () => filteredAccounts.filter((account) => resolvedRulesByAccount.get(account.id) != null),
+    [filteredAccounts, resolvedRulesByAccount],
+  )
+
+  const configurationIssueCount = filteredAccounts.length - filteredValidAccounts.length
 
   // Get data for selected account
   const accountTrades = useMemo(() => {
@@ -200,14 +226,14 @@ export default function Dashboard() {
   }, [allPayouts, selectedAccount])
 
   const accountDailyData = useMemo((): DailyPnL[] => {
-    if (!selectedAccount) return []
+    if (!selectedAccount || !selectedRules) return []
     return calculateDailyPnLData(selectedAccount.id, allTrades, selectedAccount, allPayouts)
-  }, [selectedAccount, allTrades, allPayouts])
+  }, [selectedAccount, selectedRules, allTrades, allPayouts])
 
   const accountStats = useMemo(() => {
-    if (!selectedAccount) return null
+    if (!selectedAccount || !selectedRules) return null
     return calculateAccountStats(selectedAccount, allTrades, allPayouts)
-  }, [selectedAccount, allTrades, allPayouts])
+  }, [selectedAccount, selectedRules, allTrades, allPayouts])
 
   /** Display-only floor/drawdown for intraday manual Tradovate overrides; payout logic uses raw accountStats */
   const displayAccountStats = useMemo(() => {
@@ -225,28 +251,26 @@ export default function Dashboard() {
   }, [selectedAccount, displayAccountStats, userRiskProfile, instrumentSpecs])
 
   const consistencyInfo = useMemo(() => {
-    if (!selectedAccount) return null
-    const rules = getAccountRules(selectedAccount)
-    if (rules.hasConsistency) {
+    if (!selectedAccount || !selectedRules) return null
+    if (selectedRules.hasConsistency) {
       return getConsistencyInfo(selectedAccount.id, allTrades, selectedAccount, allPayouts)
     }
     // Apex PA: qualifying-day count lives on consistencyInfo (no eval-style consistency card)
-    if (selectedAccount.firm === "Apex" && selectedAccount.type === "PA" && rules.minProfitDays > 0) {
+    if (selectedAccount.firm === "Apex" && selectedAccount.type === "PA" && selectedRules.minProfitDays > 0) {
       return getConsistencyInfo(selectedAccount.id, allTrades, selectedAccount, allPayouts)
     }
     return null
-  }, [selectedAccount, allTrades, allPayouts])
+  }, [selectedAccount, selectedRules, allTrades, allPayouts])
 
   const payoutEligibility = useMemo(() => {
-    if (!selectedAccount || selectedAccount.type !== "PA") return null
+    if (!selectedAccount || !selectedRules || selectedAccount.type !== "PA") return null
     return getPayoutEligibility(selectedAccount.id, allTrades, selectedAccount, allPayouts)
-  }, [selectedAccount, allTrades, allPayouts])
+  }, [selectedAccount, selectedRules, allTrades, allPayouts])
 
   const accountDirective = useMemo(() => {
-    if (!selectedAccount || !accountStats || !displayAccountStats) return null
-    const rules = getAccountRules(selectedAccount)
+    if (!selectedAccount || !selectedRules || !accountStats || !displayAccountStats) return null
     const room = Math.max(0, displayAccountStats.drawdownRemaining)
-    const roomFraction = rules.maxDrawdown > 0 ? room / rules.maxDrawdown : 1
+    const roomFraction = selectedRules.maxDrawdown > 0 ? room / selectedRules.maxDrawdown : 1
 
     if (selectedAccount.status === "Breached" || !displayAccountStats.isSafe) {
       return {
@@ -292,8 +316,8 @@ export default function Dashboard() {
       }
     }
 
-    if (selectedAccount.type === "Eval" && rules.hasProfitTarget) {
-      const target = rules.profitTarget
+    if (selectedAccount.type === "Eval" && selectedRules.hasProfitTarget) {
+      const target = selectedRules.profitTarget
       const remaining = Math.max(0, target - accountStats.totalPnL)
       return {
         eyebrow: "Evaluation objective",
@@ -313,20 +337,20 @@ export default function Dashboard() {
       target: "rule-status",
       critical: false,
     }
-  }, [selectedAccount, accountStats, displayAccountStats, payoutEligibility])
+  }, [selectedAccount, selectedRules, accountStats, displayAccountStats, payoutEligibility])
 
   const selectedEvalEligible = useMemo(() => {
-    if (!selectedAccount || selectedAccount.type !== "Eval") return false
+    if (!selectedAccount || !selectedRules || selectedAccount.type !== "Eval") return false
     const at = allTrades.filter((t) => t.accountId === selectedAccount.id)
     const ap = allPayouts.filter((p) => p.accountId === selectedAccount.id)
     const stats = getEvalActivationStats(selectedAccount, at, ap)
     return isEvalEligibleForPaActivation(selectedAccount, stats, at, ap)
-  }, [selectedAccount, allTrades, allPayouts])
+  }, [selectedAccount, selectedRules, allTrades, allPayouts])
 
   /** Fourth top metric: qualifying days (PA), profit/consistency (Eval), or trading days (Live). Display-only; counts match rules/payout helpers. */
   const fourthStatMetric = useMemo(() => {
-    if (!selectedAccount || !accountStats) return null
-    const rules = getAccountRules(selectedAccount)
+    if (!selectedAccount || !selectedRules || !accountStats) return null
+    const rules = selectedRules
 
     if (selectedAccount.type === "PA") {
       const minReq = rules.minProfitDays
@@ -350,7 +374,17 @@ export default function Dashboard() {
         payoutEligibility?.firm === "Tradeify" &&
         payoutEligibility.tradeifyProgram === "select_flex"
       ) {
-        const count = payoutEligibility.winningDays ?? 0
+        const count = payoutEligibility.winningDays
+        if (count == null) {
+          return {
+            title: "Winning Days",
+            value: "Unavailable",
+            change: {
+              value: "Cycle count unavailable",
+              isPositive: false,
+            },
+          }
+        }
         return {
           title: "Winning Days",
           value: count.toString(),
@@ -382,11 +416,12 @@ export default function Dashboard() {
       if (rules.hasProfitTarget && pt != null && pt > 0) {
         return {
           title: "Profit Target",
-          value: formatCurrency(accountStats.totalPnL),
+          value: formatCurrency(pt),
           change: {
-            value: `of ${formatCurrency(pt)} goal`,
+            value: `${formatCurrency(Math.max(0, pt - accountStats.totalPnL))} remaining`,
             isPositive: accountStats.totalPnL >= pt,
           },
+          subValue: `${Math.max(0, Math.min(100, (accountStats.totalPnL / pt) * 100)).toFixed(0)}% complete`,
         }
       }
 
@@ -449,6 +484,7 @@ export default function Dashboard() {
     }
   }, [
     selectedAccount,
+    selectedRules,
     accountStats,
     accountDailyData,
     payoutEligibility,
@@ -462,18 +498,20 @@ export default function Dashboard() {
 
   /** Portfolio summary for the accounts page — remaining room, not cash totals. */
   const accountsOverview = useMemo(() => {
-    if (filteredAccounts.length === 0) return null
-    return getAccountsOverview(filteredAccounts, allTrades, allPayouts)
-  }, [filteredAccounts, allTrades, allPayouts])
+    if (filteredValidAccounts.length === 0) return null
+    return getAccountsOverview(filteredValidAccounts, allTrades, allPayouts)
+  }, [filteredValidAccounts, allTrades, allPayouts])
 
   const handleSelectAccount = (account: Account) => {
     setSelectedAccountId(account.id)
     setViewMode("detail")
+    if (typeof window !== "undefined") window.history.pushState({}, "", `/?account=${account.id}`)
   }
 
   const handleBack = () => {
     setViewMode("accounts")
     setSelectedAccountId(null)
+    if (typeof window !== "undefined") window.history.pushState({}, "", "/")
   }
 
   // CREATE handlers
@@ -507,47 +545,6 @@ export default function Dashboard() {
       toast({ title: "Error", description: err instanceof Error ? err.message : "Failed to create account", variant: "destructive" })
     } finally {
       setIsSaving(false)
-    }
-  }
-
-  const handleSaveUserRiskProfile = async (profile: RiskProfile | null) => {
-    setIsSaving(true)
-    try {
-      const result = await saveUserSettings(profile)
-      if (result.error) throw result.error
-      setUserRiskProfile(profile)
-      toast({
-        title: profile ? "Default risk profile saved" : "Default risk profile cleared",
-        description: profile ? `${profile.symbol} · ${profile.contracts} contract${profile.contracts === 1 ? "" : "s"}` : undefined,
-      })
-    } catch (err) {
-      toast({ title: "Error", description: err instanceof Error ? err.message : "Failed to save settings", variant: "destructive" })
-    } finally {
-      setIsSaving(false)
-    }
-  }
-
-  const handleAddInstrument = async (spec: { symbol: string; label: string; tickSize: number; tickValue: number }) => {
-    try {
-      const result = await upsertUserInstrumentSpec(spec)
-      if (result.error) throw result.error
-      const newSpec = result.data
-      if (newSpec) {
-        setInstrumentSpecs((prev) => [...prev.filter((s) => !(s.symbol === newSpec.symbol && !s.isBuiltin)), newSpec])
-        toast({ title: "Instrument added", description: `${newSpec.symbol} — ${newSpec.label}` })
-      }
-    } catch (err) {
-      toast({ title: "Error", description: err instanceof Error ? err.message : "Failed to add instrument", variant: "destructive" })
-    }
-  }
-
-  const handleDeleteInstrument = async (symbol: string) => {
-    try {
-      const result = await deleteUserInstrumentSpec(symbol)
-      if (result.error) throw result.error
-      setInstrumentSpecs((prev) => prev.filter((s) => !(s.symbol === symbol && !s.isBuiltin)))
-    } catch (err) {
-      toast({ title: "Error", description: err instanceof Error ? err.message : "Failed to remove instrument", variant: "destructive" })
     }
   }
 
@@ -603,13 +600,13 @@ export default function Dashboard() {
   }
 
   const handleAddPayout = async (payoutData: { date: string; amount: number; notes?: string }) => {
-    if (!selectedAccount) return
+    if (!selectedAccount || !selectedRules) return
 
     setIsSaving(true)
     try {
       const accountPayoutCount = allPayouts.filter((p) => p.accountId === selectedAccount.id).length
-      const isLucid = selectedAccount.firm === "Lucid"
-      const splitPercent = isLucid ? 0.9 : 1.0
+      const splitPercent = selectedRules.payoutSplit
+      const hasFirmSplit = splitPercent > 0 && splitPercent < 1
 
       const result = await createPayout({
         accountId: selectedAccount.id,
@@ -617,9 +614,9 @@ export default function Dashboard() {
         amount: payoutData.amount,
         payoutNumber: accountPayoutCount + 1,
         notes: payoutData.notes,
-        traderReceived: isLucid ? payoutData.amount * splitPercent : undefined,
-        firmSplit: isLucid ? payoutData.amount * (1 - splitPercent) : undefined,
-        payoutSplitPercent: isLucid ? splitPercent : undefined,
+        traderReceived: hasFirmSplit ? payoutData.amount * splitPercent : undefined,
+        firmSplit: hasFirmSplit ? payoutData.amount * (1 - splitPercent) : undefined,
+        payoutSplitPercent: hasFirmSplit ? splitPercent : undefined,
       })
 
       if (result.error) throw result.error
@@ -845,8 +842,8 @@ export default function Dashboard() {
     return (
       <div className="min-h-screen premium-shell flex items-center justify-center">
         <div className="flex flex-col items-center gap-4 max-w-md text-center">
-          <AlertCircle className="h-8 w-8 text-red-500" />
-          <p className="text-red-500">{error}</p>
+          <AlertCircle className="h-8 w-8 text-[var(--text)]" />
+          <p className="text-[var(--text)]">{error}</p>
           <Button variant="outline" onClick={loadData} className="gap-2">
             <RefreshCw className="h-4 w-4" />
             Try Again
@@ -993,7 +990,7 @@ export default function Dashboard() {
         <div className="fixed right-4 top-4 z-50 flex items-center gap-3 rounded-[2px] border border-[var(--hairline)] bg-[var(--raised)] px-4 py-3 text-[var(--text)]">
           <AlertCircle className="h-4 w-4" />
           <span className="text-sm">{error}</span>
-          <button onClick={() => setError(null)} className="text-red-500/70 hover:text-red-500">
+          <button onClick={() => setError(null)} className="text-[var(--muted)] hover:text-[var(--text)]">
             ×
           </button>
         </div>
@@ -1014,11 +1011,13 @@ export default function Dashboard() {
           viewMode === "accounts"
             ? "Know which accounts can be traded, protected, or paid out."
             : selectedAccount
-              ? `${selectedAccount.drawdownType ?? "EOD"} drawdown · live rule and payout position`
+              ? selectedRules
+                ? `${selectedAccount.drawdownType ?? "EOD"} drawdown · live rule and payout position`
+                : "Rule configuration required before account metrics are available"
               : undefined
         }
         leading={viewMode === "detail" ? (
-          <Button variant="ghost" size="icon" onClick={handleBack} className="h-10 w-10 shrink-0 rounded-[10px] border border-[#2A2A2D] bg-[#141416]">
+          <Button variant="ghost" size="icon" onClick={handleBack} className="h-10 w-10 shrink-0 border border-[var(--hairline)] bg-[var(--raised)]">
             <ArrowLeft className="h-4 w-4" />
           </Button>
         ) : undefined}
@@ -1066,28 +1065,22 @@ export default function Dashboard() {
             </>
           )}
           <AddAccountModal onAddAccount={handleAddAccount} />
-          <SettingsModal
-            specs={instrumentSpecs}
-            userDefault={userRiskProfile}
-            onSaveDefault={handleSaveUserRiskProfile}
-            onAddInstrument={handleAddInstrument}
-            onDeleteInstrument={handleDeleteInstrument}
-            isSaving={isSaving}
-          />
         </> : selectedAccount ? <>
-          <select
+          {accounts.length > 1 && <select
             aria-label="Select account"
             value={selectedAccount.id}
-            onChange={(event) => setSelectedAccountId(event.target.value)}
-            className="h-10 max-w-[220px] rounded-[9px] border border-[#2A2A2D] bg-[#141416] px-3 text-xs text-white outline-none focus:border-[#48484D]"
+            onChange={(event) => {
+              setSelectedAccountId(event.target.value)
+              if (typeof window !== "undefined") window.history.pushState({}, "", `/?account=${event.target.value}`)
+            }}
+            className="h-10 max-w-[220px] rounded-[2px] border border-[var(--hairline)] bg-[var(--raised)] px-3 text-xs text-white outline-none focus:border-[var(--faint)]"
           >
             {accounts.map((account) => <option key={account.id} value={account.id}>{account.name}</option>)}
-          </select>
-          <div className="hidden xl:block"><LiveClock /></div>
+          </select>}
           {selectedAccount.type === "Eval" && selectedEvalEligible && (
             <Button
               size="sm"
-              className="rounded-[9px] bg-white text-black hover:bg-white/90"
+              className="bg-white text-black hover:bg-white/90"
               onClick={() => {
                 setActivatePaEval(selectedAccount)
                 setActivatePaOpen(true)
@@ -1130,13 +1123,13 @@ export default function Dashboard() {
           />
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
-              <Button variant="ghost" size="icon" className="h-10 w-10 rounded-[9px] border border-[#2A2A2D] bg-[#141416]">
+              <Button variant="ghost" size="icon" className="h-10 w-10 border border-[var(--hairline)] bg-[var(--raised)]">
                 <MoreHorizontal className="h-4 w-4" />
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end" className="w-40">
               <DropdownMenuItem onClick={() => setEditingAccount(selectedAccount)}><Pencil className="mr-2 h-4 w-4" />Edit Account</DropdownMenuItem>
-              <DropdownMenuItem onClick={() => setDeletingAccount(selectedAccount)} className="text-red-500 focus:text-red-500"><Trash2 className="mr-2 h-4 w-4" />Delete Account</DropdownMenuItem>
+              <DropdownMenuItem onClick={() => setDeletingAccount(selectedAccount)} className="font-semibold"><Trash2 className="mr-2 h-4 w-4" />Delete Account</DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
         </> : undefined}
@@ -1158,10 +1151,42 @@ export default function Dashboard() {
 
             {accountsOverview && <AccountsOverviewRow overview={accountsOverview} />}
 
+            {configurationIssueCount > 0 && (
+              <div className="mb-4 rounded-[2px] border border-[var(--hairline)] border-l-2 border-l-[var(--text)] bg-[var(--raised)] px-4 py-3">
+                <p className="text-sm font-medium text-[var(--text)]">
+                  {configurationIssueCount} account{configurationIssueCount === 1 ? " is" : "s are"} excluded from risk totals
+                </p>
+                <p className="mt-1 text-xs text-[var(--muted)]">
+                  Update the account settings before relying on its floor, rule, or payout values.
+                </p>
+              </div>
+            )}
+
             {/* Account Cards Grid */}
             {filteredAccounts.length > 0 ? (
               <div className="grid gap-4 md:grid-cols-2 2xl:grid-cols-3">
                 {filteredAccounts.map((account) => {
+                  const accountRules = resolvedRulesByAccount.get(account.id)
+                  if (!accountRules) {
+                    return (
+                      <div
+                        key={account.id}
+                        className="flex min-h-[240px] flex-col justify-between rounded-[2px] border border-[var(--hairline)] border-l-2 border-l-[var(--text)] bg-[var(--surface)] p-5 sm:p-6"
+                      >
+                        <div>
+                          <p className="text-base font-semibold text-[var(--text)]">{account.name}</p>
+                          <p className="mt-1 text-xs text-[var(--muted)]">{account.firm} · {account.type}</p>
+                          <h3 className="mt-8 text-lg font-medium text-[var(--text)]">Rule configuration required</h3>
+                          <p className="mt-2 text-sm leading-relaxed text-[var(--muted)]">
+                            Risk, floor, and payout figures are unavailable until this account’s settings match a supported firm program and size.
+                          </p>
+                        </div>
+                        <Button type="button" variant="outline" className="mt-6" onClick={() => setEditingAccount(account)}>
+                          Edit account settings
+                        </Button>
+                      </div>
+                    )
+                  }
                   const tradesForAccount = allTrades.filter((t) => t.accountId === account.id)
                   const payoutsForAccount = allPayouts.filter((p) => p.accountId === account.id)
                   const actStats = getEvalActivationStats(account, tradesForAccount, payoutsForAccount)
@@ -1191,7 +1216,7 @@ export default function Dashboard() {
                           <Button
                             variant="ghost"
                             size="icon"
-                            className="h-8 w-8 rounded-[8px] border border-[#2B2B2E] bg-[#171719] text-slate-500 hover:border-[#424247] hover:text-white"
+                            className="h-8 w-8 border border-[var(--hairline)] bg-[var(--raised)] text-[var(--muted)] hover:border-[var(--faint)] hover:text-white"
                           >
                             <MoreHorizontal className="h-3.5 w-3.5" />
                           </Button>
@@ -1203,7 +1228,7 @@ export default function Dashboard() {
                           </DropdownMenuItem>
                           <DropdownMenuItem
                             onClick={() => setDeletingAccount(account)}
-                            className="text-red-500 focus:text-red-500"
+                            className="font-semibold"
                           >
                             <Trash2 className="h-4 w-4 mr-2" />
                             Delete Account
@@ -1216,22 +1241,33 @@ export default function Dashboard() {
                 })}
               </div>
             ) : (
-              <div className="rounded-[14px] border border-[#262629] bg-[#101012] py-14 text-center sm:py-20">
+              <div className="rounded-[2px] border border-[var(--hairline)] bg-[var(--surface)] py-14 text-center sm:py-20">
                 <div className="mb-3 flex justify-center">
-                  <div className="flex h-10 w-10 items-center justify-center rounded-[10px] border border-[#2B2B2E] bg-[#171719]">
+                  <div className="flex h-10 w-10 items-center justify-center rounded-[2px] border border-[var(--hairline)] bg-[var(--raised)]">
                     <span className="text-lg font-bold text-white">P</span>
                   </div>
                 </div>
-                <p className="text-lg font-semibold text-[#E5E4E2]/70 mb-1">No accounts yet</p>
-                <p className="text-sm text-[#E5E4E2]/35 mb-6 max-w-xs mx-auto">
-                  Add your first Apex or Lucid account to start tracking rules, payouts, and performance.
+                <p className="mb-1 text-lg font-semibold text-[var(--text)]">No accounts yet</p>
+                <p className="mx-auto mb-6 max-w-xs text-sm text-[var(--muted)]">
+                  Add your first prop account to start tracking rules, payouts, and performance.
                 </p>
                 <AddAccountModal onAddAccount={handleAddAccount} />
               </div>
             )}
           </>
         ) : (
-          selectedAccount &&
+          selectedAccount && !selectedRules ? (
+            <div className="rounded-[2px] border border-[var(--hairline)] border-l-2 border-l-[var(--text)] bg-[var(--surface)] p-6 sm:p-8">
+              <p className="text-[9px] font-medium uppercase tracking-[0.17em] text-[var(--muted)]">Account unavailable</p>
+              <h2 className="mt-3 text-2xl font-medium tracking-[-0.03em]">Rule configuration required</h2>
+              <p className="mt-3 max-w-2xl text-sm leading-relaxed text-[var(--muted)]">
+                This account does not match a supported firm program and size. No floor, target, consistency, or payout value will be shown until the settings are corrected.
+              </p>
+              <Button type="button" className="mt-6" onClick={() => setEditingAccount(selectedAccount)}>
+                Edit account settings
+              </Button>
+            </div>
+          ) : selectedAccount &&
           accountStats && (
             <>
               <div className="mb-5 flex flex-wrap items-center gap-2">
@@ -1245,7 +1281,7 @@ export default function Dashboard() {
                 <div className="mb-5 grid gap-4 xl:grid-cols-[minmax(0,1.65fr)_minmax(300px,.7fr)]">
                   <AccountTrajectory account={selectedAccount} data={accountDailyData} stats={displayAccountStats!} />
                   <div className={cn(
-                    "flex min-h-[280px] flex-col justify-between rounded-[14px] border border-[#262629] bg-[#101012] p-6",
+                    "flex min-h-[280px] flex-col justify-between rounded-[2px] border border-[var(--hairline)] bg-[var(--surface)] p-6",
                     accountDirective.critical && "border-l-4 border-l-white",
                   )}>
                     <div>
@@ -1256,7 +1292,7 @@ export default function Dashboard() {
                     <Button
                       type="button"
                       variant="outline"
-                      className="mt-8 w-full justify-between rounded-[9px]"
+                      className="mt-8 w-full justify-between"
                       onClick={() => document.getElementById(accountDirective.target)?.scrollIntoView({ behavior: "smooth", block: "start" })}
                     >
                       {accountDirective.action}
@@ -1267,7 +1303,7 @@ export default function Dashboard() {
               )}
 
               {/* TOP ROW: Stats Cards */}
-              <div className="mb-5 grid grid-cols-2 gap-px overflow-hidden rounded-[12px] border border-[var(--hairline)] bg-[var(--hairline)] lg:grid-cols-5 [&>*]:border-0">
+              <div className="mb-5 grid grid-cols-2 gap-px overflow-hidden rounded-[2px] border border-[var(--hairline)] bg-[var(--hairline)] lg:grid-cols-5 [&>*]:border-0">
                 <MetricsCard
                   className="order-1 lg:order-none"
                   title="Account Balance"
@@ -1295,7 +1331,7 @@ export default function Dashboard() {
                       projectedEodFloor: accountStats.projectedEodFloor,
                       activeEodFloor: accountStats.activeEodFloor,
                     })
-                      ? `Projected: ${formatCurrency(accountStats.projectedEodFloor ?? 0)}`
+                      ? `Projected: ${formatCurrency(accountStats.projectedEodFloor)}`
                       : undefined
                   }
                   titleAction={
@@ -1304,7 +1340,7 @@ export default function Dashboard() {
                         type="button"
                         variant="ghost"
                         size="icon"
-                        className="h-7 w-7 text-slate-500 hover:text-[#E5E4E2]/70"
+                        className="h-7 w-7 text-[var(--muted)] hover:text-[var(--text)]"
                         title="Edit intraday floor"
                         onClick={() => {
                           setManualIntradayModalMode("floor")
@@ -1335,14 +1371,14 @@ export default function Dashboard() {
                   />
                 )}
                 <MetricsCard
-                  className="order-5 lg:order-5"
+                  className="order-5 col-span-2 lg:order-5 lg:col-span-1"
                   title="Drawdown Remaining"
                   value={formatCurrency(Math.max(0, displayAccountStats!.drawdownRemaining))}
                   change={{
-                    value: `of ${formatCurrency(getAccountRules(selectedAccount).maxDrawdown)}${selectedAccountHeadroom ? tradesSuffix(selectedAccountHeadroom) : ""}`,
+                    value: `of ${formatCurrency(selectedRules!.maxDrawdown)}${selectedAccountHeadroom ? tradesSuffix(selectedAccountHeadroom) : ""}`,
                     isPositive:
                       displayAccountStats!.drawdownRemaining >
-                      getAccountRules(selectedAccount).maxDrawdown * 0.5,
+                      selectedRules!.maxDrawdown * 0.5,
                   }}
                   subValue={
                     selectedAccount.drawdownType === "Intraday" && hasIntradayManualDrawdown(selectedAccount)
@@ -1355,7 +1391,7 @@ export default function Dashboard() {
                         type="button"
                         variant="ghost"
                         size="icon"
-                        className="h-7 w-7 text-slate-500 hover:text-[#E5E4E2]/70"
+                        className="h-7 w-7 text-[var(--muted)] hover:text-[var(--text)]"
                         title="Edit drawdown remaining"
                         onClick={() => {
                           setManualIntradayModalMode("remaining")
@@ -1371,7 +1407,7 @@ export default function Dashboard() {
 
               <div id="rule-status" className={cn(
                 "mb-6 grid items-start gap-4",
-                selectedAccount.type === "PA" && payoutEligibility && getAccountRules(selectedAccount).hasPayouts
+                selectedAccount.type === "PA" && payoutEligibility && selectedRules!.hasPayouts
                   ? "xl:grid-cols-[minmax(0,1.55fr)_minmax(340px,.75fr)]"
                   : "grid-cols-1",
               )}>
@@ -1390,11 +1426,11 @@ export default function Dashboard() {
                       : selectedAccount.firm === "Tradeify" &&
                           payoutEligibility?.firm === "Tradeify" &&
                           payoutEligibility.tradeifyProgram === "select_flex"
-                        ? payoutEligibility.winningDays ?? 0
+                        ? payoutEligibility.winningDays
                         : undefined
                   }
                 />
-                {selectedAccount.type === "PA" && payoutEligibility && getAccountRules(selectedAccount).hasPayouts && (
+                {selectedAccount.type === "PA" && payoutEligibility && selectedRules!.hasPayouts && (
                   <div id="payout-status">
                     <PayoutStatusPanel
                       account={selectedAccount}
@@ -1405,12 +1441,6 @@ export default function Dashboard() {
                   </div>
                 )}
               </div>
-
-              {shouldShowAccountRangeCard(selectedAccount) && (
-                <div className="mb-6">
-                  <AccountRangeCard account={selectedAccount} stats={displayAccountStats!} instrumentSpecs={instrumentSpecs} userDefaultRiskProfile={userRiskProfile} />
-                </div>
-              )}
 
               <div className="space-y-4">
                 <TradingCalendar account={selectedAccount} dailyData={accountDailyData} trades={accountTrades} />

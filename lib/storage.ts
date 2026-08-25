@@ -56,12 +56,9 @@ export function calculateDailyPnLData(
   account: Account,
   payouts: Payout[]
 ): DailyPnL[] {
-  let accountTrades = trades.filter((t) => t.accountId === accountId)
-  if (account.type === "PA" && account.activationStartDate) {
-    const activationStartDate = account.activationStartDate
-    accountTrades = accountTrades.filter((t) => t.date >= activationStartDate)
-  }
-  if (accountTrades.length === 0) return []
+  const accountTrades = tradesEffectiveForAccount(account, trades)
+  const accountPayouts = payoutsEffectiveForAccount(account, payouts)
+  if (accountTrades.length === 0 && accountPayouts.length === 0) return []
 
   const tradesByDate: Record<string, Trade[]> = {}
   for (const trade of accountTrades) {
@@ -69,17 +66,27 @@ export function calculateDailyPnLData(
     tradesByDate[trade.date].push(trade)
   }
 
-  const dates = Object.keys(tradesByDate).sort()
+  const payoutsByDate: Record<string, number> = {}
+  for (const payout of accountPayouts) {
+    payoutsByDate[payout.date] = (payoutsByDate[payout.date] ?? 0) + payout.amount
+  }
+
+  const dates = Array.from(new Set([
+    ...Object.keys(tradesByDate),
+    ...Object.keys(payoutsByDate),
+  ])).sort()
   let runningBalance = getRuleStartingBalance(account)
 
   return dates.map((date) => {
-    const dayTrades = tradesByDate[date]
+    const dayTrades = tradesByDate[date] ?? []
     const dailyPnL = dayTrades.reduce((sum, t) => sum + t.pnl, 0)
-    runningBalance += dailyPnL
+    const payoutAmount = payoutsByDate[date] ?? 0
+    runningBalance += dailyPnL - payoutAmount
     return {
       date,
       accountId,
       pnl: dailyPnL,
+      payoutAmount,
       balance: runningBalance,
       tradesCount: dayTrades.length,
     }
@@ -946,91 +953,4 @@ export function getPayoutEligibility(
     lucidSplit: 0,
     minPayoutAmount: rules.minPayoutAmount,
   }
-}
-
-// ─── Initial seed data ────────────────────────────────────────────────────────
-
-function getTodayDate(): string {
-  const d = new Date()
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`
-}
-
-const INITIAL_ACCOUNTS: Account[] = [
-  {
-    id: "apex-50k-eval",
-    name: "Apex 50K Eval",
-    firm: "Apex",
-    type: "Eval",
-    status: "Active",
-    drawdownType: "EOD",
-    accountSize: 50000,
-    balance: 50000,
-    startingBalance: 50000,
-    maxBalance: 50000,
-    profitTarget: 3000,
-    maxDrawdown: 2000,
-    dailyLossLimit: 1000,
-  },
-  {
-    id: "apex-50k-pa",
-    name: "Apex 50K PA",
-    firm: "Apex",
-    type: "PA",
-    status: "Active",
-    drawdownType: "EOD",
-    accountSize: 50000,
-    balance: 50670,
-    startingBalance: 50000,
-    maxBalance: 50670,
-    maxDrawdown: 2000,
-    dailyLossLimit: 1000,
-  },
-]
-
-// localStorage fallback (used only outside Supabase context)
-const STORAGE_KEYS = {
-  accounts: "apex-tracker-accounts",
-  trades: "apex-tracker-trades",
-  payouts: "apex-tracker-payouts",
-} as const
-
-export function loadAccounts(): Account[] {
-  if (typeof window === "undefined") return []
-  try { return JSON.parse(localStorage.getItem(STORAGE_KEYS.accounts) ?? "[]") } catch { return [] }
-}
-export function saveAccounts(accounts: Account[]): void {
-  if (typeof window === "undefined") return
-  localStorage.setItem(STORAGE_KEYS.accounts, JSON.stringify(accounts))
-}
-export function loadTrades(): Trade[] {
-  if (typeof window === "undefined") return []
-  try { return JSON.parse(localStorage.getItem(STORAGE_KEYS.trades) ?? "[]") } catch { return [] }
-}
-export function saveTrades(trades: Trade[]): void {
-  if (typeof window === "undefined") return
-  localStorage.setItem(STORAGE_KEYS.trades, JSON.stringify(trades))
-}
-export function loadPayouts(): Payout[] {
-  if (typeof window === "undefined") return []
-  try { return JSON.parse(localStorage.getItem(STORAGE_KEYS.payouts) ?? "[]") } catch { return [] }
-}
-export function savePayouts(payouts: Payout[]): void {
-  if (typeof window === "undefined") return
-  localStorage.setItem(STORAGE_KEYS.payouts, JSON.stringify(payouts))
-}
-
-export function initializeStorage(): { accounts: Account[]; trades: Trade[]; payouts: Payout[] } {
-  if (typeof window === "undefined") return { accounts: [], trades: [], payouts: [] }
-  let accounts = loadAccounts()
-  let trades = loadTrades()
-  let payouts = loadPayouts()
-  if (accounts.length === 0) {
-    accounts = INITIAL_ACCOUNTS
-    saveAccounts(accounts)
-    trades = [{ id: "trade-1", date: getTodayDate(), accountId: "apex-50k-pa", symbol: "NQ", pnl: 670 }]
-    saveTrades(trades)
-    payouts = []
-    savePayouts(payouts)
-  }
-  return { accounts, trades, payouts }
 }

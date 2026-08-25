@@ -54,17 +54,17 @@ function SegmentedControl<T extends string>({
   onChange: (v: T) => void
 }) {
   return (
-    <div className="flex flex-wrap gap-1 p-1 bg-[#0F1115]/80 border border-white/[0.08] rounded-xl">
+    <div className="flex flex-wrap gap-1 rounded-[2px] border border-[var(--hairline)] bg-[var(--surface)] p-1">
       {options.map((opt) => (
         <button
           key={opt.value}
           type="button"
           onClick={() => onChange(opt.value)}
           className={cn(
-            "flex-1 basis-[30%] py-1.5 px-2 rounded-lg text-sm font-medium transition-all",
+            "flex-1 basis-[30%] rounded-[2px] px-2 py-1.5 text-sm font-medium transition-colors",
             value === opt.value
-              ? "bg-[#1E2229] text-[#E5E4E2] shadow-[inset_0_0_0_1px_rgba(83,104,120,0.40),inset_0_1px_0_rgba(255,255,255,0.06)]"
-              : "text-slate-500 hover:text-[#E5E4E2]"
+              ? "bg-[var(--text)] text-[var(--ground)]"
+              : "text-[var(--muted)] hover:bg-[var(--raised)] hover:text-[var(--text)]"
           )}
         >
           {opt.label}
@@ -322,7 +322,7 @@ export function AddAccountModal({ onAddAccount }: AddAccountModalProps) {
           {qty > 1 && (
             <p className="text-[11px] text-muted-foreground -mt-2">
               {formatAccountBundleHelper({ accountSize: effectiveAccountSize, quantity: qty })} · Portfolio buying power{" "}
-              <span className="font-mono text-[#94AAB8]">${portfolioBuyingPower.toLocaleString()}</span>
+              <span className="font-mono text-[var(--text)]">${portfolioBuyingPower.toLocaleString()}</span>
               <span className="block mt-0.5">Rules track one representative ${(effectiveAccountSize / 1000).toFixed(0)}K account.</span>
             </p>
           )}
@@ -363,8 +363,8 @@ export function AddAccountModal({ onAddAccount }: AddAccountModalProps) {
                   />
                   <p className="text-[11px] text-muted-foreground">
                     {form.topstepPayoutPath === "consistency"
-                      ? "Higher payout ceiling. 40% consistency rule applies; 3 trading days required, no winning-day count."
-                      : "5 winning days of $150+ required. No consistency rule."}
+                      ? `Higher payout ceiling. ${rules.consistencyPercent}% consistency applies; ${rules.minTradingDays} trading days required.`
+                      : `${rules.minProfitDays} winning days of $${rules.winningDayThreshold.toLocaleString()}+ required. No consistency rule.`}
                   </p>
                 </div>
               )}
@@ -387,7 +387,7 @@ export function AddAccountModal({ onAddAccount }: AddAccountModalProps) {
 
           {/* Rule preview — every figure below reads straight from getAccountRules().
               Never hardcode a second copy of these numbers here. */}
-          <div className="p-3 rounded-xl bg-[#0F1115]/70 border border-white/[0.07] text-xs text-slate-400 space-y-1">
+          <div className="space-y-1 rounded-[2px] border border-[var(--hairline)] bg-[var(--raised)] p-3 text-xs text-[var(--muted)]">
             <div className="font-medium text-foreground mb-1">Account Rules</div>
             <div className="flex justify-between">
               <span>Max Drawdown</span>

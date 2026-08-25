@@ -53,7 +53,7 @@ function SegmentedControl<T extends string>({
   disabled?: boolean
 }) {
   return (
-    <div className="flex gap-0 p-1 bg-[#0F1115]/80 border border-white/[0.08] rounded-xl">
+    <div className="flex gap-0 rounded-[2px] border border-[var(--hairline)] bg-[var(--surface)] p-1">
       {options.map((opt) => (
         <button
           key={opt.value}
@@ -61,10 +61,10 @@ function SegmentedControl<T extends string>({
           onClick={() => !disabled && onChange(opt.value)}
           disabled={disabled}
           className={cn(
-            "flex-1 py-1.5 px-2 rounded-lg text-sm font-medium transition-all",
+            "flex-1 rounded-[2px] px-2 py-1.5 text-sm font-medium transition-colors",
             value === opt.value
-              ? "bg-[#1E2229] text-[#E5E4E2] shadow-[inset_0_0_0_1px_rgba(83,104,120,0.40),inset_0_1px_0_rgba(255,255,255,0.06)]"
-              : "text-slate-500 hover:text-[#E5E4E2]",
+              ? "bg-[var(--text)] text-[var(--ground)]"
+              : "text-[var(--muted)] hover:bg-[var(--raised)] hover:text-[var(--text)]",
             disabled && "opacity-50 cursor-not-allowed"
           )}
         >
@@ -143,11 +143,11 @@ export function EditAccountModal({
     if (account) {
       setForm({
         name: account.name,
-        firm: account.firm ?? "Apex",
+        firm: account.firm,
         type: account.type,
         status: account.status,
-        drawdownType: account.drawdownType ?? "EOD",
-        accountSize: account.accountSize ?? 50000,
+        drawdownType: account.drawdownType,
+        accountSize: account.accountSize,
         quantity: account.quantity ?? 1,
         startingBalance: account.startingBalance.toString(),
         maxDrawdown: account.maxDrawdown.toString(),
@@ -449,7 +449,7 @@ export function EditAccountModal({
           {qty > 1 && (
             <p className="text-[11px] text-muted-foreground -mt-2">
               {formatAccountBundleHelper({ accountSize: effectiveAccountSize, quantity: qty })} · Portfolio buying power{" "}
-              <span className="font-mono text-[#94AAB8]">${portfolioBuyingPower.toLocaleString()}</span>
+              <span className="font-mono text-[var(--text)]">${portfolioBuyingPower.toLocaleString()}</span>
               <span className="block mt-0.5">Rules track one representative account (starting ${ruleStartingBalance.toLocaleString()}).</span>
             </p>
           )}
@@ -486,8 +486,8 @@ export function EditAccountModal({
                   />
                   <p className="text-[11px] text-muted-foreground">
                     {form.topstepPayoutPath === "consistency"
-                      ? "Higher payout ceiling. 40% consistency rule applies; 3 trading days required, no winning-day count."
-                      : "5 winning days of $150+ required. No consistency rule."}
+                      ? `Higher payout ceiling. ${rules.consistencyPercent}% consistency applies; ${rules.minTradingDays} trading days required.`
+                      : `${rules.minProfitDays} winning days of $${rules.winningDayThreshold.toLocaleString()}+ required. No consistency rule.`}
                   </p>
                 </div>
               )}
