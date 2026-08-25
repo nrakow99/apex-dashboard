@@ -1,6 +1,7 @@
 "use client"
 
-import { Pencil, Trash2 } from "lucide-react"
+import { useMemo, useState } from "react"
+import { ChevronLeft, ChevronRight, Pencil, Trash2 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { cn, formatPnL, pnlColorClass } from "@/lib/utils"
 import { tradeReviewAreaCount } from "@/lib/trades-workspace"
@@ -31,7 +32,12 @@ function ReviewContext({ trade }: { trade: Trade }) {
 }
 
 export function GlobalTradesTable({ trades, accounts, onEdit, onDelete }: GlobalTradesTableProps) {
+  const [page, setPage] = useState(1)
+  const pageSize = 25
   const accountMap = new Map(accounts.map((account) => [account.id, account]))
+  const pageCount = Math.max(1, Math.ceil(trades.length / pageSize))
+  const currentPage = Math.min(page, pageCount)
+  const visibleTrades = useMemo(() => trades.slice((currentPage - 1) * pageSize, currentPage * pageSize), [currentPage, trades])
   if (trades.length === 0) {
     return <div className="border border-[var(--hairline)] bg-[var(--surface)] px-5 py-14 text-center"><p className="text-sm font-medium">No matching trade records</p><p className="mt-1 text-xs text-[var(--muted)]">Change the filters or add a trade to start a review.</p></div>
   }
@@ -52,7 +58,7 @@ export function GlobalTradesTable({ trades, accounts, onEdit, onDelete }: Global
             </tr>
           </thead>
           <tbody className="divide-y divide-[var(--hairline)]">
-            {trades.map((trade) => {
+            {visibleTrades.map((trade) => {
               const account = accountMap.get(trade.accountId)
               return (
                 <tr key={trade.id} className="transition-colors hover:bg-[var(--raised)]/60">
@@ -76,7 +82,7 @@ export function GlobalTradesTable({ trades, accounts, onEdit, onDelete }: Global
       </div>
 
       <div className="divide-y divide-[var(--hairline)] md:hidden">
-        {trades.map((trade) => {
+        {visibleTrades.map((trade) => {
           const account = accountMap.get(trade.accountId)
           return (
             <article key={trade.id} className="p-4">
@@ -91,6 +97,16 @@ export function GlobalTradesTable({ trades, accounts, onEdit, onDelete }: Global
             </article>
           )
         })}
+      </div>
+      <div className="flex flex-col gap-3 border-t border-[var(--hairline)] bg-[var(--raised)] px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
+        <p className="text-[11px] text-[var(--muted)]">
+          Showing <span className="font-mono text-white">{(currentPage - 1) * pageSize + 1}–{Math.min(currentPage * pageSize, trades.length)}</span> of <span className="font-mono text-white">{trades.length}</span> records
+        </p>
+        <div className="flex items-center gap-2">
+          <Button variant="outline" size="sm" onClick={() => setPage(Math.max(1, currentPage - 1))} disabled={currentPage === 1}><ChevronLeft className="mr-1 h-3.5 w-3.5" />Previous</Button>
+          <span className="min-w-16 text-center font-mono text-[10px] text-[var(--muted)]">{currentPage} / {pageCount}</span>
+          <Button variant="outline" size="sm" onClick={() => setPage(Math.min(pageCount, currentPage + 1))} disabled={currentPage === pageCount}>Next<ChevronRight className="ml-1 h-3.5 w-3.5" /></Button>
+        </div>
       </div>
     </div>
   )

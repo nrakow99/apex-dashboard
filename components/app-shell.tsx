@@ -3,10 +3,11 @@
 import type { ReactNode } from "react"
 import Link from "next/link"
 import { usePathname, useRouter } from "next/navigation"
-import { BarChart3, BookOpen, Layers3, LayoutDashboard, LogOut, Settings, ShieldAlert, ShieldCheck, WalletCards } from "lucide-react"
+import { BarChart3, BookOpen, Layers3, LayoutDashboard, LogOut, Plus, Settings, ShieldAlert, ShieldCheck, WalletCards } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { createClient } from "@/lib/supabase/client"
 import { OnboardingGuide } from "@/components/onboarding-guide"
+import { CommandMenu } from "@/components/command-menu"
 
 interface AppShellProps {
   eyebrow?: string
@@ -65,7 +66,14 @@ export function AppShell({ eyebrow, title, description, leading, actions, childr
           </div>
         </div>
 
-        <nav className="flex-1 overflow-y-auto px-4 py-5" aria-label="Primary navigation">
+        <div className="px-4 pt-4">
+          <CommandMenu />
+          <Link href="/today?log=1" className="mt-2 flex h-10 w-full items-center justify-center gap-2 rounded-[2px] bg-white px-3 text-xs font-medium text-black transition-colors hover:bg-white/90">
+            <Plus className="h-3.5 w-3.5" /> Quick log
+          </Link>
+        </div>
+
+        <nav className="flex-1 overflow-y-auto px-4 py-4" aria-label="Primary navigation">
           {navigation.map((group, groupIndex) => (
             <div key={group.section} className={cn(groupIndex > 0 && "mt-5")}>
               <p className="mb-2 px-3 text-[9px] font-medium uppercase tracking-[0.18em] text-[var(--faint)]">{group.section}</p>

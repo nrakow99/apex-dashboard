@@ -43,7 +43,9 @@ interface AddTradeModalProps {
     trade: { date: string; symbol: string; pnl: number; notes?: string },
     meta: TradeMeta,
     accountIds: string[],
-  ) => void
+  ) => void | Promise<void>
+  requestedOpen?: boolean
+  onOpenChange?: (open: boolean) => void
 }
 
 const emptyMeta = (): TradeMeta => ({
@@ -70,11 +72,14 @@ export function AddTradeModal({
   selectedAccountId,
   userDefaultRiskProfile = null,
   onAddTrade,
+  requestedOpen = false,
+  onOpenChange,
 }: AddTradeModalProps) {
   const [open, setOpen] = useState(false)
   const [calendarOpen, setCalendarOpen] = useState(false)
   const [formData, setFormData] = useState(emptyForm(selectedAccountId))
   const [meta, setMeta] = useState<TradeMeta>(emptyMeta())
+  const [saving, setSaving] = useState(false)
   const [accountIds, setAccountIds] = useState<string[]>(
     selectedAccountId ? [selectedAccountId] : [],
   )
@@ -99,25 +104,42 @@ export function AddTradeModal({
     })
   }
 
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault()
+  const submitTrade = async (keepOpen: boolean) => {
     if (accountIds.length === 0) return
     const parsedPnl = Number(formData.pnl)
     if (formData.pnl.trim() === "" || !Number.isFinite(parsedPnl)) return
-    onAddTrade(
-      {
-        date: formData.date,
-        symbol: formData.symbol.toUpperCase(),
-        pnl: parsedPnl,
-        notes: formData.notes.trim() || undefined,
-      },
-      meta,
-      accountIds,
-    )
-    setOpen(false)
-    setFormData(emptyForm(selectedAccountId))
-    setMeta(emptyMeta())
-    setAccountIds(selectedAccountId ? [selectedAccountId] : [])
+    setSaving(true)
+    try {
+      await onAddTrade(
+        {
+          date: formData.date,
+          symbol: formData.symbol.toUpperCase(),
+          pnl: parsedPnl,
+          notes: formData.notes.trim() || undefined,
+        },
+        meta,
+        accountIds,
+      )
+      if (typeof window !== "undefined") {
+        window.localStorage.setItem("propdash:last-trade-symbol", formData.symbol.toUpperCase())
+      }
+      setMeta(emptyMeta())
+      if (keepOpen) {
+        setFormData((current) => ({ ...current, pnl: "", notes: "" }))
+      } else {
+        setOpen(false)
+        onOpenChange?.(false)
+        setFormData(emptyForm(selectedAccountId))
+        setAccountIds(selectedAccountId ? [selectedAccountId] : [])
+      }
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault()
+    void submitTrade(false)
   }
 
   const n = accountIds.length
@@ -126,14 +148,19 @@ export function AddTradeModal({
 
   return (
     <Dialog
-      open={open}
+      open={open || requestedOpen}
       onOpenChange={(isOpen) => {
         if (isOpen) {
           const initial = selectedAccountId ? [selectedAccountId] : []
           setFormData((prev) => ({ ...prev, accountId: selectedAccountId }))
           setAccountIds(initial)
         }
+        if (isOpen && typeof window !== "undefined") {
+          const rememberedSymbol = window.localStorage.getItem("propdash:last-trade-symbol")
+          if (rememberedSymbol) setFormData((prev) => ({ ...prev, symbol: rememberedSymbol }))
+        }
         setOpen(isOpen)
+        onOpenChange?.(isOpen)
       }}
     >
       <DialogTrigger asChild>
@@ -169,16 +196,19 @@ export function AddTradeModal({
         </form>
 
         <div className={TRADE_MODAL_FOOTER}>
-          <Button type="button" variant="ghost" size="sm" onClick={() => setOpen(false)}>
+          <Button type="button" variant="ghost" size="sm" disabled={saving} onClick={() => { setOpen(false); onOpenChange?.(false) }}>
             Cancel
+          </Button>
+          <Button type="button" variant="outline" size="sm" disabled={!canSubmit || saving} onClick={() => void submitTrade(true)}>
+            Save &amp; next
           </Button>
           <Button
             form="add-trade-form"
             type="submit"
             size="sm"
-            disabled={!canSubmit}
+            disabled={!canSubmit || saving}
           >
-            {n <= 1 ? "Add Trade" : `Add to ${n} accounts`}
+            {saving ? "Saving…" : n <= 1 ? "Save trade" : `Save to ${n} accounts`}
           </Button>
         </div>
       </DialogContent>

@@ -1,7 +1,8 @@
 "use client"
 
-import { useCallback, useEffect, useMemo, useState } from "react"
+import { Suspense, useCallback, useEffect, useMemo, useState } from "react"
 import Link from "next/link"
+import { useRouter, useSearchParams } from "next/navigation"
 import { ArrowUpRight, RefreshCw, ShieldAlert, Sparkles } from "lucide-react"
 import { AddTradeModal } from "@/components/add-trade-modal"
 import { AppShell } from "@/components/app-shell"
@@ -14,9 +15,16 @@ import type { Account, InstrumentSpec, Payout, RiskProfile, Trade } from "@/lib/
 import type { TradeMeta } from "@/lib/trade-meta"
 import { buildTodayAccounts } from "@/lib/today-dashboard"
 import { buildComplianceItems } from "@/lib/compliance-center"
+import { summarizeCompliance } from "@/lib/compliance-center"
 import { DailySessionPlanCard } from "@/components/daily-session-plan"
 
 export default function TodayPage() {
+  return <Suspense fallback={null}><TodayContent /></Suspense>
+}
+
+function TodayContent() {
+  const router = useRouter()
+  const searchParams = useSearchParams()
   const [accounts, setAccounts] = useState<Account[]>([])
   const [trades, setTrades] = useState<Trade[]>([])
   const [payouts, setPayouts] = useState<Payout[]>([])
@@ -51,14 +59,18 @@ export default function TodayPage() {
     () => buildComplianceItems({ accounts, trades, payouts, instrumentSpecs, userRiskProfile }),
     [accounts, instrumentSpecs, payouts, trades, userRiskProfile],
   )
-  const attentionItems = complianceItems.filter((entry) => entry.kind !== "ready")
+  const complianceSummary = summarizeCompliance(complianceItems)
+  const urgentCount = complianceSummary.blockers + complianceSummary.watches
+  const priorityItem = complianceItems.find((entry) => entry.kind === "blocker")
+    ?? complianceItems.find((entry) => entry.kind === "watch")
+    ?? complianceItems.find((entry) => entry.kind === "ready")
+    ?? complianceItems.find((entry) => entry.kind === "action")
 
   const todayPnl = rows.reduce((sum, row) => sum + row.todayPnl, 0)
   const readyCount = rows.filter((row) => row.payoutReady).length
   const breachedCount = rows.filter((row) => row.breached).length
   const configurationCount = rows.filter((row) => !row.rulesAvailable).length
   const activeTodayCount = rows.filter((row) => row.tradeCountToday > 0).length
-  const needsAttention = attentionItems.length
   const briefing = breachedCount > 0
     ? `${breachedCount} account${breachedCount === 1 ? " is" : "s are"} off limits. Keep risk on the healthy accounts.`
     : complianceItems.some((entry) => entry.kind === "blocker")
@@ -71,16 +83,29 @@ export default function TodayPage() {
         ? "No trading activity has been logged today. Review risk before the next entry."
       : "No account is in immediate danger. Trade the plan, not the buffer."
 
-  const posture = needsAttention > 0
-    ? "Selective"
+  const posture = complianceSummary.blockers > 0
+    ? "Stop and verify"
+    : complianceSummary.watches > 0
+      ? "Trade selectively"
     : activeTodayCount === 0
       ? "Pre-trade"
       : "Clear"
+
+  const postureCopy = complianceSummary.blockers > 0
+    ? `${complianceSummary.blockers} issue${complianceSummary.blockers === 1 ? "" : "s"} must be resolved before trading.`
+    : complianceSummary.watches > 0
+      ? `${complianceSummary.watches} account check${complianceSummary.watches === 1 ? "" : "s"} deserve a closer look. ${complianceSummary.actions > 0 ? `${complianceSummary.actions} routine step${complianceSummary.actions === 1 ? " remains" : "s remain"}.` : ""}`
+      : activeTodayCount === 0
+        ? "Set the plan, verify the firm portal, then log the first result."
+        : "No urgent risk flags detected."
 
   const addTrade = async (trade: { date: string; symbol: string; pnl: number; notes?: string }, meta: TradeMeta, accountIds: string[]) => {
     await Promise.all(accountIds.map((accountId) => createTrade({ ...trade, accountId }, meta)))
     await load()
   }
+
+  const quickLogRequested = searchParams.get("log") === "1"
+  const quickLogAccountId = rows.find((row) => !row.breached && row.rulesAvailable)?.account.id ?? accounts[0]?.id ?? ""
 
   return (
     <AppShell
@@ -89,7 +114,7 @@ export default function TodayPage() {
       description="Your risk, rules, and next payout move—before the session starts."
       actions={<>
         <Button variant="outline" size="icon" onClick={load} disabled={loading} aria-label="Refresh"><RefreshCw className={cn("h-4 w-4", loading && "animate-spin")} /></Button>
-        {accounts.length > 0 && <AddTradeModal accounts={accounts} selectedAccountId={accounts[0].id} onAddTrade={addTrade} />}
+        {accounts.length > 0 && <AddTradeModal accounts={accounts} selectedAccountId={quickLogAccountId} onAddTrade={addTrade} requestedOpen={quickLogRequested} onOpenChange={(open) => { if (!open && quickLogRequested) router.replace("/today", { scroll: false }) }} />}
       </>}
     >
       {error ? (
@@ -104,9 +129,12 @@ export default function TodayPage() {
                 {breachedCount > 0 ? <ShieldAlert className="h-[18px] w-[18px]" /> : <Sparkles className="h-[18px] w-[18px]" />}
               </span>
               <div>
-                <p className="text-[10px] font-medium uppercase tracking-[0.17em] text-[var(--muted)]">Daily briefing</p>
+                <p className="text-[10px] font-medium uppercase tracking-[0.17em] text-[var(--muted)]">What matters now</p>
                 <h2 className="mt-2 max-w-3xl text-xl font-medium leading-snug tracking-[-0.025em] sm:text-2xl">{briefing}</h2>
-                <p className="mt-3 text-sm text-[var(--muted)]">Loss room is ranked from tightest to widest. Payout requirements use the current cycle.</p>
+                {priorityItem ? <div className="mt-4 flex flex-col gap-3 border-t border-[var(--hairline)] pt-4 sm:flex-row sm:items-center sm:justify-between">
+                  <div><p className="text-[9px] uppercase tracking-[0.15em] text-[var(--faint)]">Do this next</p><p className="mt-1 text-sm text-[var(--muted)]">{priorityItem.accountName ? `${priorityItem.accountName} · ` : ""}{priorityItem.title}</p></div>
+                  <Button asChild variant="outline" size="sm" className="shrink-0"><Link href={priorityItem.href}>{priorityItem.action}<ArrowUpRight className="ml-1.5 h-3.5 w-3.5" /></Link></Button>
+                </div> : <p className="mt-3 text-sm text-[var(--muted)]">No open actions. Keep the firm portal and saved results in sync.</p>}
               </div>
             </div>
           </Card>
@@ -114,11 +142,7 @@ export default function TodayPage() {
             <p className="text-[10px] font-medium uppercase tracking-[0.17em] text-[var(--muted)]">Session posture</p>
             <p className="mt-3 text-lg font-medium">{posture}</p>
             <p className="mt-1 text-sm leading-relaxed text-[var(--muted)]">
-              {needsAttention > 0
-                ? `${needsAttention} compliance item${needsAttention === 1 ? " needs" : "s need"} attention today.`
-                : activeTodayCount === 0
-                  ? "Waiting for the first reviewed result."
-                  : "No urgent risk flags detected."}
+              {postureCopy}
             </p>
           </Card>
         </section>
@@ -127,7 +151,7 @@ export default function TodayPage() {
           <Summary label="Tracked accounts" value={String(rows.length)} />
           <Summary label="Today’s net P&L" value={formatPnL(todayPnl)} signed />
           <Summary label="Payout ready" value={String(readyCount)} />
-          <Summary label="Needs attention" value={String(needsAttention)} />
+          <Summary label="Urgent checks" value={String(urgentCount)} />
         </section>
 
         <DailySessionPlanCard date={localTodayKey()} />
@@ -140,7 +164,7 @@ export default function TodayPage() {
               {rows.map((row) => <Link href={`/?account=${row.account.id}`} key={row.account.id} className={cn("grid grid-cols-[minmax(0,1fr)_auto] gap-5 border-b border-[var(--hairline)] p-4 transition-colors last:border-0 hover:bg-[var(--raised)] sm:grid-cols-[minmax(0,1fr)_120px_170px] sm:items-center sm:px-5", (row.breached || !row.rulesAvailable) && "border-l-2 border-l-[var(--text)]")}>
                 <div><p className="font-medium">{row.account.name}</p><p className="mt-1 text-xs text-[var(--muted)]">{row.breached ? "Do not trade · breached" : !row.rulesAvailable ? "Rules unavailable · update account" : `${row.account.firm} · ${row.account.type}`}</p></div>
                 <div className="text-right"><p className="text-[10px] uppercase tracking-[0.12em] text-[var(--muted)]">Today</p><p className={cn("mt-1 font-mono text-sm", pnlColorClass(row.todayPnl))}>{formatPnL(row.todayPnl)}</p></div>
-                <div className="col-span-2 sm:col-span-1"><div className="flex justify-between text-[10px] text-[var(--muted)]"><span>Loss room</span><span className="font-mono text-[var(--text)]">{row.drawdownRemaining == null ? "Unavailable" : formatCurrency(row.drawdownRemaining)}</span></div>{row.drawdownPercent != null && <div className="mt-2 h-1 rounded-[2px] bg-[var(--hairline)]"><div className="h-full rounded-[2px] bg-[var(--text)]" style={{ width: `${Math.min(100, row.drawdownPercent * 100)}%` }} /></div>}{row.dailyRemaining != null && <p className="mt-2 text-[10px] text-[var(--muted)]">Daily room {formatCurrency(row.dailyRemaining)}</p>}</div>
+                <div className="col-span-2 sm:col-span-1"><div className="flex justify-between text-[10px] text-[var(--muted)]"><span>Account loss room</span><span className="font-mono text-[var(--text)]">{row.drawdownRemaining == null ? "Unavailable" : formatCurrency(row.drawdownRemaining)}</span></div>{row.drawdownPercent != null && <div className="mt-2 h-1 rounded-[2px] bg-[var(--hairline)]"><div className="h-full rounded-[2px] bg-[var(--text)]" style={{ width: `${Math.min(100, row.drawdownPercent * 100)}%` }} /></div>}{row.dailyRemaining != null && <p className="mt-2 text-[10px] text-[var(--muted)]">Today’s loss room {formatCurrency(row.dailyRemaining)}</p>}</div>
               </Link>)}
             </div>
           </section>
@@ -149,7 +173,7 @@ export default function TodayPage() {
               <div className="mb-3 flex items-end justify-between"><div><p className="text-[10px] uppercase tracking-[0.16em] text-[var(--muted)]">Action center</p><h2 className="mt-1 text-xl font-medium">Next moves</h2></div><Link href="/compliance" className="text-xs text-[var(--muted)] hover:text-white">View all</Link></div>
               <div className="space-y-2">
                 {complianceItems.length === 0 && <Card className="rounded-[2px] border-[var(--hairline)] bg-[var(--surface)] p-4"><p className="text-sm">No open compliance actions</p><p className="mt-1 text-xs text-[var(--muted)]">Continue checking the firm portal before requests.</p></Card>}
-                {complianceItems.slice(0, 3).map((entry) => <Link href={entry.href} key={entry.id} className="block"><Card className={cn("rounded-[2px] border-[var(--hairline)] bg-[var(--surface)] p-4 transition-colors hover:border-[var(--faint)] hover:bg-[var(--raised)]", entry.kind === "blocker" && "border-l-2 border-l-white")}><div className="flex items-start justify-between gap-3"><div><p className="text-sm font-medium">{entry.title}</p><p className="mt-1 text-xs leading-relaxed text-[var(--muted)]">{entry.accountName ? `${entry.accountName} · ` : ""}{entry.description}</p></div><ArrowUpRight className="h-4 w-4 shrink-0 text-[var(--muted)]" /></div></Card></Link>)}
+                {complianceItems.slice(0, 3).map((entry) => <Link href={entry.href} key={entry.id} className="block"><Card className={cn("rounded-[2px] border-[var(--hairline)] bg-[var(--surface)] p-4 transition-colors hover:border-[var(--faint)] hover:bg-[var(--raised)]", entry.kind === "blocker" && "border-l-2 border-l-white")}><div className="flex items-start justify-between gap-3"><div><p className="mb-2 text-[9px] uppercase tracking-[0.14em] text-[var(--faint)]">{entry.kind === "blocker" ? "Stop trading" : entry.kind === "watch" ? "Check before trading" : entry.kind === "ready" ? "Opportunity" : "Routine next step"}</p><p className="text-sm font-medium">{entry.title}</p><p className="mt-1 text-xs leading-relaxed text-[var(--muted)]">{entry.accountName ? `${entry.accountName} · ` : ""}{entry.description}</p></div><ArrowUpRight className="h-4 w-4 shrink-0 text-[var(--muted)]" /></div></Card></Link>)}
               </div>
             </section>
             <section>

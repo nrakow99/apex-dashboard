@@ -78,12 +78,14 @@ import { BUILTIN_INSTRUMENTS } from "@/lib/instrument-specs"
 import { resolveRiskProfile, getHeadroom, tradesSuffix, lossEndsAccountText } from "@/lib/headroom"
 
 type ViewMode = "accounts" | "detail"
+type DetailSection = "overview" | "rules" | "history"
 
 export default function Dashboard() {
   const { toast } = useToast()
   const [viewMode, setViewMode] = useState<ViewMode>("accounts")
   const [accountFilter, setAccountFilter] = useState<AccountType | "All">("All")
   const [selectedAccountId, setSelectedAccountId] = useState<string | null>(null)
+  const [detailSection, setDetailSection] = useState<DetailSection>("overview")
   const [accounts, setAccounts] = useState<Account[]>([])
   const [allTrades, setAllTrades] = useState<Trade[]>([])
   const [allPayouts, setAllPayouts] = useState<Payout[]>([])
@@ -179,6 +181,8 @@ export default function Dashboard() {
     window.addEventListener("popstate", syncViewFromUrl)
     return () => window.removeEventListener("popstate", syncViewFromUrl)
   }, [accounts])
+
+  useEffect(() => { setDetailSection("overview") }, [selectedAccountId])
 
   // Get selected account
   const selectedAccount = useMemo(() => {
@@ -1277,6 +1281,18 @@ export default function Dashboard() {
                 )}
               </div>
 
+              <div className="sticky top-0 z-20 mb-5 flex gap-1 border border-[var(--hairline)] bg-[var(--surface)] p-1" role="tablist" aria-label="Account detail sections">
+                {([
+                  ["overview", "Overview", "Balance and next action"],
+                  ["rules", "Rules & payouts", "Limits and withdrawal status"],
+                  ["history", "History", `${accountTrades.length} trades`],
+                ] as const).map(([value, label, helper]) => <button key={value} type="button" role="tab" aria-selected={detailSection === value} onClick={() => setDetailSection(value)} className={cn("min-w-0 flex-1 rounded-[2px] px-3 py-2.5 text-left transition-colors", detailSection === value ? "bg-white text-black" : "text-[var(--muted)] hover:bg-[var(--raised)] hover:text-white")}>
+                  <span className="block text-xs font-medium sm:text-sm">{label}</span>
+                  <span className={cn("mt-0.5 hidden text-[9px] sm:block", detailSection === value ? "text-black/60" : "text-[var(--faint)]")}>{helper}</span>
+                </button>)}
+              </div>
+
+              {detailSection === "overview" && <>
               {accountDirective && (
                 <div className="mb-5 grid gap-4 xl:grid-cols-[minmax(0,1.65fr)_minmax(300px,.7fr)]">
                   <AccountTrajectory account={selectedAccount} data={accountDailyData} stats={displayAccountStats!} />
@@ -1293,7 +1309,7 @@ export default function Dashboard() {
                       type="button"
                       variant="outline"
                       className="mt-8 w-full justify-between"
-                      onClick={() => document.getElementById(accountDirective.target)?.scrollIntoView({ behavior: "smooth", block: "start" })}
+                      onClick={() => setDetailSection("rules")}
                     >
                       {accountDirective.action}
                       <ArrowLeft className="h-4 w-4 rotate-180" />
@@ -1404,8 +1420,9 @@ export default function Dashboard() {
                   }
                 />
               </div>
+              </>}
 
-              <div id="rule-status" className={cn(
+              {detailSection === "rules" && <div id="rule-status" className={cn(
                 "mb-6 grid items-start gap-4",
                 selectedAccount.type === "PA" && payoutEligibility && selectedRules!.hasPayouts
                   ? "xl:grid-cols-[minmax(0,1.55fr)_minmax(340px,.75fr)]"
@@ -1440,12 +1457,12 @@ export default function Dashboard() {
                     />
                   </div>
                 )}
-              </div>
+              </div>}
 
-              <div className="space-y-4">
+              {detailSection === "history" && <div className="space-y-4">
                 <TradingCalendar account={selectedAccount} dailyData={accountDailyData} trades={accountTrades} />
                 <TradeHistoryTable trades={accountTrades} onEditTrade={setEditingTrade} onDeleteTrade={setDeletingTrade} />
-              </div>
+              </div>}
             </>
           )
         )}

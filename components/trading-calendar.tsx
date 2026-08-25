@@ -5,7 +5,7 @@ import { parseLocalDate } from "@/lib/date-utils"
 import { Card } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { ChevronLeft, ChevronRight, X, Star } from "lucide-react"
-import { cn } from "@/lib/utils"
+import { cn, formatPnL } from "@/lib/utils"
 import type { Account, DailyPnL, Trade } from "@/lib/types"
 import { getAccountRules, resolveTradeifyProgram } from "@/lib/rules"
 import { getRuleStartingBalance } from "@/lib/account-quantity"
@@ -268,9 +268,7 @@ export function TradingCalendar({ account, dailyData, trades }: TradingCalendarP
                           : "text-muted-foreground",
                     )}
                   >
-                    <span className="hidden sm:inline">{dayStats.pnl > 0 ? "+" : ""}$</span>
-                    <span className="sm:hidden">{dayStats.pnl > 0 ? "+" : ""}</span>
-                    {Math.abs(dayStats.pnl).toLocaleString()}
+                    {formatPnL(dayStats.pnl)}
                   </span>
                   <div className="mt-0.5 hidden items-center gap-1 sm:flex lg:mt-0.5 lg:gap-0.5">
                     <span className="text-[10px] tabular-nums text-muted-foreground lg:text-[10px] xl:text-[11px]">
@@ -324,7 +322,7 @@ export function TradingCalendar({ account, dailyData, trades }: TradingCalendarP
                           : "text-muted-foreground",
                     )}
                   >
-                    {selectedDayStats.pnl > 0 ? "+" : ""}${selectedDayStats.pnl.toLocaleString()}
+                    {formatPnL(selectedDayStats.pnl)}
                   </span>
                 </div>
                 <span className="hidden text-muted-foreground/30 sm:inline">|</span>
@@ -395,7 +393,7 @@ export function TradingCalendar({ account, dailyData, trades }: TradingCalendarP
                         trade.pnl > 0 ? "text-[var(--gain)]" : trade.pnl < 0 ? "text-[var(--loss)]" : "text-muted-foreground",
                       )}
                     >
-                      {trade.pnl > 0 ? "+" : ""}${trade.pnl.toLocaleString()}
+                      {formatPnL(trade.pnl)}
                     </span>
                   </div>
                   {/* Setup tags */}
