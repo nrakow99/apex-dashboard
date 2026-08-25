@@ -6,11 +6,13 @@ import { Check, Loader2, Plus, Trash2 } from "lucide-react"
 import { AppShell } from "@/components/app-shell"
 import { RiskProfileFormFields } from "@/components/risk-profile-fields"
 import { DeleteConfirmationModal } from "@/components/delete-confirmation-modal"
+import { DataManagementPanel } from "@/components/data-management-panel"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { useDashboardData } from "@/hooks/use-dashboard-data"
 import { useToast } from "@/hooks/use-toast"
+import { useOnboarding } from "@/hooks/use-onboarding"
 import { createClient } from "@/lib/supabase/client"
 import { deleteUserInstrumentSpec, saveUserSettings, upsertUserInstrumentSpec } from "@/lib/supabase/database"
 import { findInstrumentSpec, normalizeSymbol, pointsToTicks } from "@/lib/instrument-specs"
@@ -19,6 +21,7 @@ import type { InstrumentSpec } from "@/lib/types"
 export default function SettingsPage() {
   const { accounts, trades, payouts, instrumentSpecs, userRiskProfile, loading, error, setInstrumentSpecs, setUserRiskProfile } = useDashboardData()
   const { toast } = useToast()
+  const { restart } = useOnboarding()
   const [email, setEmail] = useState<string | null>(null)
   const [scanConfigured, setScanConfigured] = useState<boolean | null>(null)
   const [savingRisk, setSavingRisk] = useState(false)
@@ -142,13 +145,15 @@ export default function SettingsPage() {
         </div>
 
         <aside className="space-y-6">
-          <section className="border border-[var(--hairline)] bg-[var(--surface)] p-5"><p className="text-[9px] uppercase tracking-[0.15em] text-[var(--muted)]">Profile</p><h2 className="mt-1 text-base font-medium">Signed-in account</h2><p className="mt-4 break-all font-mono text-xs">{email ?? "Unavailable"}</p><p className="mt-2 text-[11px] text-[var(--muted)]">Authentication is managed by your secure Supabase session.</p></section>
+          <section className="border border-[var(--hairline)] bg-[var(--surface)] p-5"><p className="text-[9px] uppercase tracking-[0.15em] text-[var(--muted)]">Profile</p><h2 className="mt-1 text-base font-medium">Signed-in account</h2><p className="mt-4 break-all font-mono text-xs">{email ?? "Unavailable"}</p><p className="mt-2 text-[11px] text-[var(--muted)]">Authentication is managed by your secure Supabase session.</p><Button variant="outline" size="sm" className="mt-4 w-full" onClick={() => { restart(); toast({ title: "Setup guide restarted" }) }}>Restart setup guide</Button></section>
 
           <section className="border border-[var(--hairline)] bg-[var(--surface)]"><div className="border-b border-[var(--hairline)] px-5 py-4"><p className="text-[9px] uppercase tracking-[0.15em] text-[var(--muted)]">Data</p><h2 className="mt-1 text-base font-medium">Workspace inventory</h2></div><div className="divide-y divide-[var(--hairline)]">{[["Accounts", accounts.length], ["Trade records", trades.length], ["Payouts", payouts.length], ["Account risk overrides", accountOverrides]].map(([label, value]) => <div key={String(label)} className="flex items-center justify-between px-5 py-3 text-xs"><span className="text-[var(--muted)]">{label}</span><span className="font-mono">{value}</span></div>)}</div><div className="border-t border-[var(--hairline)] p-4"><Button asChild variant="outline" className="w-full"><Link href="/trades">Manage trade data</Link></Button></div></section>
 
           <section className="border border-[var(--hairline)] bg-[var(--surface)]"><div className="border-b border-[var(--hairline)] px-5 py-4"><p className="text-[9px] uppercase tracking-[0.15em] text-[var(--muted)]">Capabilities</p><h2 className="mt-1 text-base font-medium">System status</h2></div><div className="divide-y divide-[var(--hairline)]"><div className="flex items-start justify-between gap-4 px-5 py-3"><div><p className="text-xs">Workspace database</p><p className="mt-1 text-[10px] text-[var(--muted)]">Accounts, trades, settings, payouts</p></div><span className="text-[10px] uppercase tracking-[0.12em]">{error ? "Issue" : loading ? "Checking" : "Connected"}</span></div><div className="flex items-start justify-between gap-4 px-5 py-3"><div><p className="text-xs">Screenshot trade scan</p><p className="mt-1 text-[10px] text-[var(--muted)]">OpenAI vision extraction</p></div><span className="text-[10px] uppercase tracking-[0.12em]">{scanConfigured == null ? "Unavailable" : scanConfigured ? "Configured" : "Not configured"}</span></div><div className="flex items-start justify-between gap-4 px-5 py-3"><div><p className="text-xs">Prop-firm rule engine</p><p className="mt-1 text-[10px] text-[var(--muted)]">Apex, Lucid, Tradeify, Topstep, Alpha</p></div><span className="text-[10px] uppercase tracking-[0.12em]">Active</span></div></div></section>
         </aside>
       </div>
+
+      <div className="mt-6"><DataManagementPanel accounts={accounts} trades={trades} payouts={payouts} /></div>
 
       <DeleteConfirmationModal open={deletingSpec != null} onOpenChange={(open) => { if (!open) setDeletingSpec(null) }} title="Remove custom instrument?" description="Headroom estimates using this custom specification may become unavailable or fall back to the verified built-in with the same symbol." itemDetails={deletingSpec ? <div className="flex items-center justify-between"><span className="font-mono text-sm">{deletingSpec.symbol}</span><span className="text-sm text-[var(--muted)]">{deletingSpec.label}</span></div> : undefined} onConfirm={handleDeleteInstrument} isDeleting={isDeleting} confirmText="Remove instrument" />
     </AppShell>
