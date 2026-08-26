@@ -168,14 +168,21 @@ export async function POST(request: Request) {
   )
   if (reservationError) {
     const limited = /safety limit reached/i.test(reservationError.message)
+    const quotaReached = /plan quota reached/i.test(reservationError.message)
     return NextResponse.json(
       {
-        error: limited
-          ? "Screenshot scanning is temporarily limited for this account. Try again later."
-          : "Screenshot usage could not be verified. Try again after the database update is applied.",
-        code: limited ? "SCREENSHOT_IMPORT_RATE_LIMITED" : "SCREENSHOT_USAGE_UNAVAILABLE",
+        error: quotaReached
+          ? "This month’s screenshot allowance is used. Import a CSV at no cost or change plans when billing is available."
+          : limited
+            ? "Screenshot scanning is temporarily limited for this account. Try again later."
+            : "Screenshot usage could not be verified. Try again after the database update is applied.",
+        code: quotaReached
+          ? "SCREENSHOT_PLAN_QUOTA_REACHED"
+          : limited
+            ? "SCREENSHOT_IMPORT_RATE_LIMITED"
+            : "SCREENSHOT_USAGE_UNAVAILABLE",
       },
-      { status: limited ? 429 : 503 },
+      { status: quotaReached ? 403 : limited ? 429 : 503 },
     )
   }
 

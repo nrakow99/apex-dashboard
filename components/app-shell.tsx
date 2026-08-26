@@ -3,7 +3,7 @@
 import type { ReactNode } from "react"
 import Link from "next/link"
 import { usePathname, useRouter } from "next/navigation"
-import { BarChart3, BookOpen, Layers3, LayoutDashboard, LogOut, Plus, Settings, ShieldAlert, ShieldCheck, WalletCards } from "lucide-react"
+import { BookOpen, Crosshair, Layers3, LayoutDashboard, LogOut, Plus, Settings, ShieldAlert, ShieldCheck, WalletCards } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { createClient } from "@/lib/supabase/client"
 import { OnboardingGuide } from "@/components/onboarding-guide"
@@ -22,11 +22,11 @@ const navigation = [
   { section: "Command", items: [
     { href: "/today", label: "Today", icon: LayoutDashboard },
     { href: "/compliance", label: "Compliance", icon: ShieldAlert },
-    { href: "/", label: "Accounts", icon: Layers3 },
+    { href: "/accounts", label: "Accounts", icon: Layers3 },
   ] },
   { section: "Review", items: [
     { href: "/trades", label: "Trades", icon: BookOpen },
-    { href: "/analytics", label: "Analytics", icon: BarChart3 },
+    { href: "/analytics", label: "Edge", icon: Crosshair },
   ] },
   { section: "Capital", items: [
     { href: "/payouts", label: "Payouts", icon: WalletCards },
@@ -39,7 +39,7 @@ const navigation = [
 const mobileNavigation = navigation.flatMap((group) => group.items)
 
 function isActivePath(pathname: string, href: string): boolean {
-  return href === "/" ? pathname === "/" : pathname.startsWith(href)
+  return pathname === href || pathname.startsWith(`${href}/`)
 }
 
 export function AppShell({ eyebrow, title, description, leading, actions, children }: AppShellProps) {

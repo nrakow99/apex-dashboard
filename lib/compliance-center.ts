@@ -43,7 +43,7 @@ export function buildComplianceItems(input: ComplianceInputs): ComplianceItem[] 
       accountName: null,
       title: "Add the first account",
       description: "Payout compliance cannot be calculated until an exact firm, program, size, and stage are configured.",
-      href: "/",
+      href: "/accounts",
       action: "Add account",
       rank: 10,
     }))
@@ -78,7 +78,7 @@ export function buildComplianceItems(input: ComplianceInputs): ComplianceItem[] 
   }
 
   for (const account of input.accounts) {
-    const accountHref = `/?account=${account.id}`
+    const accountHref = `/accounts?account=${account.id}`
     if (account.status === "Breached") {
       items.push(item({
         id: `${account.id}:breached`,

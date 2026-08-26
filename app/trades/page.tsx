@@ -18,6 +18,7 @@ import { filterWorkspaceTrades, summarizeTradeWorkspace, type TradeWorkspaceFilt
 import type { Trade } from "@/lib/types"
 import type { TradeMeta } from "@/lib/trade-meta"
 import { cn, formatPnL, pnlColorClass } from "@/lib/utils"
+import { DemoDataBanner } from "@/components/demo-data-banner"
 
 const filters: { value: TradeWorkspaceFilter; label: string }[] = [
   { value: "all", label: "All" },
@@ -87,9 +88,26 @@ export default function TradesPage() {
       eyebrow="Journal"
       title="Trades"
       description="Search every account record, finish reviews, and keep imported history clean."
-      actions={accounts.length > 0 ? <><CsvImportModal accounts={accounts} selectedAccountId={defaultAccountId} existingTrades={trades} onImported={async (saved, duplicates) => { setTrades((current) => [...current, ...saved]); toast({ title: "CSV history imported", description: `${saved.length} added · ${duplicates} duplicates skipped.` }) }} /><ScreenshotImportModal accounts={accounts} selectedAccountId={defaultAccountId} existingTrades={trades} onImported={async (result) => { await reload(); toast({ title: result.insertedCount ? "History imported" : "No new rows imported", description: `${result.insertedCount} added · ${result.duplicateCount} duplicates skipped.` }) }} /><AddTradeModal accounts={activeAccounts.length ? activeAccounts : accounts} selectedAccountId={defaultAccountId} userDefaultRiskProfile={userRiskProfile} onAddTrade={handleAdd} /></> : <Button asChild><Link href="/">Add an account</Link></Button>}
+      actions={accounts.length > 0 ? <AddTradeModal accounts={activeAccounts.length ? activeAccounts : accounts} selectedAccountId={defaultAccountId} userDefaultRiskProfile={userRiskProfile} onAddTrade={handleAdd} /> : <Button asChild><Link href="/accounts">Add an account</Link></Button>}
     >
+      <DemoDataBanner accounts={accounts} />
       {error && <div role="alert" className="mb-5 border-l-2 border-white bg-[var(--raised)] px-4 py-3 text-sm">Some workspace data could not load: {error}</div>}
+
+      {accounts.length > 0 && <section className="mb-6 grid gap-px border border-[var(--hairline)] bg-[var(--hairline)] lg:grid-cols-[minmax(0,1.15fr)_minmax(0,.85fr)_minmax(0,.85fr)]">
+        <div className="bg-[var(--surface)] p-5 sm:p-6">
+          <p className="text-[9px] uppercase tracking-[0.17em] text-[var(--faint)]">Start from where you are</p>
+          <h2 className="mt-2 text-lg font-medium">Bring an active account up to date</h2>
+          <p className="mt-2 max-w-xl text-xs leading-relaxed text-[var(--muted)]">Import existing results before logging the next trade. Every row is reviewed, duplicates are skipped, and uncertain screenshot values stay out until you approve them.</p>
+        </div>
+        <div className="flex flex-col justify-between gap-4 bg-[var(--surface)] p-5">
+          <div><p className="text-sm font-medium">CSV history</p><p className="mt-1 text-xs leading-relaxed text-[var(--muted)]">Fast, local parsing with no AI key or scan credit.</p></div>
+          <CsvImportModal accounts={accounts} selectedAccountId={defaultAccountId} existingTrades={trades} onImported={async (saved, duplicates) => { setTrades((current) => [...current, ...saved]); toast({ title: "CSV history imported", description: `${saved.length} added · ${duplicates} duplicates skipped.` }) }} />
+        </div>
+        <div className="flex flex-col justify-between gap-4 bg-[var(--surface)] p-5">
+          <div><p className="text-sm font-medium">Screenshot scan</p><p className="mt-1 text-xs leading-relaxed text-[var(--muted)]">Extract a visible history table, then verify every selected row.</p></div>
+          <ScreenshotImportModal accounts={accounts} selectedAccountId={defaultAccountId} existingTrades={trades} onImported={async (result) => { await reload(); toast({ title: result.insertedCount ? "History imported" : "No new rows imported", description: `${result.insertedCount} added · ${result.duplicateCount} duplicates skipped.` }) }} />
+        </div>
+      </section>}
 
       <section className="grid gap-px border border-[var(--hairline)] bg-[var(--hairline)] sm:grid-cols-2 xl:grid-cols-4">
         <Stat label="Net P&L" value={summary.records ? formatPnL(summary.totalPnl) : "Unavailable"} supporting={`${summary.records} account-level records`} valueClass={summary.records ? pnlColorClass(summary.totalPnl) : undefined} />

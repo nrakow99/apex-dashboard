@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react"
 import Link from "next/link"
-import { BookOpen, Command, Layers3, LayoutDashboard, Search, Settings, ShieldAlert, WalletCards } from "lucide-react"
+import { BookOpen, Command, Crosshair, Layers3, LayoutDashboard, Search, Settings, ShieldAlert, WalletCards } from "lucide-react"
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog"
 import { useDashboardData } from "@/hooks/use-dashboard-data"
 import { cn } from "@/lib/utils"
@@ -11,8 +11,9 @@ const destinations = [
   { href: "/today", label: "Today", description: "Daily risk and next actions", icon: LayoutDashboard },
   { href: "/today?log=1", label: "Quick log a trade", description: "Account, symbol, and net P&L", icon: Command },
   { href: "/compliance", label: "Compliance", description: "Urgent issues and payout blockers", icon: ShieldAlert },
-  { href: "/", label: "Accounts", description: "Balances, floors, and account details", icon: Layers3 },
+  { href: "/accounts", label: "Accounts", description: "Balances, floors, and account details", icon: Layers3 },
   { href: "/trades", label: "Trade history", description: "Search, review, and import records", icon: BookOpen },
+  { href: "/analytics", label: "Edge", description: "Behavior, concentration, and proven patterns", icon: Crosshair },
   { href: "/payouts", label: "Payouts", description: "Readiness, scenarios, and ledger", icon: WalletCards },
   { href: "/settings", label: "Settings", description: "Risk defaults, data, and workspace", icon: Settings },
 ]
@@ -67,7 +68,7 @@ export function CommandMenu() {
           </div>}
           {accountMatches.length > 0 && <div className={cn(matches.length > 0 && "mt-3 border-t border-[var(--hairline)] pt-2")}>
             <p className="px-2 pb-2 pt-1 text-[9px] uppercase tracking-[0.17em] text-[var(--faint)]">Accounts</p>
-            {accountMatches.map((account) => <Link key={account.id} href={`/?account=${account.id}`} onClick={() => setOpen(false)} className="flex items-center justify-between gap-4 rounded-[2px] px-3 py-2.5 transition-colors hover:bg-[var(--raised)] focus:bg-[var(--raised)] focus:outline-none">
+            {accountMatches.map((account) => <Link key={account.id} href={`/accounts?account=${account.id}`} onClick={() => setOpen(false)} className="flex items-center justify-between gap-4 rounded-[2px] px-3 py-2.5 transition-colors hover:bg-[var(--raised)] focus:bg-[var(--raised)] focus:outline-none">
               <span className="min-w-0"><span className="block truncate text-sm font-medium">{account.name}</span><span className="mt-0.5 block text-[10px] uppercase tracking-[0.12em] text-[var(--muted)]">{account.firm} · {account.type}</span></span>
               <span className="text-[10px] text-[var(--faint)]">Open</span>
             </Link>)}

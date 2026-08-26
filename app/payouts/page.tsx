@@ -17,6 +17,7 @@ import type { Payout } from "@/lib/types"
 import { cn, formatCurrency } from "@/lib/utils"
 import { buildCapitalMetrics } from "@/lib/capital-metrics"
 import { AccountCostLedger } from "@/components/account-cost-ledger"
+import { DemoDataBanner } from "@/components/demo-data-banner"
 
 function Stat({ label, value, supporting }: { label: string; value: string; supporting: string }) {
   return <div className="bg-[var(--surface)] p-4"><p className="text-[9px] uppercase tracking-[0.15em] text-[var(--muted)]">{label}</p><p className="mt-2 font-mono text-xl font-medium">{value}</p><p className="mt-1 text-[10px] text-[var(--muted)]">{supporting}</p></div>
@@ -90,6 +91,7 @@ export default function PayoutsPage() {
 
   return (
     <AppShell eyebrow="Capital" title="Payouts" description="Prioritize funded accounts, verify every condition, and keep withdrawals auditable.">
+      <DemoDataBanner accounts={accounts} />
       {error && <div role="alert" className="mb-5 border-l-2 border-white bg-[var(--raised)] px-4 py-3 text-sm">Some payout data could not load: {error}</div>}
 
       <section className="grid gap-px border border-[var(--hairline)] bg-[var(--hairline)] sm:grid-cols-2 xl:grid-cols-4">
@@ -102,7 +104,7 @@ export default function PayoutsPage() {
       {loading ? (
         <div className="mt-6 border border-[var(--hairline)] bg-[var(--surface)] px-5 py-16 text-center text-sm text-[var(--muted)]">Calculating payout readiness…</div>
       ) : rows.length === 0 ? (
-        <div className="mt-6 border border-[var(--hairline)] bg-[var(--surface)] px-6 py-16 text-center"><p className="text-base font-medium">No funded accounts yet</p><p className="mx-auto mt-2 max-w-md text-sm leading-relaxed text-[var(--muted)]">Convert an eligible evaluation or add a funded account. Payout rules will appear only when the configuration is verified.</p><Button asChild className="mt-5"><Link href="/">Open accounts</Link></Button></div>
+        <div className="mt-6 border border-[var(--hairline)] bg-[var(--surface)] px-6 py-16 text-center"><p className="text-base font-medium">No funded accounts yet</p><p className="mx-auto mt-2 max-w-md text-sm leading-relaxed text-[var(--muted)]">Convert an eligible evaluation or add a funded account. Payout rules will appear only when the configuration is verified.</p><Button asChild className="mt-5"><Link href="/accounts">Open accounts</Link></Button></div>
       ) : (
         <div className="mt-6 grid items-start gap-5 xl:grid-cols-[360px_minmax(0,1fr)]">
           <section className="border border-[var(--hairline)] bg-[var(--surface)]">

@@ -14,9 +14,9 @@ import { cn } from "@/lib/utils"
 const pageHelp: Record<string, { title: string; description: string; steps: string[] }> = {
   "/today": { title: "Start every session here", description: "Today turns every account into one prioritized trading plan.", steps: ["Read What matters now", "Resolve Stop or Check items", "Quick log results after the session"] },
   "/compliance": { title: "Work from the top down", description: "The queue separates hard blockers from routine payout progress.", steps: ["Stop items come first", "Check items deserve review", "Routine steps can wait"] },
-  "/": { title: "Open an account for the full picture", description: "Cards answer whether an account is stable; detail views explain why.", steps: ["Overview shows balance and next action", "Rules & payouts shows verified limits", "History contains calendar and trades"] },
+  "/accounts": { title: "Open an account for the full picture", description: "Cards answer whether an account is stable; detail views explain why.", steps: ["Overview shows balance and next action", "Rules & payouts shows verified limits", "History contains calendar and trades"] },
   "/trades": { title: "Logging can stay simple", description: "Only account, date, symbol, and net P&L are required.", steps: ["Use Quick log for manual results", "Import CSV for broker history", "Add review details when useful"] },
-  "/analytics": { title: "Trust conclusions with coverage", description: "Every insight states how much reviewed data supports it.", steps: ["Choose an account or portfolio", "Compare markets and sessions", "Improve missing review coverage"] },
+  "/analytics": { title: "Find your evidence-backed edge", description: "PropDash compares behavior across firms while showing the sample behind every conclusion.", steps: ["Read the Edge brief", "Check same-day concentration", "Repeat strengths and remove leaks"] },
   "/payouts": { title: "Verify before requesting", description: "Readiness uses saved history and verified rules, then asks you to confirm the firm portal.", steps: ["Select the funded account", "Review every requirement", "Test the withdrawal impact"] },
   "/settings": { title: "Set assumptions once", description: "Risk defaults power trade-headroom estimates but never replace firm rules.", steps: ["Set a complete risk profile", "Confirm instrument specifications", "Export or back up workspace data"] },
 }
@@ -31,17 +31,25 @@ export function OnboardingGuide() {
     recordVisit(pathname)
   }, [pathname, recordVisit])
 
+  const realAccounts = useMemo(
+    () => accounts.filter((account) => !account.name.startsWith("DEMO ·")),
+    [accounts],
+  )
+  const realAccountIds = useMemo(
+    () => new Set(realAccounts.map((account) => account.id)),
+    [realAccounts],
+  )
   const steps = useMemo(() => buildOnboardingSteps({
-    accountCount: accounts.length,
-    tradeCount: trades.length,
-    fundedAccountCount: accounts.filter((account) => account.type === "PA").length,
+    accountCount: realAccounts.length,
+    tradeCount: trades.filter((trade) => realAccountIds.has(trade.accountId)).length,
+    fundedAccountCount: realAccounts.filter((account) => account.type === "PA").length,
     riskProfile: userRiskProfile,
     visitedPaths: state.visitedPaths,
-  }), [accounts, state.visitedPaths, trades.length, userRiskProfile])
+  }), [realAccountIds, realAccounts, state.visitedPaths, trades, userRiskProfile])
   const progress = onboardingProgress(steps)
   const firstVisit = !loading && !state.started && !state.dismissed
   const open = manuallyOpen || firstVisit
-  const context = pageHelp[pathname] ?? pageHelp["/"]
+  const context = pageHelp[pathname] ?? pageHelp["/today"]
 
   const close = () => {
     setManuallyOpen(false)

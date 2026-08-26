@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button"
 import { useDashboardData } from "@/hooks/use-dashboard-data"
 import { buildComplianceItems, summarizeCompliance, type ComplianceKind } from "@/lib/compliance-center"
 import { cn } from "@/lib/utils"
+import { DemoDataBanner } from "@/components/demo-data-banner"
 
 const filters: Array<{ value: "all" | ComplianceKind; label: string }> = [
   { value: "all", label: "All" },
@@ -30,6 +31,7 @@ export default function CompliancePage() {
 
   return (
     <AppShell eyebrow="Control" title="Compliance" description="One prioritized queue for account safety, rule configuration, and the next verified payout action.">
+      <DemoDataBanner accounts={accounts} />
       {error && <div role="alert" className="mb-5 border-l-2 border-white bg-[var(--raised)] px-4 py-3 text-sm">Some compliance inputs could not load: {error}</div>}
 
       <section className="grid gap-px border border-[var(--hairline)] bg-[var(--hairline)] sm:grid-cols-2 xl:grid-cols-4">

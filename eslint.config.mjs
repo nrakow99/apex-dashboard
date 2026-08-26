@@ -7,7 +7,7 @@ export default defineConfig([
   ...nextTypeScript,
   {
     files: [
-      "app/page.tsx",
+      "app/accounts/page.tsx",
       "app/today/page.tsx",
       "components/activate-pa-modal.tsx",
       "components/add-account-modal.tsx",

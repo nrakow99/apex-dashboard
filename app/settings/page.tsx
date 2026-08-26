@@ -14,9 +14,10 @@ import { useDashboardData } from "@/hooks/use-dashboard-data"
 import { useToast } from "@/hooks/use-toast"
 import { useOnboarding } from "@/hooks/use-onboarding"
 import { createClient } from "@/lib/supabase/client"
-import { deleteUserInstrumentSpec, saveUserSettings, upsertUserInstrumentSpec } from "@/lib/supabase/database"
+import { deleteUserInstrumentSpec, fetchScreenshotUsageThisMonth, fetchSubscriptionEntitlement, saveUserSettings, upsertUserInstrumentSpec } from "@/lib/supabase/database"
 import { findInstrumentSpec, normalizeSymbol, pointsToTicks } from "@/lib/instrument-specs"
 import type { InstrumentSpec } from "@/lib/types"
+import { formatAccountLimit, subscriptionPlan, type SubscriptionEntitlement } from "@/lib/subscriptions"
 
 export default function SettingsPage() {
   const { accounts, trades, payouts, accountCosts, accountCostsAvailable, instrumentSpecs, userRiskProfile, loading, error, setInstrumentSpecs, setUserRiskProfile } = useDashboardData()
@@ -24,6 +25,9 @@ export default function SettingsPage() {
   const { restart } = useOnboarding()
   const [email, setEmail] = useState<string | null>(null)
   const [scanConfigured, setScanConfigured] = useState<boolean | null>(null)
+  const [entitlement, setEntitlement] = useState<SubscriptionEntitlement | null>(null)
+  const [entitlementAvailable, setEntitlementAvailable] = useState<boolean | null>(null)
+  const [scanUsage, setScanUsage] = useState<number | null>(null)
   const [savingRisk, setSavingRisk] = useState(false)
   const [riskDraft, setRiskDraft] = useState<{ symbol: string; contracts: string; stopPoints: string } | null>(null)
   const [showInstrumentForm, setShowInstrumentForm] = useState(false)
@@ -36,6 +40,11 @@ export default function SettingsPage() {
     const supabase = createClient()
     void supabase.auth.getUser().then(({ data }) => setEmail(data.user?.email ?? null))
     void fetch("/api/status").then((response) => response.ok ? response.json() : Promise.reject()).then((status: { screenshotScanConfigured?: boolean }) => setScanConfigured(Boolean(status.screenshotScanConfigured))).catch(() => setScanConfigured(null))
+    void Promise.all([fetchSubscriptionEntitlement(), fetchScreenshotUsageThisMonth()]).then(([entitlementResult, usageResult]) => {
+      setEntitlement(entitlementResult.data)
+      setEntitlementAvailable(!entitlementResult.error && entitlementResult.data != null)
+      setScanUsage(usageResult.error ? null : usageResult.data)
+    })
   }, [])
 
   const customSpecs = useMemo(() => instrumentSpecs.filter((spec) => !spec.isBuiltin).sort((a, b) => a.symbol.localeCompare(b.symbol)), [instrumentSpecs])
@@ -51,6 +60,8 @@ export default function SettingsPage() {
     }
   }, [userRiskProfile, instrumentSpecs])
   const riskForm = riskDraft ?? storedRiskDraft
+  const currentPlan = entitlement ? subscriptionPlan(entitlement.tier) : null
+  const planName = entitlement?.tier === "founding" ? "Founding beta" : currentPlan?.name ?? "Unavailable"
 
   const handleSaveRisk = async () => {
     const spec = findInstrumentSpec(instrumentSpecs, riskForm.symbol)
@@ -146,6 +157,16 @@ export default function SettingsPage() {
 
         <aside className="space-y-6">
           <section className="border border-[var(--hairline)] bg-[var(--surface)] p-5"><p className="text-[9px] uppercase tracking-[0.15em] text-[var(--muted)]">Profile</p><h2 className="mt-1 text-base font-medium">Signed-in account</h2><p className="mt-4 break-all font-mono text-xs">{email ?? "Unavailable"}</p><p className="mt-2 text-[11px] text-[var(--muted)]">Authentication is managed by your secure Supabase session.</p><Button variant="outline" size="sm" className="mt-4 w-full" onClick={() => { restart(); toast({ title: "Setup guide restarted" }) }}>Restart setup guide</Button></section>
+
+          <section className="border border-[var(--hairline)] bg-[var(--surface)]">
+            <div className="border-b border-[var(--hairline)] px-5 py-4"><p className="text-[9px] uppercase tracking-[0.15em] text-[var(--muted)]">Subscription</p><h2 className="mt-1 text-base font-medium">{entitlementAvailable == null ? "Checking access…" : planName}</h2><p className="mt-1 text-[11px] leading-relaxed text-[var(--muted)]">{entitlement?.tier === "founding" ? "Full beta access while billing is finalized." : currentPlan?.description ?? "Plan details are unavailable until the entitlement migration is applied."}</p></div>
+            <div className="divide-y divide-[var(--hairline)]">
+              <div className="flex items-center justify-between px-5 py-3 text-xs"><span className="text-[var(--muted)]">Tracked accounts</span><span className="font-mono">{entitlement ? `${accounts.length} / ${formatAccountLimit(entitlement.accountLimit)}` : "Unavailable"}</span></div>
+              <div className="flex items-center justify-between px-5 py-3 text-xs"><span className="text-[var(--muted)]">Screenshot images this month</span><span className="font-mono">{entitlement && scanUsage != null ? `${scanUsage} / ${entitlement.screenshotMonthlyLimit}` : "Unavailable"}</span></div>
+              <div className="flex items-center justify-between px-5 py-3 text-xs"><span className="text-[var(--muted)]">Status</span><span className="text-[10px] uppercase tracking-[0.12em]">{entitlement?.status ?? "Unavailable"}</span></div>
+            </div>
+            <div className="border-t border-[var(--hairline)] p-4"><Button asChild variant="outline" className="w-full"><Link href="/pricing">Compare plans</Link></Button></div>
+          </section>
 
           <section className="border border-[var(--hairline)] bg-[var(--surface)]"><div className="border-b border-[var(--hairline)] px-5 py-4"><p className="text-[9px] uppercase tracking-[0.15em] text-[var(--muted)]">Data</p><h2 className="mt-1 text-base font-medium">Workspace inventory</h2></div><div className="divide-y divide-[var(--hairline)]">{[["Accounts", accounts.length], ["Trade records", trades.length], ["Payouts", payouts.length], ["Account costs", accountCostsAvailable ? accountCosts.length : "Unavailable"], ["Account risk overrides", accountOverrides]].map(([label, value]) => <div key={String(label)} className="flex items-center justify-between px-5 py-3 text-xs"><span className="text-[var(--muted)]">{label}</span><span className="font-mono">{value}</span></div>)}</div><div className="border-t border-[var(--hairline)] p-4"><Button asChild variant="outline" className="w-full"><Link href="/trades">Manage trade data</Link></Button></div></section>
 

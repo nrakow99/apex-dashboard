@@ -23,6 +23,7 @@ import {
   type ImportableScreenshotTradeRow,
   type ScreenshotImportSource,
 } from "@/lib/screenshot-import"
+import type { SubscriptionEntitlement, SubscriptionStatus, SubscriptionTier } from "@/lib/subscriptions"
 
 const VALID_FIRMS: readonly Firm[] = ["Apex", "Lucid", "Tradeify", "Topstep", "Alpha"]
 
@@ -97,6 +98,14 @@ interface DailySessionPlanRow {
   notes: string | null
 }
 
+interface UserEntitlementRow {
+  tier: SubscriptionTier
+  status: SubscriptionStatus
+  account_limit: number | null
+  screenshot_monthly_limit: number
+  current_period_end: string | null
+}
+
 export interface UserOnboardingSettings {
   started: boolean
   dismissed: boolean
@@ -151,19 +160,20 @@ interface PayoutRow {
 }
 
 function rowToAccount(row: AccountRow): Account {
+  if (!VALID_FIRMS.includes(row.firm as Firm)) {
+    throw new Error(`Unsupported firm in account ${row.id}; verified rules are unavailable`)
+  }
+  if (row.drawdown_type !== "EOD" && row.drawdown_type !== "Intraday") {
+    throw new Error(`Unsupported drawdown type in account ${row.id}`)
+  }
   return {
     id: row.id,
     name: row.name,
-    // Every valid Firm passes through unchanged. Anything else (legacy rows,
-    // corrupt data) falls back to "Apex" — but that fallback must never
-    // silently masquerade as a real Topstep/Alpha account, which is why this
-    // list is exhaustive rather than special-casing Lucid/Tradeify only (the
-    // bug that used to reclassify every non-Lucid/Tradeify firm as Apex).
-    firm: (VALID_FIRMS.includes(row.firm as Firm) ? row.firm : "Apex") as Firm,
+    firm: row.firm as Firm,
     type: row.type,
     status: row.status === "Inactive" ? "Active" : (row.status as "Active" | "Passed" | "Breached"),
-    drawdownType: (row.drawdown_type ?? "EOD") as DrawdownType,
-    accountSize: row.account_size ?? 50000,
+    drawdownType: row.drawdown_type,
+    accountSize: row.account_size,
     quantity: row.quantity ?? 1,
     balance: row.starting_balance,
     startingBalance: row.starting_balance,
@@ -429,7 +439,11 @@ export async function fetchAccounts(): Promise<{ data: Account[] | null; error: 
     .select("*")
     .order("created_at", { ascending: true })
   if (error) return { data: null, error: new Error(error.message) }
-  return { data: (data as AccountRow[]).map(rowToAccount), error: null }
+  try {
+    return { data: (data as AccountRow[]).map(rowToAccount), error: null }
+  } catch (caught) {
+    return { data: null, error: caught instanceof Error ? caught : new Error("Account data is invalid") }
+  }
 }
 
 export async function fetchTrades(): Promise<{ data: Trade[] | null; error: Error | null }> {
@@ -544,7 +558,7 @@ export async function createAccount(account: {
   quantity?: number
   startingBalance: number
   profitTarget?: number
-  maxDrawdown?: number
+  maxDrawdown: number
   dailyLossLimit?: number
   program?: TradeifyProgram | null
   legacyFiftyKTarget?: boolean
@@ -572,7 +586,7 @@ export async function createAccount(account: {
       quantity: account.quantity ?? 1,
       starting_balance: account.startingBalance,
       profit_target: account.profitTarget ?? null,
-      max_drawdown: account.maxDrawdown ?? 2000,
+      max_drawdown: account.maxDrawdown,
       daily_loss_limit: account.dailyLossLimit ?? null,
       program: account.program ?? null,
       legacy_fifty_k_target: account.legacyFiftyKTarget ?? false,
@@ -954,4 +968,52 @@ export async function saveOnboardingSettings(
     onboarding_visited_paths: [...new Set(state.visitedPaths)],
   }, { onConflict: "user_id" })
   return { error: error ? new Error(error.message) : null }
+}
+
+export async function fetchSubscriptionEntitlement(): Promise<{
+  data: SubscriptionEntitlement | null
+  error: Error | null
+}> {
+  const supabase = createClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) return { data: null, error: new Error("Not authenticated") }
+  const { data, error } = await supabase
+    .from("user_entitlements")
+    .select("tier,status,account_limit,screenshot_monthly_limit,current_period_end")
+    .eq("user_id", user.id)
+    .maybeSingle()
+  if (error) return { data: null, error: new Error(error.message) }
+  const row = data as UserEntitlementRow | null
+  if (!row) return { data: null, error: null }
+  return {
+    data: {
+      tier: row.tier,
+      status: row.status,
+      accountLimit: row.account_limit == null ? null : Number(row.account_limit),
+      screenshotMonthlyLimit: Number(row.screenshot_monthly_limit),
+      currentPeriodEnd: row.current_period_end,
+    },
+    error: null,
+  }
+}
+
+export async function fetchScreenshotUsageThisMonth(): Promise<{
+  data: number | null
+  error: Error | null
+}> {
+  const supabase = createClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) return { data: null, error: new Error("Not authenticated") }
+  const now = new Date()
+  const monthStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1)).toISOString()
+  const { data, error } = await supabase
+    .from("screenshot_scan_requests")
+    .select("image_count")
+    .eq("user_id", user.id)
+    .gte("requested_at", monthStart)
+  if (error) return { data: null, error: new Error(error.message) }
+  return {
+    data: (data ?? []).reduce((sum, row) => sum + Number((row as { image_count?: number }).image_count ?? 0), 0),
+    error: null,
+  }
 }

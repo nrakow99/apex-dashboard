@@ -24,7 +24,7 @@ export function buildOnboardingSteps(input: OnboardingInputs): OnboardingStep[] 
       id: "account",
       title: "Add a real account",
       description: "Choose the exact firm, program, size, stage, and drawdown type so verified rules resolve correctly.",
-      href: "/",
+      href: "/accounts",
       action: input.accountCount > 0 ? "Review accounts" : "Add account",
       complete: input.accountCount > 0,
     },

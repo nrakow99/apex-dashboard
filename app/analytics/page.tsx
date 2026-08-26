@@ -6,8 +6,10 @@ import { AppShell } from "@/components/app-shell"
 import { Button } from "@/components/ui/button"
 import { useDashboardData } from "@/hooks/use-dashboard-data"
 import { buildTradeAnalytics, filterAnalyticsPeriod, type AnalyticsBreakdownRow, type DailyAnalyticsPoint } from "@/lib/trade-analytics"
+import { accountNamesForConcentration, buildBehavioralEdge, buildSameDayConcentration, type EvidencePattern } from "@/lib/edge-intelligence"
 import { SESSION_LABELS, type SessionId } from "@/lib/sessions"
 import { cn, formatPnL, pnlColorClass } from "@/lib/utils"
+import { DemoDataBanner } from "@/components/demo-data-banner"
 
 type Period = "30" | "90" | "all"
 
@@ -60,6 +62,11 @@ function Coverage({ label, value }: { label: string; value: number | null }) {
   return <div><div className="flex items-center justify-between text-[11px]"><span className="text-[var(--muted)]">{label}</span><span className="font-mono">{value == null ? "Unavailable" : `${value.toFixed(0)}%`}</span></div><div className="mt-2 h-1 bg-[var(--hairline)]"><div className="h-full bg-white" style={{ width: `${value ?? 0}%` }} /></div></div>
 }
 
+function patternLabel(pattern: EvidencePattern, sessionLabel: (label: string) => string): string {
+  const label = pattern.dimension === "session" ? sessionLabel(pattern.label) : pattern.label
+  return `${label} · ${pattern.dimension}`
+}
+
 export default function AnalyticsPage() {
   const { accounts, trades, loading, error } = useDashboardData()
   const [accountId, setAccountId] = useState("all")
@@ -70,6 +77,8 @@ export default function AnalyticsPage() {
     return filterAnalyticsPeriod(accountTrades, period === "all" ? null : Number(period))
   }, [trades, accountId, period])
   const analytics = useMemo(() => buildTradeAnalytics(selectedTrades), [selectedTrades])
+  const edge = useMemo(() => buildBehavioralEdge(selectedTrades), [selectedTrades])
+  const concentration = useMemo(() => buildSameDayConcentration(selectedTrades), [selectedTrades])
   const sessionLabel = (label: string) => SESSION_LABELS[label as SessionId] ?? label
   const observations = [
     analytics.bySymbol[0]?.records >= 3 ? `${analytics.bySymbol[0].label} has the highest net contribution in this view at ${formatPnL(analytics.bySymbol[0].pnl)} across ${analytics.bySymbol[0].records} records.` : null,
@@ -79,11 +88,26 @@ export default function AnalyticsPage() {
   ].filter(Boolean) as string[]
 
   return (
-    <AppShell eyebrow="Performance" title="Analytics" description="Measure what is actually in your journal, with coverage shown beside every conclusion." actions={<div className="flex items-center gap-1">{(["30", "90", "all"] as Period[]).map((value) => <button key={value} type="button" onClick={() => setPeriod(value)} className={cn("h-9 rounded-[2px] border px-3 text-xs transition-colors", period === value ? "border-white bg-white text-black" : "border-[var(--hairline)] bg-[var(--raised)] text-[var(--muted)] hover:text-white")}>{value === "all" ? "All time" : `${value} days`}</button>)}</div>}>
+    <AppShell eyebrow="Decision intelligence" title="Edge" description="See which behaviors deserve more capital—and which patterns are quietly taxing every account." actions={<div className="flex items-center gap-1">{(["30", "90", "all"] as Period[]).map((value) => <button key={value} type="button" onClick={() => setPeriod(value)} className={cn("h-9 rounded-[2px] border px-3 text-xs transition-colors", period === value ? "border-white bg-white text-black" : "border-[var(--hairline)] bg-[var(--raised)] text-[var(--muted)] hover:text-white")}>{value === "all" ? "All time" : `${value} days`}</button>)}</div>}>
+      <DemoDataBanner accounts={accounts} />
       {error && <div role="alert" className="mb-5 border-l-2 border-white bg-[var(--raised)] px-4 py-3 text-sm">Some analytics data could not load: {error}</div>}
-      <div className="mb-4 flex items-center justify-between gap-3"><p className="text-xs text-[var(--muted)]">All figures are account-level trade records. Mirrored accounts remain separate records.</p><select value={accountId} onChange={(event) => setAccountId(event.target.value)} aria-label="Analyze account" className="h-9 min-w-[190px] rounded-[2px] border border-[var(--hairline)] bg-[var(--raised)] px-3 text-xs outline-none"><option value="all">All accounts</option>{accounts.map((account) => <option key={account.id} value={account.id}>{account.name}</option>)}</select></div>
+      <div className="mb-4 flex flex-col justify-between gap-3 sm:flex-row sm:items-center"><p className="text-xs text-[var(--muted)]">Historical evidence, not a market signal. Mirrored account records remain separate so cross-firm concentration stays visible.</p><select value={accountId} onChange={(event) => setAccountId(event.target.value)} aria-label="Analyze account" className="h-9 min-w-[190px] rounded-[2px] border border-[var(--hairline)] bg-[var(--raised)] px-3 text-xs outline-none"><option value="all">All accounts</option>{accounts.map((account) => <option key={account.id} value={account.id}>{account.name}</option>)}</select></div>
 
-      {loading ? <div className="border border-[var(--hairline)] bg-[var(--surface)] px-5 py-16 text-center text-sm text-[var(--muted)]">Building analytics…</div> : analytics.records === 0 ? <div className="border border-[var(--hairline)] bg-[var(--surface)] px-6 py-16 text-center"><p className="text-base font-medium">No trades in this view</p><p className="mt-2 text-sm text-[var(--muted)]">Add records or expand the time range. Missing metrics remain unavailable until data exists.</p><Button asChild className="mt-5"><Link href="/trades">Open trades</Link></Button></div> : <>
+      {loading ? <div className="border border-[var(--hairline)] bg-[var(--surface)] px-5 py-16 text-center text-sm text-[var(--muted)]">Building your edge brief…</div> : analytics.records === 0 ? <div className="border border-[var(--hairline)] bg-[var(--surface)] px-6 py-16 text-center"><p className="text-base font-medium">No evidence in this view</p><p className="mt-2 text-sm text-[var(--muted)]">Import history or expand the time range. PropDash will not invent an edge without supporting records.</p><Button asChild className="mt-5"><Link href="/trades">Bring in history</Link></Button></div> : <>
+        <section className="mb-6 grid gap-px border border-[var(--hairline)] bg-[var(--hairline)] xl:grid-cols-[1.25fr_1fr_1fr]">
+          <div className="bg-[var(--surface)] p-5 sm:p-6">
+            <p className="text-[9px] uppercase tracking-[0.17em] text-[var(--faint)]">Evidence-backed strength</p>
+            {edge.provenPattern ? <><h2 className="mt-3 text-xl font-medium tracking-[-0.025em]">Repeat {patternLabel(edge.provenPattern, sessionLabel)}</h2><p className="mt-2 text-sm leading-relaxed text-[var(--muted)]">Supported by {edge.provenPattern.records} records with <span className={cn("font-mono", pnlColorClass(edge.provenPattern.averagePnl))}>{formatPnL(edge.provenPattern.averagePnl)}</span> average net P&amp;L.</p></> : <><h2 className="mt-3 text-xl font-medium">More reviewed trades needed</h2><p className="mt-2 text-sm leading-relaxed text-[var(--muted)]">No market, session, or setup has the minimum three records needed for a responsible comparison.</p></>}
+          </div>
+          <div className="bg-[var(--surface)] p-5 sm:p-6">
+            <p className="text-[9px] uppercase tracking-[0.17em] text-[var(--faint)]">Process tax</p>
+            {edge.processLeak ? <><h2 className="mt-3 text-lg font-medium">Remove {edge.processLeak.label}</h2><p className="mt-2 text-sm leading-relaxed text-[var(--muted)]">{edge.processLeak.records} tagged records average <span className={cn("font-mono", pnlColorClass(edge.processLeak.averagePnl))}>{formatPnL(edge.processLeak.averagePnl)}</span>.</p></> : <><h2 className="mt-3 text-lg font-medium">No proven leak yet</h2><p className="mt-2 text-sm leading-relaxed text-[var(--muted)]">Tag process breaks during review to measure their real cost.</p></>}
+          </div>
+          <div className="bg-[var(--surface)] p-5 sm:p-6">
+            <p className="text-[9px] uppercase tracking-[0.17em] text-[var(--faint)]">Cross-account concentration</p>
+            {concentration[0] ? <><h2 className="mt-3 text-lg font-medium">{concentration[0].accountCount} accounts · {concentration[0].symbol}</h2><p className="mt-2 text-sm leading-relaxed text-[var(--muted)]">Same-day exposure on {shortDate(concentration[0].date)} across {accountNamesForConcentration(concentration[0], selectedTrades, accounts).join(", ")}. This does not prove simultaneous positions.</p></> : <><h2 className="mt-3 text-lg font-medium">No repeated concentration</h2><p className="mt-2 text-sm leading-relaxed text-[var(--muted)]">No same-day market appears across multiple selected accounts.</p></>}
+          </div>
+        </section>
         <section className="grid gap-px border border-[var(--hairline)] bg-[var(--hairline)] sm:grid-cols-2 xl:grid-cols-6">
           <Metric label="Net P&L" value={formatPnL(analytics.totalPnl)} supporting={`${analytics.records} records`} valueClass={pnlColorClass(analytics.totalPnl)} />
           <Metric label="Win rate" value={analytics.winRate == null ? "Unavailable" : `${analytics.winRate.toFixed(1)}%`} supporting={`${analytics.wins}W · ${analytics.losses}L · ${analytics.flats}F`} />
