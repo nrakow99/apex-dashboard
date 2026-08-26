@@ -8,6 +8,7 @@ import { createClient } from "@/lib/supabase/client"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
+import { ThemeToggle } from "@/components/theme-toggle"
 
 type Mode = "login" | "signup" | "magic" | "reset"
 
@@ -86,7 +87,8 @@ function LoginContent() {
   const description = mode === "login" ? "Open your cross-firm workspace." : mode === "signup" ? "Start free with two tracked accounts." : mode === "magic" ? "No password required." : "We will send a secure reset link."
 
   return (
-    <div className="min-h-screen bg-black text-white">
+    <div className="relative min-h-screen bg-black text-white">
+      <ThemeToggle className="absolute right-5 top-5 z-10" />
       <div className="grid min-h-screen lg:grid-cols-[minmax(0,.9fr)_minmax(480px,.7fr)]">
         <section className="hidden border-r border-[var(--hairline)] p-10 lg:flex lg:flex-col lg:justify-between xl:p-14">
           <Link href="/" className="flex w-fit items-center gap-2.5"><span className="flex h-9 w-9 items-center justify-center rounded-[2px] border border-[var(--hairline)] bg-[var(--raised)]"><ShieldCheck className="h-4 w-4" /></span><span className="font-semibold">PropDash</span></Link>

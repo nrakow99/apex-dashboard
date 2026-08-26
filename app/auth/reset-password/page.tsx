@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { createClient } from "@/lib/supabase/client"
+import { ThemeToggle } from "@/components/theme-toggle"
 
 export default function ResetPasswordPage() {
   const router = useRouter()
@@ -35,7 +36,8 @@ export default function ResetPasswordPage() {
   }
 
   return (
-    <main className="flex min-h-screen items-center justify-center bg-black px-5 py-12 text-white">
+    <main className="relative flex min-h-screen items-center justify-center bg-black px-5 py-12 text-white">
+      <ThemeToggle className="absolute right-5 top-5" />
       <section className="w-full max-w-[440px] border border-[var(--hairline)] bg-[var(--surface)] p-6 sm:p-8">
         <ShieldCheck className="h-5 w-5" />
         <p className="mt-6 text-[10px] uppercase tracking-[0.18em] text-[var(--muted)]">Secure workspace</p>

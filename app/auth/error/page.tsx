@@ -1,5 +1,6 @@
 import Link from "next/link"
 import { AlertCircle, ArrowLeft } from "lucide-react"
+import { ThemeToggle } from "@/components/theme-toggle"
 
 export default async function AuthErrorPage({
   searchParams,
@@ -8,7 +9,8 @@ export default async function AuthErrorPage({
 }) {
   const params = await searchParams
   return (
-    <main className="flex min-h-screen items-center justify-center bg-black px-5 py-12 text-white">
+    <main className="relative flex min-h-screen items-center justify-center bg-black px-5 py-12 text-white">
+      <ThemeToggle className="absolute right-5 top-5" />
       <section className="w-full max-w-[520px] border border-[var(--hairline)] bg-[var(--surface)] p-6 sm:p-8">
         <span className="flex h-10 w-10 items-center justify-center border border-[var(--hairline)] bg-[var(--raised)]"><AlertCircle className="h-4 w-4" /></span>
         <p className="mt-6 text-[10px] uppercase tracking-[0.18em] text-[var(--muted)]">Authentication</p>

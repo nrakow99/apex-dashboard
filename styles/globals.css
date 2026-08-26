@@ -10,6 +10,7 @@
     --raised: #141415;    /* input, nested */
     --hairline: #1F1F21;  /* every border */
     --text: #FFFFFF;
+    --muted: #6E6E73;     /* labels, units */
     --faint: #3F3F45;     /* axis, disabled */
     --gain: #3ECF8E;
     --loss: #E5484D;
@@ -28,7 +29,7 @@
     --primary-foreground: 0 0% 0%;       /* ground — black text on primary */
     --secondary: 240 2% 8%;              /* raised */
     --secondary-foreground: 0 0% 100%;   /* text */
-    --muted: 240 2% 8%;                  /* raised — muted backgrounds */
+    --muted-bg: 240 2% 8%;               /* raised — muted backgrounds */
     --muted-foreground: 240 2% 44%;      /* #6E6E73 — labels, units */
     --accent: 240 2% 8%;                 /* raised */
     --accent-foreground: 0 0% 100%;      /* text */
@@ -40,6 +41,42 @@
     --ring: 240 3% 20%;                  /* hairline, lifted for focus visibility */
     --radius: 2px;
   }
+
+  .light {
+    /* Neutral daylight palette. Signed P&L remains the only chromatic data. */
+    --ground: #F5F5F7;
+    --surface: #FFFFFF;
+    --raised: #ECECEF;
+    --hairline: #D2D2D7;
+    --text: #111114;
+    --muted: #68686D;
+    --faint: #9A9AA0;
+    --gain: #167A50;
+    --loss: #C9363D;
+
+    --background: 240 11% 96%;
+    --foreground: 240 8% 7%;
+    --card: 0 0% 100%;
+    --card-foreground: 240 8% 7%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 240 8% 7%;
+    --primary: 240 8% 7%;
+    --primary-foreground: 0 0% 100%;
+    --secondary: 240 7% 93%;
+    --secondary-foreground: 240 8% 7%;
+    --muted-bg: 240 7% 93%;
+    --muted-foreground: 240 2% 41%;
+    --accent: 240 7% 93%;
+    --accent-foreground: 240 8% 7%;
+    --destructive: 357 58% 50%;
+    --destructive-foreground: 0 0% 100%;
+    --border: 240 3% 83%;
+    --input: 240 7% 93%;
+    --ring: 240 3% 55%;
+    color-scheme: light;
+  }
+
+  .dark { color-scheme: dark; }
 }
 
 @layer base {
@@ -47,7 +84,7 @@
     @apply border-border;
   }
 
-  /* ── Autofill override: keep inputs dark in Chrome/Safari ── */
+  /* ── Autofill override: keep inputs inside the active palette ── */
   input:-webkit-autofill,
   input:-webkit-autofill:hover,
   input:-webkit-autofill:focus,
@@ -68,8 +105,8 @@
 @layer utilities {
   /* Login-page inputs: explicit dark bg so browser default styling is overridden */
   .autofill-dark {
-    background-color: rgba(15, 17, 21, 0.85) !important;
-    color: #E5E4E2;
+    background-color: var(--raised) !important;
+    color: var(--text);
   }
 
   /*
@@ -110,6 +147,23 @@
     color: hsl(var(--muted-foreground));
   }
 }
+
+/* Legacy Tailwind white/black utilities in the dashboard are semantic
+ * foreground/background choices. Map them to the active neutral palette so
+ * charts, selected controls, overlays, and older surfaces stay legible. */
+.light .bg-white { background-color: var(--text); }
+.light .bg-black { background-color: var(--ground); }
+.light .text-white { color: var(--text); }
+.light .text-black { color: var(--ground); }
+.light .border-white { border-color: var(--text); }
+.light .fill-white { fill: var(--text); }
+.light .hover\:text-white:hover { color: var(--text); }
+.light .group:hover .group-hover\:text-white { color: var(--text); }
+.light .hover\:bg-white\/90:hover { background-color: color-mix(in srgb, var(--text) 90%, transparent); }
+.light .bg-white\/30 { background-color: color-mix(in srgb, var(--text) 30%, transparent); }
+.light .text-black\/60 { color: color-mix(in srgb, var(--ground) 60%, transparent); }
+.light .border-white\/10 { border-color: color-mix(in srgb, var(--text) 10%, transparent); }
+.light .border-white\/5 { border-color: color-mix(in srgb, var(--text) 5%, transparent); }
 
 /* Minimal scrollbar */
 ::-webkit-scrollbar { width: 6px; height: 6px; }

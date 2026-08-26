@@ -1,6 +1,7 @@
 import Link from "next/link"
 import { ShieldCheck } from "lucide-react"
 import { createClient } from "@/lib/supabase/server"
+import { ThemeToggle } from "@/components/theme-toggle"
 
 export async function MarketingHeader() {
   const supabase = await createClient()
@@ -17,6 +18,7 @@ export async function MarketingHeader() {
           <Link href="/pricing" className="hover:text-white">Pricing</Link>
         </nav>
         <div className="ml-auto flex items-center gap-2 sm:ml-0">
+          <ThemeToggle className="h-9 w-9" />
           {user ? <Link href="/today" className="flex h-9 items-center rounded-[2px] bg-white px-4 text-xs font-medium text-black hover:bg-white/90">Open dashboard</Link> : <><Link href="/auth/login" className="flex h-9 items-center px-3 text-xs text-[var(--muted)] hover:text-white">Sign in</Link><Link href="/auth/login?mode=signup" className="flex h-9 items-center rounded-[2px] bg-white px-4 text-xs font-medium text-black hover:bg-white/90">Start free</Link></>}
         </div>
       </div>

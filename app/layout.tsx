@@ -2,6 +2,7 @@ import "@/styles/globals.css"
 import { Inter, JetBrains_Mono } from "next/font/google"
 import type React from "react"
 import { Toaster } from "@/components/ui/toaster"
+import { ThemeProvider } from "@/components/theme-provider"
 
 const inter = Inter({ 
   subsets: ["latin"], 
@@ -32,10 +33,12 @@ export default function RootLayout({
   children: React.ReactNode
 }) {
   return (
-    <html lang="en" className="dark bg-background">
+    <html lang="en" className="bg-background" suppressHydrationWarning>
       <body className={`${inter.variable} ${jetbrainsMono.variable} font-sans antialiased`}>
-        {children}
-        <Toaster />
+        <ThemeProvider attribute="class" defaultTheme="dark" enableSystem={false} disableTransitionOnChange>
+          {children}
+          <Toaster />
+        </ThemeProvider>
       </body>
     </html>
   )

@@ -8,6 +8,7 @@ import { cn } from "@/lib/utils"
 import { createClient } from "@/lib/supabase/client"
 import { OnboardingGuide } from "@/components/onboarding-guide"
 import { CommandMenu } from "@/components/command-menu"
+import { ThemeToggle } from "@/components/theme-toggle"
 
 interface AppShellProps {
   eyebrow?: string
@@ -94,6 +95,7 @@ export function AppShell({ eyebrow, title, description, leading, actions, childr
         </nav>
 
         <div className="border-t border-[var(--hairline)] p-4">
+          <ThemeToggle showLabel className="mb-1 border-transparent bg-transparent" />
           <button onClick={signOut} className="flex h-11 w-full items-center gap-3 rounded-[2px] px-3 text-sm text-[var(--muted)] transition-colors hover:bg-[var(--raised)] hover:text-white">
             <LogOut className="h-[17px] w-[17px]" />
             Sign out
@@ -109,6 +111,7 @@ export function AppShell({ eyebrow, title, description, leading, actions, childr
             <ShieldCheck className="h-4 w-4" />
             <span className="text-sm font-semibold">PropDash</span>
             <span className="ml-auto text-[8px] uppercase tracking-[0.16em] text-[var(--muted)]">Payout intelligence</span>
+            <ThemeToggle className="h-8 w-8" />
           </div>
           <div className="flex h-12 items-center gap-1 overflow-x-auto border-t border-[var(--hairline)] px-2" aria-label="Mobile navigation">
             {mobileNavigation.map(({ href, label, icon: Icon }) => {

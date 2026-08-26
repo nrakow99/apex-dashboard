@@ -18,6 +18,7 @@ import { deleteUserInstrumentSpec, fetchScreenshotUsageThisMonth, fetchSubscript
 import { findInstrumentSpec, normalizeSymbol, pointsToTicks } from "@/lib/instrument-specs"
 import type { InstrumentSpec } from "@/lib/types"
 import { formatAccountLimit, subscriptionPlan, type SubscriptionEntitlement } from "@/lib/subscriptions"
+import { ThemeToggle } from "@/components/theme-toggle"
 
 export default function SettingsPage() {
   const { accounts, trades, payouts, accountCosts, accountCostsAvailable, instrumentSpecs, userRiskProfile, loading, error, setInstrumentSpecs, setUserRiskProfile } = useDashboardData()
@@ -156,6 +157,8 @@ export default function SettingsPage() {
         </div>
 
         <aside className="space-y-6">
+          <section className="border border-[var(--hairline)] bg-[var(--surface)] p-5"><p className="text-[9px] uppercase tracking-[0.15em] text-[var(--muted)]">Appearance</p><h2 className="mt-1 text-base font-medium">Display mode</h2><p className="mt-2 text-[11px] leading-relaxed text-[var(--muted)]">Switch between the focused midnight workspace and a high-clarity daylight palette. Your choice stays on this device.</p><ThemeToggle showLabel className="mt-4" /></section>
+
           <section className="border border-[var(--hairline)] bg-[var(--surface)] p-5"><p className="text-[9px] uppercase tracking-[0.15em] text-[var(--muted)]">Profile</p><h2 className="mt-1 text-base font-medium">Signed-in account</h2><p className="mt-4 break-all font-mono text-xs">{email ?? "Unavailable"}</p><p className="mt-2 text-[11px] text-[var(--muted)]">Authentication is managed by your secure Supabase session.</p><Button variant="outline" size="sm" className="mt-4 w-full" onClick={() => { restart(); toast({ title: "Setup guide restarted" }) }}>Restart setup guide</Button></section>
 
           <section className="border border-[var(--hairline)] bg-[var(--surface)]">
