@@ -264,32 +264,32 @@ export function AccountCard({
       )}
       onClick={onClick}
     >
-      <div className="mb-6 flex items-start justify-between gap-4">
-        <div className="min-w-0">
-          <div className="flex items-center gap-2">
-            <h3 className="truncate text-base font-semibold tracking-[-0.02em] text-[var(--text)] sm:text-lg">{account.name}</h3>
-            <span className={cn(
-              "inline-flex shrink-0 items-center gap-1 rounded-[2px] border border-[var(--hairline)] bg-[var(--raised)] px-2 py-1 text-[9px] tracking-[0.08em]",
-              health.severity === "critical" && "font-bold uppercase text-white",
-              health.severity === "elevated" && "font-semibold text-white",
-              health.severity === "positive" && "font-medium text-white",
-              health.severity === "neutral" && "text-[var(--muted-foreground)]",
-            )}>
-              {health.severity === "critical" && <AlertTriangle className="h-2.5 w-2.5" aria-hidden />}
-              {health.severity === "elevated" && <AlertTriangle className="h-2.5 w-2.5 opacity-60" aria-hidden />}
-              {health.severity === "positive" && <CheckCircle2 className="h-2.5 w-2.5" aria-hidden />}
-              {health.label}
-            </span>
-          </div>
-          <p className="mt-1.5 flex items-center gap-1 text-[11px] text-[var(--muted-foreground)]">
-            {showIdentity && <span className="truncate">{accountIdentity(account)} · </span>}
-            <span>{account.drawdownType ?? "EOD"}</span>
-            <InfoHint topic="drawdownType" firm={account.firm} />
-          </p>
-        </div>
+      <div className="mb-6">
+        <div className="flex items-start justify-between gap-4">
+          <h3 className="min-w-0 truncate text-base font-semibold tracking-[-0.02em] text-[var(--text)] sm:text-lg">{account.name}</h3>
         <div className="flex shrink-0 items-center gap-1">
           {menuSlot && <span onClick={(event) => event.stopPropagation()}>{menuSlot}</span>}
           <ChevronRight className="h-4 w-4 text-[var(--faint)] transition-colors group-hover:text-white" aria-hidden />
+        </div>
+        </div>
+        <div className="mt-2 flex min-w-0 items-center gap-2">
+          <span className={cn(
+            "inline-flex shrink-0 items-center gap-1 rounded-[2px] border border-[var(--hairline)] bg-[var(--raised)] px-2 py-1 text-[9px] tracking-[0.08em]",
+            health.severity === "critical" && "font-bold uppercase text-white",
+            health.severity === "elevated" && "font-semibold text-white",
+            health.severity === "positive" && "font-medium text-white",
+            health.severity === "neutral" && "text-[var(--muted-foreground)]",
+          )}>
+            {health.severity === "critical" && <AlertTriangle className="h-2.5 w-2.5" aria-hidden />}
+            {health.severity === "elevated" && <AlertTriangle className="h-2.5 w-2.5 opacity-60" aria-hidden />}
+            {health.severity === "positive" && <CheckCircle2 className="h-2.5 w-2.5" aria-hidden />}
+            {health.label}
+          </span>
+          <p className="flex min-w-0 items-center gap-1 text-[11px] text-[var(--muted-foreground)]">
+            {showIdentity && <span className="truncate">{accountIdentity(account)} · </span>}
+            <span className="shrink-0">{account.drawdownType ?? "EOD"}</span>
+            <InfoHint topic="drawdownType" firm={account.firm} />
+          </p>
         </div>
       </div>
 

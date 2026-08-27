@@ -52,7 +52,7 @@ export default function CompliancePage() {
         {loading ? <p className="px-5 py-14 text-center text-sm text-[var(--muted)]">Evaluating verified rules and workspace data…</p> : visible.length === 0 ? (
           <div className="px-6 py-16 text-center"><ShieldCheck className="mx-auto h-6 w-6 text-[var(--muted)]" /><p className="mt-4 text-base font-medium">No items in this view</p><p className="mx-auto mt-2 max-w-md text-sm leading-relaxed text-[var(--muted)]">The filter has no current actions. This does not replace checking the firm portal before a payout request.</p></div>
         ) : <div className="divide-y divide-[var(--hairline)]">{visible.map((entry) => (
-          <div key={entry.id} className={cn("grid gap-4 px-5 py-5 sm:grid-cols-[110px_minmax(0,1fr)_auto] sm:items-center", entry.kind === "blocker" && "border-l-2 border-l-white") }>
+          <div key={entry.id} className={cn("grid gap-4 px-5 py-5 sm:grid-cols-[135px_minmax(0,1fr)_auto] sm:items-center", entry.kind === "blocker" && "border-l-2 border-l-white") }>
             <div><span className="inline-flex rounded-[2px] border border-[var(--hairline)] bg-[var(--raised)] px-2 py-1 text-[9px] font-medium uppercase tracking-[0.14em] text-[var(--muted)]">{entry.kind}</span>{entry.accountName && <p className="mt-2 truncate text-[10px] text-[var(--muted)]">{entry.accountName}</p>}</div>
             <div><p className="text-sm font-medium">{entry.title}</p><p className="mt-1 max-w-2xl text-xs leading-relaxed text-[var(--muted)]">{entry.description}</p></div>
             <Button asChild variant="outline" size="sm"><Link href={entry.href}>{entry.action}<ArrowRight className="ml-1.5 h-3.5 w-3.5" /></Link></Button>

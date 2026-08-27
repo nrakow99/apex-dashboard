@@ -13,8 +13,10 @@ export async function MarketingHeader() {
           <span className="flex h-8 w-8 items-center justify-center rounded-[2px] border border-[var(--hairline)] bg-[var(--raised)]"><ShieldCheck className="h-4 w-4" /></span>
           <span className="font-semibold tracking-[-0.02em]">PropDash</span>
         </Link>
-        <nav className="ml-auto hidden items-center gap-6 text-xs text-[var(--muted)] sm:flex" aria-label="Marketing navigation">
-          <Link href="/#edge" className="hover:text-white">Why PropDash</Link>
+        <nav className="ml-auto hidden items-center gap-6 text-xs text-[var(--muted)] lg:flex" aria-label="Marketing navigation">
+          <Link href="/#product" className="hover:text-white">Product</Link>
+          <Link href="/#workflow" className="hover:text-white">Workflow</Link>
+          <Link href="/#trust" className="hover:text-white">Trust</Link>
           <Link href="/pricing" className="hover:text-white">Pricing</Link>
         </nav>
         <div className="ml-auto flex items-center gap-2 sm:ml-0">
@@ -29,9 +31,9 @@ export async function MarketingHeader() {
 export function MarketingFooter() {
   return (
     <footer className="border-t border-[var(--hairline)] bg-black">
-      <div className="mx-auto flex max-w-[1280px] flex-col gap-4 px-5 py-8 text-[11px] text-[var(--muted)] sm:flex-row sm:items-center sm:justify-between sm:px-8">
-        <p>PropDash · Cross-firm payout intelligence</p>
-        <div className="flex gap-5"><Link href="/pricing" className="hover:text-white">Pricing</Link><Link href="/auth/login" className="hover:text-white">Sign in</Link></div>
+      <div className="mx-auto grid max-w-[1280px] gap-8 px-5 py-10 text-[11px] text-[var(--muted)] sm:px-8 lg:grid-cols-[1fr_auto] lg:items-end">
+        <div><p className="text-sm font-medium text-[var(--text)]">PropDash</p><p className="mt-2 max-w-md leading-relaxed">Cross-firm payout intelligence for protecting funded accounts. Historical evidence is not a market signal.</p></div>
+        <div className="flex flex-wrap gap-x-5 gap-y-2"><Link href="/#product" className="hover:text-white">Product</Link><Link href="/#workflow" className="hover:text-white">Workflow</Link><Link href="/#trust" className="hover:text-white">Trust</Link><Link href="/pricing" className="hover:text-white">Pricing</Link><Link href="/auth/login" className="hover:text-white">Sign in</Link></div>
       </div>
     </footer>
   )

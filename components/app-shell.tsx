@@ -122,7 +122,7 @@ export function AppShell({ eyebrow, title, description, leading, actions, childr
         </div>
 
         <header className="border-b border-[var(--hairline)]">
-          <div className="mx-auto flex min-h-[112px] max-w-[1560px] flex-col justify-center gap-5 px-5 py-5 sm:px-8 lg:flex-row lg:items-center lg:justify-between lg:px-10 lg:py-0">
+          <div className="mx-auto flex min-h-[112px] max-w-[1560px] flex-col justify-center gap-5 px-5 py-5 sm:px-8 lg:px-10 xl:flex-row xl:items-center xl:justify-between xl:py-0">
             <div className="flex min-w-0 flex-1 items-center gap-3">
               {leading}
               <div className="min-w-0">
@@ -131,7 +131,7 @@ export function AppShell({ eyebrow, title, description, leading, actions, childr
               {description && <p className="mt-1 text-sm text-[var(--muted)]">{description}</p>}
               </div>
             </div>
-            {actions && <div className="flex shrink-0 flex-wrap items-center gap-2">{actions}</div>}
+            {actions && <div className="flex w-full shrink-0 flex-wrap items-center gap-2 xl:w-auto xl:justify-end">{actions}</div>}
           </div>
         </header>
 
