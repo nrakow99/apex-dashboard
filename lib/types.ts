@@ -15,6 +15,8 @@ export type AlphaTier = "zero" | "standard" | "advanced"
 export interface Account {
   id: string
   name: string
+  /** Product-tour data. Demo records never mix with a real decision workspace. */
+  isDemo?: boolean
   firm: Firm
   type: AccountType
   status: AccountStatus
@@ -98,7 +100,7 @@ export interface Trade {
   contracts?: number | null
   /** Stable identity for a reviewed screenshot-import row, when available. */
   importKey?: string | null
-  importSource?: "screenshot" | null
+  importSource?: "screenshot" | "csv" | null
   rawSymbol?: string | null
   isAggregate?: boolean
   pnlHigh?: number | null
@@ -111,6 +113,19 @@ export interface Trade {
   winRatePercent?: number | null
   extractionConfidence?: "high" | "medium" | "low" | null
   importBatchId?: string | null
+}
+
+export type TradeImportSource = "csv" | "lucid_trading_history" | "generic_trading_history" | "unknown"
+
+export interface TradeImportBatch {
+  id: string
+  accountId: string
+  source: TradeImportSource
+  filenames: string[]
+  rowCount: number
+  coverageStart: string | null
+  coverageEnd: string | null
+  createdAt: string
 }
 
 export interface DailyPnL {

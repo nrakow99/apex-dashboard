@@ -19,6 +19,8 @@ import type { Trade } from "@/lib/types"
 import type { TradeMeta } from "@/lib/trade-meta"
 import { cn, formatPnL, pnlColorClass } from "@/lib/utils"
 import { DemoDataBanner } from "@/components/demo-data-banner"
+import { ImportBatchHistory } from "@/components/import-batch-history"
+import { scopeDecisionWorkspace } from "@/lib/workspace-scope"
 
 const filters: { value: TradeWorkspaceFilter; label: string }[] = [
   { value: "all", label: "All" },
@@ -33,7 +35,7 @@ function Stat({ label, value, supporting, valueClass }: { label: string; value: 
 }
 
 export default function TradesPage() {
-  const { accounts, trades, userRiskProfile, loading, error, reload, setTrades } = useDashboardData()
+  const { accounts, trades, userRiskProfile, importBatches, importBatchesAvailable, loading, error, reload, setTrades } = useDashboardData()
   const { toast } = useToast()
   const [accountId, setAccountId] = useState("all")
   const [filter, setFilter] = useState<TradeWorkspaceFilter>("all")
@@ -43,10 +45,16 @@ export default function TradesPage() {
   const [isSaving, setIsSaving] = useState(false)
   const [isDeleting, setIsDeleting] = useState(false)
 
-  const filteredTrades = useMemo(() => filterWorkspaceTrades(trades, accounts, { accountId, filter, query }), [trades, accounts, accountId, filter, query])
-  const summary = useMemo(() => summarizeTradeWorkspace(accountId === "all" ? trades : trades.filter((trade) => trade.accountId === accountId)), [trades, accountId])
-  const activeAccounts = accounts.filter((account) => account.status === "Active")
-  const defaultAccountId = activeAccounts[0]?.id ?? accounts[0]?.id ?? ""
+  const workspace = useMemo(() => scopeDecisionWorkspace(accounts, trades, []), [accounts, trades])
+  const workspaceAccountIds = useMemo(() => new Set(workspace.accounts.map((account) => account.id)), [workspace.accounts])
+  const workspaceBatches = useMemo(
+    () => importBatches.filter((batch) => workspaceAccountIds.has(batch.accountId)),
+    [importBatches, workspaceAccountIds],
+  )
+  const filteredTrades = useMemo(() => filterWorkspaceTrades(workspace.trades, workspace.accounts, { accountId, filter, query }), [workspace.trades, workspace.accounts, accountId, filter, query])
+  const summary = useMemo(() => summarizeTradeWorkspace(accountId === "all" ? workspace.trades : workspace.trades.filter((trade) => trade.accountId === accountId)), [workspace.trades, accountId])
+  const activeAccounts = workspace.accounts.filter((account) => account.status === "Active")
+  const defaultAccountId = activeAccounts[0]?.id ?? workspace.accounts[0]?.id ?? ""
 
   const handleAdd = async (trade: { date: string; symbol: string; pnl: number; notes?: string }, meta: TradeMeta, accountIds: string[]) => {
     const results = await Promise.all(accountIds.map((id) => createTrade({ ...trade, accountId: id }, meta)))
@@ -88,12 +96,12 @@ export default function TradesPage() {
       eyebrow="Journal"
       title="Trades"
       description="Search every account record, finish reviews, and keep imported history clean."
-      actions={accounts.length > 0 ? <AddTradeModal accounts={activeAccounts.length ? activeAccounts : accounts} selectedAccountId={defaultAccountId} userDefaultRiskProfile={userRiskProfile} onAddTrade={handleAdd} /> : <Button asChild><Link href="/accounts">Add an account</Link></Button>}
+      actions={workspace.accounts.length > 0 ? <AddTradeModal accounts={activeAccounts.length ? activeAccounts : workspace.accounts} selectedAccountId={defaultAccountId} userDefaultRiskProfile={userRiskProfile} onAddTrade={handleAdd} /> : <Button asChild><Link href="/accounts">Add an account</Link></Button>}
     >
       <DemoDataBanner accounts={accounts} />
       {error && <div role="alert" className="mb-5 border-l-2 border-white bg-[var(--raised)] px-4 py-3 text-sm">Some workspace data could not load: {error}</div>}
 
-      {accounts.length > 0 && <section className="mb-6 grid gap-px border border-[var(--hairline)] bg-[var(--hairline)] lg:grid-cols-[minmax(0,1.15fr)_minmax(0,.85fr)_minmax(0,.85fr)]">
+      {workspace.accounts.length > 0 && <section className="mb-6 grid gap-px border border-[var(--hairline)] bg-[var(--hairline)] lg:grid-cols-[minmax(0,1.15fr)_minmax(0,.85fr)_minmax(0,.85fr)]">
         <div className="bg-[var(--surface)] p-5 sm:p-6">
           <p className="text-[9px] uppercase tracking-[0.17em] text-[var(--faint)]">Start from where you are</p>
           <h2 className="mt-2 text-lg font-medium">Bring an active account up to date</h2>
@@ -101,11 +109,11 @@ export default function TradesPage() {
         </div>
         <div className="flex flex-col justify-between gap-4 bg-[var(--surface)] p-5">
           <div><p className="text-sm font-medium">CSV history</p><p className="mt-1 text-xs leading-relaxed text-[var(--muted)]">Fast, local parsing with no AI key or scan credit.</p></div>
-          <CsvImportModal accounts={accounts} selectedAccountId={defaultAccountId} existingTrades={trades} onImported={async (saved, duplicates) => { setTrades((current) => [...current, ...saved]); toast({ title: "CSV history imported", description: `${saved.length} added · ${duplicates} duplicates skipped.` }) }} />
+          <CsvImportModal accounts={workspace.accounts} selectedAccountId={defaultAccountId} existingTrades={workspace.trades} onImported={async (saved, duplicates) => { setTrades((current) => [...current, ...saved]); toast({ title: "CSV history imported", description: `${saved.length} added · ${duplicates} duplicates skipped.` }) }} />
         </div>
         <div className="flex flex-col justify-between gap-4 bg-[var(--surface)] p-5">
           <div><p className="text-sm font-medium">Screenshot scan</p><p className="mt-1 text-xs leading-relaxed text-[var(--muted)]">Extract a visible history table, then verify every selected row.</p></div>
-          <ScreenshotImportModal accounts={accounts} selectedAccountId={defaultAccountId} existingTrades={trades} onImported={async (result) => { await reload(); toast({ title: result.insertedCount ? "History imported" : "No new rows imported", description: `${result.insertedCount} added · ${result.duplicateCount} duplicates skipped.` }) }} />
+          <ScreenshotImportModal accounts={workspace.accounts} selectedAccountId={defaultAccountId} existingTrades={workspace.trades} onImported={async (result) => { await reload(); toast({ title: result.insertedCount ? "History imported" : "No new rows imported", description: `${result.insertedCount} added · ${result.duplicateCount} duplicates skipped.` }) }} />
         </div>
       </section>}
 
@@ -124,7 +132,7 @@ export default function TradesPage() {
           </div>
           <select value={accountId} onChange={(event) => setAccountId(event.target.value)} aria-label="Filter by account" className="h-10 min-w-[190px] rounded-[2px] border border-[var(--hairline)] bg-[var(--raised)] px-3 text-xs outline-none focus:border-[var(--faint)]">
             <option value="all">All accounts</option>
-            {accounts.map((account) => <option key={account.id} value={account.id}>{account.name}</option>)}
+            {workspace.accounts.map((account) => <option key={account.id} value={account.id}>{account.name}</option>)}
           </select>
           <div className="flex max-w-full gap-1 overflow-x-auto" aria-label="Trade result filters">
             {filters.map((item) => <button key={item.value} type="button" onClick={() => setFilter(item.value)} className={cn("h-10 whitespace-nowrap rounded-[2px] border px-3 text-xs transition-colors", filter === item.value ? "border-[var(--text)] bg-[var(--text)] text-[var(--ground)]" : "border-[var(--hairline)] bg-[var(--raised)] text-[var(--muted)] hover:text-[var(--text)]")}>{item.label}</button>)}
@@ -133,10 +141,12 @@ export default function TradesPage() {
       </section>
 
       <div className="mt-3">
-        {loading ? <div className="border border-[var(--hairline)] bg-[var(--surface)] px-5 py-16 text-center text-sm text-[var(--muted)]">Loading trade records…</div> : <GlobalTradesTable trades={filteredTrades} accounts={accounts} onEdit={setEditing} onDelete={setDeleting} />}
+        {loading ? <div className="border border-[var(--hairline)] bg-[var(--surface)] px-5 py-16 text-center text-sm text-[var(--muted)]">Loading trade records…</div> : <GlobalTradesTable trades={filteredTrades} accounts={workspace.accounts} onEdit={setEditing} onDelete={setDeleting} />}
       </div>
 
-      <EditTradeModal trade={editing} accounts={accounts} open={editing != null} onOpenChange={(open) => { if (!open) setEditing(null) }} onSave={handleSave} isSaving={isSaving} />
+      <ImportBatchHistory accounts={workspace.accounts} batches={workspaceBatches} available={importBatchesAvailable} onDeleted={reload} />
+
+      <EditTradeModal trade={editing} accounts={workspace.accounts} open={editing != null} onOpenChange={(open) => { if (!open) setEditing(null) }} onSave={handleSave} isSaving={isSaving} />
       <DeleteConfirmationModal open={deleting != null} onOpenChange={(open) => { if (!open) setDeleting(null) }} title="Delete trade record?" description="This permanently removes the record from account metrics and payout calculations." warningText="This action cannot be undone." itemDetails={deleting ? <div className="flex items-center justify-between"><span className="font-mono text-sm">{deleting.symbol} · {deleting.date}</span><span className={cn("font-mono text-sm", pnlColorClass(deleting.pnl))}>{formatPnL(deleting.pnl)}</span></div> : undefined} onConfirm={handleDelete} isDeleting={isDeleting} confirmText="Delete trade" />
     </AppShell>
   )

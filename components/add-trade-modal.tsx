@@ -113,7 +113,7 @@ export function AddTradeModal({
       await onAddTrade(
         {
           date: formData.date,
-          symbol: formData.symbol.toUpperCase(),
+          symbol: formData.symbol.trim().toUpperCase(),
           pnl: parsedPnl,
           notes: formData.notes.trim() || undefined,
         },
@@ -121,7 +121,7 @@ export function AddTradeModal({
         accountIds,
       )
       if (typeof window !== "undefined") {
-        window.localStorage.setItem("propdash:last-trade-symbol", formData.symbol.toUpperCase())
+        window.localStorage.setItem("propdash:last-trade-symbol", formData.symbol.trim().toUpperCase())
       }
       setMeta(emptyMeta())
       if (keepOpen) {
@@ -144,7 +144,7 @@ export function AddTradeModal({
 
   const n = accountIds.length
   const parsedPnl = Number(formData.pnl)
-  const canSubmit = n > 0 && formData.symbol !== "" && formData.pnl.trim() !== "" && Number.isFinite(parsedPnl)
+  const canSubmit = n > 0 && formData.symbol.trim() !== "" && formData.pnl.trim() !== "" && Number.isFinite(parsedPnl)
 
   return (
     <Dialog

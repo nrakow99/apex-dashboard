@@ -18,6 +18,7 @@ import { cn, formatCurrency } from "@/lib/utils"
 import { buildCapitalMetrics } from "@/lib/capital-metrics"
 import { AccountCostLedger } from "@/components/account-cost-ledger"
 import { DemoDataBanner } from "@/components/demo-data-banner"
+import { scopeDecisionWorkspace } from "@/lib/workspace-scope"
 
 function Stat({ label, value, supporting }: { label: string; value: string; supporting: string }) {
   return <div className="bg-[var(--surface)] p-4"><p className="text-[9px] uppercase tracking-[0.15em] text-[var(--muted)]">{label}</p><p className="mt-2 font-mono text-xl font-medium">{value}</p><p className="mt-1 text-[10px] text-[var(--muted)]">{supporting}</p></div>
@@ -35,18 +36,19 @@ export default function PayoutsPage() {
   const [deleting, setDeleting] = useState<Payout | null>(null)
   const [isDeleting, setIsDeleting] = useState(false)
 
-  const rows = useMemo(() => buildPayoutWorkspace(accounts, trades, payouts), [accounts, trades, payouts])
-  const summary = useMemo(() => summarizePayoutWorkspace(rows, payouts), [rows, payouts])
+  const workspace = useMemo(() => scopeDecisionWorkspace(accounts, trades, payouts, accountCosts), [accountCosts, accounts, payouts, trades])
+  const rows = useMemo(() => buildPayoutWorkspace(workspace.accounts, workspace.trades, workspace.payouts), [workspace])
+  const summary = useMemo(() => summarizePayoutWorkspace(rows, workspace.payouts), [rows, workspace.payouts])
   const capital = useMemo(
-    () => buildCapitalMetrics(accounts, payouts, accountCostsAvailable ? accountCosts : null),
-    [accountCosts, accountCostsAvailable, accounts, payouts],
+    () => buildCapitalMetrics(workspace.accounts, workspace.payouts, accountCostsAvailable ? workspace.accountCosts : null),
+    [accountCostsAvailable, workspace],
   )
 
   const defaultSelection = rows.find((row) => row.isReady) ?? rows.find((row) => row.rulesAvailable) ?? rows[0] ?? null
   const selected = rows.find((row) => row.account.id === requestedAccountId) ?? defaultSelection
   const selectedAccountId = selected?.account.id ?? null
-  const sortedPayouts = [...payouts].sort((a, b) => b.date.localeCompare(a.date) || b.payoutNumber - a.payoutNumber)
-  const accountMap = new Map(accounts.map((account) => [account.id, account]))
+  const sortedPayouts = [...workspace.payouts].sort((a, b) => b.date.localeCompare(a.date) || b.payoutNumber - a.payoutNumber)
+  const accountMap = new Map(workspace.accounts.map((account) => [account.id, account]))
 
   const handleAddPayout = async (input: { date: string; amount: number; notes?: string }) => {
     if (!selected?.eligibility) return
@@ -97,7 +99,7 @@ export default function PayoutsPage() {
       <section className="grid gap-px border border-[var(--hairline)] bg-[var(--hairline)] sm:grid-cols-2 xl:grid-cols-4">
         <Stat label="Ready now" value={loading ? "—" : String(summary.readyAccounts)} supporting={`${summary.fundedAccounts} funded accounts`} />
         <Stat label="Available gross" value={loading ? "—" : formatCurrency(summary.availableGross)} supporting="Across verified rule sets" />
-        <Stat label="Recorded gross" value={loading ? "—" : formatCurrency(summary.recordedGross)} supporting={`${payouts.length} completed payouts`} />
+        <Stat label="Recorded gross" value={loading ? "—" : formatCurrency(summary.recordedGross)} supporting={`${workspace.payouts.length} completed payouts`} />
         <Stat label="Rule coverage" value={loading ? "—" : summary.rulesUnavailable ? `${summary.rulesUnavailable} unavailable` : "Complete"} supporting="Unknown configurations fail closed" />
       </section>
 
@@ -132,7 +134,7 @@ export default function PayoutsPage() {
             {selected?.rulesAvailable && selected.eligibility && selected.account.status === "Active" ? (
               <>
                 <PayoutStatusPanel account={selected.account} eligibility={selected.eligibility} payouts={selected.accountPayouts} onAddPayout={handleAddPayout} />
-                <PayoutImpactPlanner key={selected.account.id} account={selected.account} trades={trades} payouts={payouts} minAmount={selected.eligibility.minPayoutAmount} maxAmount={selected.eligibility.maxWithdrawable} eligible={selected.eligibility.isEligible} />
+                <PayoutImpactPlanner key={selected.account.id} account={selected.account} trades={workspace.trades} payouts={workspace.payouts} minAmount={selected.eligibility.minPayoutAmount} maxAmount={selected.eligibility.maxWithdrawable} eligible={selected.eligibility.isEligible} />
               </>
             ) : (
               <div className="border border-[var(--hairline)] bg-[var(--surface)] p-6"><p className="text-[10px] uppercase tracking-[0.15em] text-[var(--muted)]">Withdrawal readiness</p><h2 className="mt-2 text-lg font-medium">Payout data unavailable</h2><p className="mt-2 max-w-xl text-sm leading-relaxed text-[var(--muted)]">{selected?.account.status !== "Active" ? `This account is ${selected?.account.status.toLowerCase()}. Readiness is calculated only for active funded accounts.` : selected?.unavailableReason ?? "A verified rule set could not be resolved."}</p></div>
@@ -144,7 +146,7 @@ export default function PayoutsPage() {
       <section className="mt-8 border border-[var(--hairline)] bg-[var(--surface)]">
         <div className="border-b border-[var(--hairline)] px-5 py-4"><p className="text-[9px] uppercase tracking-[0.15em] text-[var(--muted)]">Tracked capital</p><h2 className="mt-1 text-base font-medium">Payout economics</h2><p className="mt-1 text-xs text-[var(--muted)]">Calculated only from saved payouts and user-entered costs. Missing split or cost data stays unavailable.</p></div>
         <div className="grid gap-px bg-[var(--hairline)] sm:grid-cols-2 xl:grid-cols-3">
-          <Stat label="Gross payouts" value={formatCurrency(capital.grossPayouts)} supporting={`${payouts.length} recorded requests`} />
+          <Stat label="Gross payouts" value={formatCurrency(capital.grossPayouts)} supporting={`${workspace.payouts.length} recorded requests`} />
           <Stat label="Trader proceeds" value={capital.traderProceeds == null ? "Unavailable" : formatCurrency(capital.traderProceeds)} supporting="Withheld if any split is missing" />
           <Stat label="Tracked costs" value={loading || capital.trackedCosts == null ? "Unavailable" : formatCurrency(capital.trackedCosts)} supporting="Only fees entered below" />
           <Stat label="Tracked net" value={capital.trackedNetProceeds == null ? "Unavailable" : formatCurrency(capital.trackedNetProceeds)} supporting="Trader proceeds minus tracked costs" />
@@ -154,10 +156,13 @@ export default function PayoutsPage() {
         </div>
       </section>
 
-      <AccountCostLedger accounts={accounts} costs={accountCosts} available={accountCostsAvailable} onChange={setAccountCosts} />
+      <AccountCostLedger accounts={workspace.accounts} costs={workspace.accountCosts} available={accountCostsAvailable} onChange={(nextScopedCosts) => {
+        const scopedIds = new Set(workspace.accounts.map((account) => account.id))
+        setAccountCosts([...accountCosts.filter((cost) => !scopedIds.has(cost.accountId)), ...nextScopedCosts])
+      }} />
 
       <section className="mt-8 border border-[var(--hairline)] bg-[var(--surface)]">
-        <div className="flex items-center justify-between border-b border-[var(--hairline)] px-5 py-4"><div><p className="text-[9px] uppercase tracking-[0.15em] text-[var(--muted)]">Ledger</p><h2 className="mt-1 text-base font-medium">Payout history</h2></div><span className="font-mono text-xs text-[var(--muted)]">{payouts.length} records</span></div>
+        <div className="flex items-center justify-between border-b border-[var(--hairline)] px-5 py-4"><div><p className="text-[9px] uppercase tracking-[0.15em] text-[var(--muted)]">Ledger</p><h2 className="mt-1 text-base font-medium">Payout history</h2></div><span className="font-mono text-xs text-[var(--muted)]">{workspace.payouts.length} records</span></div>
         {sortedPayouts.length ? <div className="divide-y divide-[var(--hairline)]">{sortedPayouts.map((payout) => {
           const account = accountMap.get(payout.accountId)
           return <div key={payout.id} className="grid items-center gap-3 px-5 py-3 sm:grid-cols-[1fr_150px_150px_44px]"><div className="min-w-0"><p className="truncate text-sm">{account?.name ?? "Unavailable account"}</p><p className="mt-1 text-[10px] text-[var(--muted)]">Payout {payout.payoutNumber} · {localDate(payout.date)}</p></div><div><p className="text-[9px] uppercase tracking-[0.12em] text-[var(--muted)]">Gross</p><p className="mt-1 font-mono text-sm">{formatCurrency(payout.amount)}</p></div><div><p className="text-[9px] uppercase tracking-[0.12em] text-[var(--muted)]">Trader received</p><p className="mt-1 font-mono text-sm">{payout.traderReceived == null ? "Unavailable" : formatCurrency(payout.traderReceived)}</p></div><Button variant="ghost" size="icon" onClick={() => setDeleting(payout)} aria-label="Delete payout"><Trash2 /></Button></div>

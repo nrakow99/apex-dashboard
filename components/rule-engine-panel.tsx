@@ -16,6 +16,7 @@ import {
   getRuleEngineFloorRowLabel,
 } from "@/lib/floor-display-labels"
 import { getApexPaScalingTier } from "@/lib/apex-pa-scaling"
+import { DISPLAY_THRESHOLDS } from "@/lib/display-thresholds"
 import { CheckCircle2, AlertTriangle } from "lucide-react"
 
 interface AccountStats {
@@ -193,7 +194,7 @@ export function RuleEnginePanel({
   const dailyLossStatus: "good" | "warning" | "danger" =
     !rules.hasDLL
       ? "good"
-      : todayPnL >= -effectiveDll * 0.8
+      : todayPnL >= -effectiveDll * (1 - DISPLAY_THRESHOLDS.dailyLossGoodRemainingFraction)
         ? "good"
         : todayPnL >= -effectiveDll
           ? "warning"
@@ -204,7 +205,11 @@ export function RuleEnginePanel({
     ? (stats.drawdownRemaining / rules.maxDrawdown) * 100
     : 0
   const drawdownStatus: "good" | "warning" | "danger" =
-    drawdownPercent > 50 ? "good" : drawdownPercent > 20 ? "warning" : "danger"
+    drawdownPercent > DISPLAY_THRESHOLDS.drawdownGoodRemainingFraction * 100
+      ? "good"
+      : drawdownPercent > DISPLAY_THRESHOLDS.drawdownWarningRemainingFraction * 100
+        ? "warning"
+        : "danger"
 
   const firmLabel = account.firm
   const hasConsistencyActivity = stats.tradingDays > 0

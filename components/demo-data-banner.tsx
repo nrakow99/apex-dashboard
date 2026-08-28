@@ -3,7 +3,7 @@ import { ArrowUpRight } from "lucide-react"
 import type { Account } from "@/lib/types"
 
 export function DemoDataBanner({ accounts }: { accounts: readonly Account[] }) {
-  const demoCount = accounts.filter((account) => account.name.startsWith("DEMO ·")).length
+  const demoCount = accounts.filter((account) => account.isDemo).length
   if (demoCount === 0) return null
   const realCount = accounts.length - demoCount
   return (
@@ -11,7 +11,7 @@ export function DemoDataBanner({ accounts }: { accounts: readonly Account[] }) {
       <div>
         <p className="text-xs font-medium">Demo workspace</p>
         <p className="mt-1 text-[11px] leading-relaxed text-[var(--muted)]">
-          {demoCount} example account{demoCount === 1 ? " is" : "s are"} included so you can explore the product. {realCount > 0 ? `${realCount} real account${realCount === 1 ? " is" : "s are"} kept separate.` : "Add a real account before relying on this workspace for decisions."}
+          {demoCount} example account{demoCount === 1 ? " is" : "s are"} included so you can explore the product. {realCount > 0 ? `${realCount} real account${realCount === 1 ? " is" : "s are"} active; demo records are excluded from every decision and aggregate.` : "Add a real account before relying on this workspace for decisions."}
         </p>
       </div>
       <Link href="/accounts" className="flex shrink-0 items-center gap-1.5 text-xs text-[var(--muted)] hover:text-white">Manage accounts<ArrowUpRight className="h-3.5 w-3.5" /></Link>

@@ -24,7 +24,7 @@ const pageHelp: Record<string, { title: string; description: string; steps: stri
 export function OnboardingGuide() {
   const pathname = usePathname()
   const { accounts, trades, userRiskProfile, loading } = useDashboardData()
-  const { state, update, recordVisit } = useOnboarding()
+  const { state, loading: onboardingLoading, update, recordVisit } = useOnboarding()
   const [manuallyOpen, setManuallyOpen] = useState(false)
 
   useEffect(() => {
@@ -32,7 +32,7 @@ export function OnboardingGuide() {
   }, [pathname, recordVisit])
 
   const realAccounts = useMemo(
-    () => accounts.filter((account) => !account.name.startsWith("DEMO ·")),
+    () => accounts.filter((account) => !account.isDemo),
     [accounts],
   )
   const realAccountIds = useMemo(
@@ -47,7 +47,7 @@ export function OnboardingGuide() {
     visitedPaths: state.visitedPaths,
   }), [realAccountIds, realAccounts, state.visitedPaths, trades, userRiskProfile])
   const progress = onboardingProgress(steps)
-  const firstVisit = !loading && !state.started && !state.dismissed
+  const firstVisit = !loading && !onboardingLoading && !state.started && !state.dismissed
   const open = manuallyOpen || firstVisit
   const context = pageHelp[pathname] ?? pageHelp["/today"]
 

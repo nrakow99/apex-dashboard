@@ -1,7 +1,7 @@
 "use client"
 
 import { format } from "date-fns"
-import { useState } from "react"
+import { useId, useState } from "react"
 import { CalendarIcon, ChevronDown } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Calendar } from "@/components/ui/calendar"
@@ -79,6 +79,7 @@ export function TradeFormBody({
   userDefaultRiskProfile = null,
   defaultDetailsOpen = false,
 }: TradeFormBodyProps) {
+  const symbolListId = useId()
   const [detailsPreference, setDetailsPreference] = useState<boolean | null>(null)
   const [showAccounts, setShowAccounts] = useState(false)
   const isMultiAccount = onAccountIdsChange != null
@@ -174,10 +175,20 @@ export function TradeFormBody({
 
       <div className={cn(TRADE_FIELD, COL_HALF)}>
         <Label className={TRADE_LABEL}>Symbol</Label>
-        <Select value={formData.symbol} onValueChange={(value) => setFormData({ ...formData, symbol: value })} disabled={disabled}>
-          <SelectTrigger className="h-10 bg-[var(--raised)] font-mono"><SelectValue placeholder="Choose symbol" /></SelectTrigger>
-          <SelectContent>{TRADING_SYMBOLS.map((symbol) => <SelectItem key={symbol} value={symbol}>{symbol}</SelectItem>)}</SelectContent>
-        </Select>
+        <Input
+          value={formData.symbol}
+          onChange={(event) => setFormData({ ...formData, symbol: event.target.value.toUpperCase() })}
+          onBlur={() => setFormData((current) => ({ ...current, symbol: current.symbol.trim().toUpperCase() }))}
+          list={symbolListId}
+          placeholder="NQ or custom symbol"
+          autoComplete="off"
+          maxLength={16}
+          className="h-10 bg-[var(--raised)] font-mono uppercase"
+          disabled={disabled}
+          required
+        />
+        <datalist id={symbolListId}>{TRADING_SYMBOLS.map((symbol) => <option key={symbol} value={symbol} />)}</datalist>
+        <p className="mt-1 text-[10px] text-[var(--muted)]">Choose a suggestion or type any market symbol.</p>
       </div>
 
       <div className={cn(TRADE_FIELD, COL_HALF)}>

@@ -10,6 +10,8 @@ import { accountNamesForConcentration, buildBehavioralEdge, buildSameDayConcentr
 import { SESSION_LABELS, type SessionId } from "@/lib/sessions"
 import { cn, formatPnL, pnlColorClass } from "@/lib/utils"
 import { DemoDataBanner } from "@/components/demo-data-banner"
+import { scopeDecisionWorkspace } from "@/lib/workspace-scope"
+import { DISPLAY_THRESHOLDS } from "@/lib/display-thresholds"
 
 type Period = "30" | "90" | "all"
 
@@ -71,11 +73,12 @@ export default function AnalyticsPage() {
   const { accounts, trades, loading, error } = useDashboardData()
   const [accountId, setAccountId] = useState("all")
   const [period, setPeriod] = useState<Period>("90")
+  const workspace = useMemo(() => scopeDecisionWorkspace(accounts, trades, []), [accounts, trades])
 
   const selectedTrades = useMemo(() => {
-    const accountTrades = accountId === "all" ? trades : trades.filter((trade) => trade.accountId === accountId)
+    const accountTrades = accountId === "all" ? workspace.trades : workspace.trades.filter((trade) => trade.accountId === accountId)
     return filterAnalyticsPeriod(accountTrades, period === "all" ? null : Number(period))
-  }, [trades, accountId, period])
+  }, [workspace.trades, accountId, period])
   const analytics = useMemo(() => buildTradeAnalytics(selectedTrades), [selectedTrades])
   const edge = useMemo(() => buildBehavioralEdge(selectedTrades), [selectedTrades])
   const concentration = useMemo(() => buildSameDayConcentration(selectedTrades), [selectedTrades])
@@ -83,7 +86,7 @@ export default function AnalyticsPage() {
   const observations = [
     analytics.bySymbol[0]?.records >= 3 ? `${analytics.bySymbol[0].label} has the highest net contribution in this view at ${formatPnL(analytics.bySymbol[0].pnl)} across ${analytics.bySymbol[0].records} records.` : null,
     analytics.bySession[0]?.records >= 3 ? `${sessionLabel(analytics.bySession[0].label)} has the highest session contribution at ${formatPnL(analytics.bySession[0].pnl)} across ${analytics.bySession[0].records} tagged records.` : null,
-    analytics.reviewCoverage != null && analytics.reviewCoverage < 70 ? `Review context exists on ${analytics.reviewCoverage.toFixed(0)}% of records; session and process comparisons only use the tagged subset.` : null,
+    analytics.reviewCoverage != null && analytics.reviewCoverage < DISPLAY_THRESHOLDS.reviewCoverageWarningPercent ? `Review context exists on ${analytics.reviewCoverage.toFixed(0)}% of records; session and process comparisons only use the tagged subset.` : null,
     analytics.maxLossStreak >= 3 ? `The longest observed losing-record streak in this view is ${analytics.maxLossStreak}.` : null,
   ].filter(Boolean) as string[]
 
@@ -91,7 +94,7 @@ export default function AnalyticsPage() {
     <AppShell eyebrow="Decision intelligence" title="Edge" description="See which behaviors deserve more capital—and which patterns are quietly taxing every account." actions={<div className="flex items-center gap-1">{(["30", "90", "all"] as Period[]).map((value) => <button key={value} type="button" onClick={() => setPeriod(value)} className={cn("h-9 rounded-[2px] border px-3 text-xs transition-colors", period === value ? "border-white bg-white text-black" : "border-[var(--hairline)] bg-[var(--raised)] text-[var(--muted)] hover:text-white")}>{value === "all" ? "All time" : `${value} days`}</button>)}</div>}>
       <DemoDataBanner accounts={accounts} />
       {error && <div role="alert" className="mb-5 border-l-2 border-white bg-[var(--raised)] px-4 py-3 text-sm">Some analytics data could not load: {error}</div>}
-      <div className="mb-4 flex flex-col justify-between gap-3 sm:flex-row sm:items-center"><p className="text-xs text-[var(--muted)]">Historical evidence, not a market signal. Mirrored account records remain separate so cross-firm concentration stays visible.</p><select value={accountId} onChange={(event) => setAccountId(event.target.value)} aria-label="Analyze account" className="h-9 min-w-[190px] rounded-[2px] border border-[var(--hairline)] bg-[var(--raised)] px-3 text-xs outline-none"><option value="all">All accounts</option>{accounts.map((account) => <option key={account.id} value={account.id}>{account.name}</option>)}</select></div>
+      <div className="mb-4 flex flex-col justify-between gap-3 sm:flex-row sm:items-center"><p className="text-xs text-[var(--muted)]">Historical evidence, not a market signal. Mirrored account records remain separate so cross-firm concentration stays visible.</p><select value={accountId} onChange={(event) => setAccountId(event.target.value)} aria-label="Analyze account" className="h-9 min-w-[190px] rounded-[2px] border border-[var(--hairline)] bg-[var(--raised)] px-3 text-xs outline-none"><option value="all">All accounts</option>{workspace.accounts.map((account) => <option key={account.id} value={account.id}>{account.name}</option>)}</select></div>
 
       {loading ? <div className="border border-[var(--hairline)] bg-[var(--surface)] px-5 py-16 text-center text-sm text-[var(--muted)]">Building your edge brief…</div> : analytics.records === 0 ? <div className="border border-[var(--hairline)] bg-[var(--surface)] px-6 py-16 text-center"><p className="text-base font-medium">No evidence in this view</p><p className="mt-2 text-sm text-[var(--muted)]">Import history or expand the time range. PropDash will not invent an edge without supporting records.</p><Button asChild className="mt-5"><Link href="/trades">Bring in history</Link></Button></div> : <>
         <section className="mb-6 grid gap-px border border-[var(--hairline)] bg-[var(--hairline)] xl:grid-cols-[1.25fr_1fr_1fr]">
@@ -105,7 +108,7 @@ export default function AnalyticsPage() {
           </div>
           <div className="bg-[var(--surface)] p-5 sm:p-6">
             <p className="text-[9px] uppercase tracking-[0.17em] text-[var(--faint)]">Cross-account concentration</p>
-            {concentration[0] ? <><h2 className="mt-3 text-lg font-medium">{concentration[0].accountCount} accounts · {concentration[0].symbol}</h2><p className="mt-2 text-sm leading-relaxed text-[var(--muted)]">Same-day exposure on {shortDate(concentration[0].date)} across {accountNamesForConcentration(concentration[0], selectedTrades, accounts).join(", ")}. This does not prove simultaneous positions.</p></> : <><h2 className="mt-3 text-lg font-medium">No repeated concentration</h2><p className="mt-2 text-sm leading-relaxed text-[var(--muted)]">No same-day market appears across multiple selected accounts.</p></>}
+            {concentration[0] ? <><h2 className="mt-3 text-lg font-medium">{concentration[0].accountCount} accounts · {concentration[0].symbol}</h2><p className="mt-2 text-sm leading-relaxed text-[var(--muted)]">Same-day exposure on {shortDate(concentration[0].date)} across {accountNamesForConcentration(concentration[0], selectedTrades, workspace.accounts).join(", ")}. This does not prove simultaneous positions.</p></> : <><h2 className="mt-3 text-lg font-medium">No repeated concentration</h2><p className="mt-2 text-sm leading-relaxed text-[var(--muted)]">No same-day market appears across multiple selected accounts.</p></>}
           </div>
         </section>
         <section className="grid gap-px border border-[var(--hairline)] bg-[var(--hairline)] sm:grid-cols-2 xl:grid-cols-6">

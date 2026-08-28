@@ -1,10 +1,7 @@
 "use client"
 
-import { useCallback, useEffect, useMemo, useSyncExternalStore } from "react"
+import { useCallback, useEffect, useSyncExternalStore } from "react"
 import { fetchOnboardingSettings, saveOnboardingSettings } from "@/lib/supabase/database"
-
-const STORAGE_KEY = "propdash:onboarding:v1"
-const CHANGE_EVENT = "propdash:onboarding-change"
 
 export interface OnboardingState {
   started: boolean
@@ -13,83 +10,69 @@ export interface OnboardingState {
 }
 
 const DEFAULT_STATE: OnboardingState = { started: false, dismissed: false, visitedPaths: [] }
+let currentState = DEFAULT_STATE
+let hydrated = false
+let loadPromise: Promise<void> | null = null
+const listeners = new Set<() => void>()
 
-function subscribe(callback: () => void) {
-  window.addEventListener("storage", callback)
-  window.addEventListener(CHANGE_EVENT, callback)
-  return () => {
-    window.removeEventListener("storage", callback)
-    window.removeEventListener(CHANGE_EVENT, callback)
-  }
+function emit() {
+  for (const listener of listeners) listener()
+}
+
+function subscribe(listener: () => void) {
+  listeners.add(listener)
+  return () => listeners.delete(listener)
 }
 
 function snapshot() {
-  return window.localStorage.getItem(STORAGE_KEY) ?? ""
+  return `${hydrated ? "1" : "0"}:${JSON.stringify(currentState)}`
 }
 
-function parse(raw: string): OnboardingState {
-  if (!raw) return DEFAULT_STATE
-  try {
-    const value = JSON.parse(raw) as Partial<OnboardingState>
-    return {
-      started: Boolean(value.started),
-      dismissed: Boolean(value.dismissed),
-      visitedPaths: Array.isArray(value.visitedPaths)
-        ? [...new Set(value.visitedPaths.filter((path): path is string => typeof path === "string"))]
-        : [],
-    }
-  } catch {
-    return DEFAULT_STATE
+function parseSnapshot(value: string): { state: OnboardingState; loading: boolean } {
+  const separator = value.indexOf(":")
+  return {
+    loading: value.slice(0, separator) !== "1",
+    state: JSON.parse(value.slice(separator + 1)) as OnboardingState,
   }
 }
 
-function write(next: OnboardingState) {
-  window.localStorage.setItem(STORAGE_KEY, JSON.stringify(next))
-  window.dispatchEvent(new Event(CHANGE_EVENT))
+function hydrateFromSupabase(): Promise<void> {
+  if (hydrated) return Promise.resolve()
+  if (loadPromise) return loadPromise
+  loadPromise = fetchOnboardingSettings().then((result) => {
+    currentState = result.error || !result.data ? DEFAULT_STATE : result.data
+    hydrated = true
+    emit()
+  }).finally(() => { loadPromise = null })
+  return loadPromise
+}
+
+async function persist(updater: (current: OnboardingState) => OnboardingState) {
+  await hydrateFromSupabase()
+  currentState = updater(currentState)
+  emit()
+  await saveOnboardingSettings(currentState)
 }
 
 export function useOnboarding() {
-  const raw = useSyncExternalStore(subscribe, snapshot, () => "")
-  const state = useMemo(() => parse(raw), [raw])
+  const serialized = useSyncExternalStore(subscribe, snapshot, () => `0:${JSON.stringify(DEFAULT_STATE)}`)
+  const { state, loading } = parseSnapshot(serialized)
 
-  useEffect(() => {
-    let active = true
-    void fetchOnboardingSettings().then(async (result) => {
-      if (!active || result.error) return
-      const local = parse(window.localStorage.getItem(STORAGE_KEY) ?? "")
-      const remote = result.data
-      const merged = remote
-        ? {
-            started: local.started || remote.started,
-            dismissed: local.dismissed || remote.dismissed,
-            visitedPaths: [...new Set([...local.visitedPaths, ...remote.visitedPaths])],
-          }
-        : local
-      write(merged)
-      await saveOnboardingSettings(merged)
-    })
-    return () => { active = false }
-  }, [])
+  useEffect(() => { void hydrateFromSupabase() }, [])
 
   const update = useCallback((updates: Partial<OnboardingState>) => {
-    const current = parse(window.localStorage.getItem(STORAGE_KEY) ?? "")
-    const next = { ...current, ...updates }
-    write(next)
-    void saveOnboardingSettings(next)
+    void persist((current) => ({ ...current, ...updates }))
   }, [])
 
   const recordVisit = useCallback((path: string) => {
-    const current = parse(window.localStorage.getItem(STORAGE_KEY) ?? "")
-    if (current.visitedPaths.includes(path)) return
-    const next = { ...current, visitedPaths: [...current.visitedPaths, path] }
-    write(next)
-    void saveOnboardingSettings(next)
+    void persist((current) => current.visitedPaths.includes(path)
+      ? current
+      : { ...current, visitedPaths: [...current.visitedPaths, path] })
   }, [])
 
   const restart = useCallback(() => {
-    write(DEFAULT_STATE)
-    void saveOnboardingSettings(DEFAULT_STATE)
+    void persist(() => DEFAULT_STATE)
   }, [])
 
-  return { state, update, recordVisit, restart }
+  return { state, loading, update, recordVisit, restart }
 }

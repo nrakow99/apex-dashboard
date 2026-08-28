@@ -7,20 +7,13 @@ import { AccountTrajectory } from "@/components/account-trajectory"
 import { TradeHistoryTable } from "@/components/trade-history-table"
 import { TradingCalendar } from "@/components/trading-calendar"
 import { RuleEnginePanel } from "@/components/rule-engine-panel"
-import { AccountCard } from "@/components/account-card"
-import { AccountsOverviewRow } from "@/components/accounts-overview-row"
+import { AccountsPortfolioView } from "@/components/accounts-portfolio-view"
+import { AccountsModalLayer } from "@/components/accounts-modal-layer"
 import { PayoutStatusPanel } from "@/components/payout-status-panel"
 import { AddTradeModal } from "@/components/add-trade-modal"
 import { ScreenshotImportModal } from "@/components/screenshot-import-modal"
 import { AddAccountModal } from "@/components/add-account-modal"
-import { EditTradeModal } from "@/components/edit-trade-modal"
-import { EditAccountModal } from "@/components/edit-account-modal"
-import { DeleteConfirmationModal } from "@/components/delete-confirmation-modal"
-import { ActivatePaModal } from "@/components/activate-pa-modal"
-import {
-  ManualIntradayDrawdownModal,
-  type ManualDrawdownMode,
-} from "@/components/manual-intraday-drawdown-modal"
+import type { ManualDrawdownMode } from "@/components/manual-intraday-drawdown-modal"
 import {
   applyIntradayManualDrawdownToStats,
   hasIntradayManualDrawdown,
@@ -31,7 +24,6 @@ import {
   shouldShowEodProjectedFloorSubValue,
 } from "@/lib/floor-display-labels"
 import { Button } from "@/components/ui/button"
-import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -39,7 +31,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 import { ArrowLeft, Loader2, AlertCircle, RefreshCw, MoreHorizontal, Pencil, Trash2 } from "lucide-react"
-import { cn, formatCurrency, formatPnL, pnlColorClass } from "@/lib/utils"
+import { cn, formatCurrency, formatPnL } from "@/lib/utils"
 import { formatRepresentativeTrackingHelper } from "@/lib/account-quantity"
 import { AccountQuantityBadge } from "@/components/account-quantity-badge"
 import { DemoDataBanner } from "@/components/demo-data-banner"
@@ -76,7 +68,9 @@ import {
 import type { Trade, Payout, Account, AccountType, DrawdownType, Firm, DailyPnL, TradeifyProgram, TopstepPayoutPath, AlphaTier, InstrumentSpec, RiskProfile } from "@/lib/types"
 import { migrateLocalTradeMetadata, type TradeMeta } from "@/lib/trade-meta"
 import { BUILTIN_INSTRUMENTS } from "@/lib/instrument-specs"
+import { DISPLAY_THRESHOLDS } from "@/lib/display-thresholds"
 import { resolveRiskProfile, getHeadroom, tradesSuffix, lossEndsAccountText } from "@/lib/headroom"
+import { scopeDecisionWorkspace } from "@/lib/workspace-scope"
 
 type ViewMode = "accounts" | "detail"
 type DetailSection = "overview" | "rules" | "history"
@@ -288,7 +282,7 @@ export default function Dashboard() {
       }
     }
 
-    if (roomFraction <= 0.25) {
+    if (roomFraction <= DISPLAY_THRESHOLDS.protectFirstRoomFraction) {
       return {
         eyebrow: "Protect first",
         title: `${formatCurrency(room)} of loss room remains`,
@@ -504,7 +498,9 @@ export default function Dashboard() {
   /** Portfolio summary for the accounts page — remaining room, not cash totals. */
   const accountsOverview = useMemo(() => {
     if (filteredValidAccounts.length === 0) return null
-    return getAccountsOverview(filteredValidAccounts, allTrades, allPayouts)
+    const workspace = scopeDecisionWorkspace(filteredValidAccounts, allTrades, allPayouts)
+    if (workspace.accounts.length === 0) return null
+    return getAccountsOverview(workspace.accounts, workspace.trades, workspace.payouts)
   }, [filteredValidAccounts, allTrades, allPayouts])
 
   const handleSelectAccount = (account: Account) => {
@@ -828,6 +824,37 @@ export default function Dashboard() {
     }
   }
 
+  const handleActivatePa = async ({
+    name,
+    activatedAtIso,
+    activationStartDate,
+    tradeifyProgram,
+    topstepPayoutPath,
+  }: {
+    name: string
+    activatedAtIso: string
+    activationStartDate: string
+    tradeifyProgram?: "select_flex" | "select_daily"
+    topstepPayoutPath?: TopstepPayoutPath
+  }) => {
+    if (!activatePaEval) return
+    const evalAccount = activatePaEval
+    setIsSaving(true)
+    try {
+      const updates = buildEvalToPaConversionUpdates(evalAccount, name, activatedAtIso, activationStartDate, tradeifyProgram, topstepPayoutPath)
+      const result = await updateAccount(evalAccount.id, updates)
+      if (result.error) throw result.error
+      await loadData()
+      setActivatePaOpen(false)
+      setActivatePaEval(null)
+      toast({ title: "Performance account activated", description: `${updates.name} is now a funded account. PA metrics use trades on or after ${activationStartDate}.` })
+    } catch (err) {
+      toast({ title: "Activation failed", description: err instanceof Error ? err.message : "Could not activate PA", variant: "destructive" })
+    } finally {
+      setIsSaving(false)
+    }
+  }
+
   // Loading state
   if (isLoading) {
     return (
@@ -860,134 +887,36 @@ export default function Dashboard() {
 
   return (
     <div className="min-h-screen premium-shell">
-      {/* Edit Trade Modal */}
-      <EditTradeModal
-        trade={editingTrade}
+      <AccountsModalLayer
         accounts={accounts}
-        open={!!editingTrade}
-        onOpenChange={(open) => !open && setEditingTrade(null)}
-        onSave={handleUpdateTrade}
-        isSaving={isSaving}
-      />
-
-      {/* Delete Trade Modal */}
-      <DeleteConfirmationModal
-        open={!!deletingTrade}
-        onOpenChange={(open) => !open && setDeletingTrade(null)}
-        title="Delete this trade?"
-        description="This action cannot be undone."
-        itemDetails={deletingTrade && (
-          <div className="space-y-1">
-            <div className="flex justify-between text-sm">
-              <span className="text-muted-foreground">Symbol:</span>
-              <span className="font-mono font-semibold">{deletingTrade.symbol}</span>
-            </div>
-            <div className="flex justify-between text-sm">
-              <span className="text-muted-foreground">Date:</span>
-              <span>{new Date(deletingTrade.date).toLocaleDateString()}</span>
-            </div>
-            <div className="flex justify-between text-sm">
-              <span className="text-muted-foreground">Net PnL:</span>
-              <span className={cn("font-mono font-semibold", pnlColorClass(deletingTrade.pnl))}>
-                {formatPnL(deletingTrade.pnl)}
-              </span>
-            </div>
-          </div>
-        )}
-        onConfirm={handleDeleteTrade}
-        isDeleting={isSaving}
-      />
-
-      {/* Edit Account Modal */}
-      <EditAccountModal
-        account={editingAccount}
-        open={!!editingAccount}
-        onOpenChange={(open) => !open && setEditingAccount(null)}
-        onSave={handleUpdateAccount}
-        isSaving={isSaving}
         instrumentSpecs={instrumentSpecs}
-      />
-
-      {/* Delete Account Modal */}
-      <DeleteConfirmationModal
-        open={!!deletingAccount}
-        onOpenChange={(open) => !open && setDeletingAccount(null)}
-        title="Delete this account?"
-        description="This action cannot be undone."
-        warningText="Deleting this account will also delete all trades and payouts linked to it."
-        itemDetails={deletingAccount && (
-          <div className="space-y-1">
-            <div className="flex justify-between text-sm">
-              <span className="text-muted-foreground">Account:</span>
-              <span className="font-semibold">{deletingAccount.name}</span>
-            </div>
-            <div className="flex justify-between text-sm">
-              <span className="text-muted-foreground">Type:</span>
-              <span>{deletingAccount.type}</span>
-            </div>
-          </div>
-        )}
-        onConfirm={handleDeleteAccount}
-        isDeleting={isSaving}
-        confirmText="Delete Account"
-      />
-
-      {selectedAccount?.drawdownType === "Intraday" && accountStats && (
-        <ManualIntradayDrawdownModal
-          open={manualIntradayModalOpen}
-          onOpenChange={setManualIntradayModalOpen}
-          currentBalance={accountStats.currentBalance}
-          initialMode={manualIntradayModalMode}
-          estimatedFloor={accountStats.activeEodFloor ?? accountStats.minBalance}
-          estimatedDrawdownRemaining={accountStats.drawdownRemaining}
-          hasManualOverride={hasIntradayManualDrawdown(selectedAccount)}
-          onSave={handleManualIntradaySave}
-          onClearManual={handleManualIntradayClear}
-          isSaving={isSaving}
-        />
-      )}
-
-      <ActivatePaModal
-        open={activatePaOpen}
-        onOpenChange={(open) => {
-          setActivatePaOpen(open)
-          if (!open) setActivatePaEval(null)
-        }}
-        evalAccount={activatePaEval}
-        isSubmitting={isSaving}
-        onConfirm={async ({ name, activatedAtIso, activationStartDate, tradeifyProgram, topstepPayoutPath }) => {
-          if (!activatePaEval) return
-          const evalAcc = activatePaEval
-          setIsSaving(true)
-          try {
-            const updates = buildEvalToPaConversionUpdates(
-              evalAcc,
-              name,
-              activatedAtIso,
-              activationStartDate,
-              tradeifyProgram,
-              topstepPayoutPath,
-            )
-            const result = await updateAccount(evalAcc.id, updates)
-            if (result.error) throw result.error
-
-            await loadData()
-            setActivatePaOpen(false)
-            setActivatePaEval(null)
-            toast({
-              title: "Performance account activated",
-              description: `${updates.name} is now a funded account. PA metrics use trades on or after ${activationStartDate}.`,
-            })
-          } catch (err) {
-            toast({
-              title: "Activation failed",
-              description: err instanceof Error ? err.message : "Could not activate PA",
-              variant: "destructive",
-            })
-          } finally {
-            setIsSaving(false)
-          }
-        }}
+        isSaving={isSaving}
+        editingTrade={editingTrade}
+        setEditingTrade={setEditingTrade}
+        onUpdateTrade={handleUpdateTrade}
+        deletingTrade={deletingTrade}
+        setDeletingTrade={setDeletingTrade}
+        onDeleteTrade={handleDeleteTrade}
+        editingAccount={editingAccount}
+        setEditingAccount={setEditingAccount}
+        onUpdateAccount={handleUpdateAccount}
+        deletingAccount={deletingAccount}
+        setDeletingAccount={setDeletingAccount}
+        onDeleteAccount={handleDeleteAccount}
+        selectedAccount={selectedAccount}
+        currentBalance={accountStats?.currentBalance}
+        estimatedFloor={accountStats?.activeEodFloor ?? accountStats?.minBalance}
+        estimatedDrawdownRemaining={accountStats?.drawdownRemaining}
+        manualIntradayOpen={manualIntradayModalOpen}
+        setManualIntradayOpen={setManualIntradayModalOpen}
+        manualIntradayMode={manualIntradayModalMode}
+        onManualSave={handleManualIntradaySave}
+        onManualClear={handleManualIntradayClear}
+        activatePaOpen={activatePaOpen}
+        setActivatePaOpen={setActivatePaOpen}
+        activatePaEval={activatePaEval}
+        setActivatePaEval={setActivatePaEval}
+        onActivatePa={handleActivatePa}
       />
 
       {/* Error toast */}
@@ -1141,126 +1070,23 @@ export default function Dashboard() {
       >
         <DemoDataBanner accounts={accounts} />
         {viewMode === "accounts" ? (
-          <>
-            {/* Account Type Tabs */}
-            <div className="mb-4 flex items-center justify-between gap-4">
-              <Tabs value={accountFilter} onValueChange={(v) => setAccountFilter(v as AccountType | "All")}>
-                <TabsList>
-                  <TabsTrigger value="All">All</TabsTrigger>
-                  <TabsTrigger value="Eval">Eval</TabsTrigger>
-                  <TabsTrigger value="PA">Funded</TabsTrigger>
-                  <TabsTrigger value="Live">Live</TabsTrigger>
-                </TabsList>
-              </Tabs>
-              <p className="text-xs text-[var(--muted)]">{filteredAccounts.length} account{filteredAccounts.length === 1 ? "" : "s"}</p>
-            </div>
-
-            {accountsOverview && <AccountsOverviewRow overview={accountsOverview} />}
-
-            {configurationIssueCount > 0 && (
-              <div className="mb-4 rounded-[2px] border border-[var(--hairline)] border-l-2 border-l-[var(--text)] bg-[var(--raised)] px-4 py-3">
-                <p className="text-sm font-medium text-[var(--text)]">
-                  {configurationIssueCount} account{configurationIssueCount === 1 ? " is" : "s are"} excluded from risk totals
-                </p>
-                <p className="mt-1 text-xs text-[var(--muted)]">
-                  Update the account settings before relying on its floor, rule, or payout values.
-                </p>
-              </div>
-            )}
-
-            {/* Account Cards Grid */}
-            {filteredAccounts.length > 0 ? (
-              <div className="grid gap-4 md:grid-cols-2 2xl:grid-cols-3">
-                {filteredAccounts.map((account) => {
-                  const accountRules = resolvedRulesByAccount.get(account.id)
-                  if (!accountRules) {
-                    return (
-                      <div
-                        key={account.id}
-                        className="flex min-h-[240px] flex-col justify-between rounded-[2px] border border-[var(--hairline)] border-l-2 border-l-[var(--text)] bg-[var(--surface)] p-5 sm:p-6"
-                      >
-                        <div>
-                          <p className="text-base font-semibold text-[var(--text)]">{account.name}</p>
-                          <p className="mt-1 text-xs text-[var(--muted)]">{account.firm} · {account.type}</p>
-                          <h3 className="mt-8 text-lg font-medium text-[var(--text)]">Rule configuration required</h3>
-                          <p className="mt-2 text-sm leading-relaxed text-[var(--muted)]">
-                            Risk, floor, and payout figures are unavailable until this account’s settings match a supported firm program and size.
-                          </p>
-                        </div>
-                        <Button type="button" variant="outline" className="mt-6" onClick={() => setEditingAccount(account)}>
-                          Edit account settings
-                        </Button>
-                      </div>
-                    )
-                  }
-                  const tradesForAccount = allTrades.filter((t) => t.accountId === account.id)
-                  const payoutsForAccount = allPayouts.filter((p) => p.accountId === account.id)
-                  const actStats = getEvalActivationStats(account, tradesForAccount, payoutsForAccount)
-                  const eligibleForPa =
-                    account.type === "Eval" &&
-                    isEvalEligibleForPaActivation(account, actStats, tradesForAccount, payoutsForAccount)
-                  return (
-                  <AccountCard
-                    key={account.id}
-                    account={account}
-                    trades={allTrades}
-                    payouts={allPayouts}
-                    instrumentSpecs={instrumentSpecs}
-                    userDefaultRiskProfile={userRiskProfile}
-                    onClick={() => handleSelectAccount(account)}
-                    onActivatePa={
-                      eligibleForPa
-                        ? () => {
-                            setActivatePaEval(account)
-                            setActivatePaOpen(true)
-                          }
-                        : undefined
-                    }
-                    menuSlot={
-                      <DropdownMenu>
-                        <DropdownMenuTrigger asChild>
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            className="h-8 w-8 border border-[var(--hairline)] bg-[var(--raised)] text-[var(--muted)] hover:border-[var(--faint)] hover:text-white"
-                          >
-                            <MoreHorizontal className="h-3.5 w-3.5" />
-                          </Button>
-                        </DropdownMenuTrigger>
-                        <DropdownMenuContent align="end" className="w-40">
-                          <DropdownMenuItem onClick={() => setEditingAccount(account)}>
-                            <Pencil className="h-4 w-4 mr-2" />
-                            Edit Account
-                          </DropdownMenuItem>
-                          <DropdownMenuItem
-                            onClick={() => setDeletingAccount(account)}
-                            className="font-semibold"
-                          >
-                            <Trash2 className="h-4 w-4 mr-2" />
-                            Delete Account
-                          </DropdownMenuItem>
-                        </DropdownMenuContent>
-                      </DropdownMenu>
-                    }
-                  />
-                  )
-                })}
-              </div>
-            ) : (
-              <div className="rounded-[2px] border border-[var(--hairline)] bg-[var(--surface)] py-14 text-center sm:py-20">
-                <div className="mb-3 flex justify-center">
-                  <div className="flex h-10 w-10 items-center justify-center rounded-[2px] border border-[var(--hairline)] bg-[var(--raised)]">
-                    <span className="text-lg font-bold text-white">P</span>
-                  </div>
-                </div>
-                <p className="mb-1 text-lg font-semibold text-[var(--text)]">No accounts yet</p>
-                <p className="mx-auto mb-6 max-w-xs text-sm text-[var(--muted)]">
-                  Add your first prop account to start tracking rules, payouts, and performance.
-                </p>
-                <AddAccountModal onAddAccount={handleAddAccount} />
-              </div>
-            )}
-          </>
+          <AccountsPortfolioView
+            accountFilter={accountFilter}
+            onFilterChange={setAccountFilter}
+            accounts={filteredAccounts}
+            resolvedRules={resolvedRulesByAccount}
+            overview={accountsOverview}
+            configurationIssueCount={configurationIssueCount}
+            trades={allTrades}
+            payouts={allPayouts}
+            instrumentSpecs={instrumentSpecs}
+            userRiskProfile={userRiskProfile}
+            onSelect={handleSelectAccount}
+            onEdit={setEditingAccount}
+            onDelete={setDeletingAccount}
+            onActivate={(account) => { setActivatePaEval(account); setActivatePaOpen(true) }}
+            onAddAccount={handleAddAccount}
+          />
         ) : (
           selectedAccount && !selectedRules ? (
             <div className="rounded-[2px] border border-[var(--hairline)] border-l-2 border-l-[var(--text)] bg-[var(--surface)] p-6 sm:p-8">
@@ -1396,7 +1222,7 @@ export default function Dashboard() {
                     value: `of ${formatCurrency(selectedRules!.maxDrawdown)}${selectedAccountHeadroom ? tradesSuffix(selectedAccountHeadroom) : ""}`,
                     isPositive:
                       displayAccountStats!.drawdownRemaining >
-                      selectedRules!.maxDrawdown * 0.5,
+                      selectedRules!.maxDrawdown * DISPLAY_THRESHOLDS.metricPositiveRoomFraction,
                   }}
                   subValue={
                     selectedAccount.drawdownType === "Intraday" && hasIntradayManualDrawdown(selectedAccount)

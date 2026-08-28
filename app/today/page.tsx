@@ -19,6 +19,7 @@ import { summarizeCompliance } from "@/lib/compliance-center"
 import { DailySessionPlanCard } from "@/components/daily-session-plan"
 import { buildRotationDecision } from "@/lib/edge-intelligence"
 import { DemoDataBanner } from "@/components/demo-data-banner"
+import { scopeDecisionWorkspace } from "@/lib/workspace-scope"
 
 export default function TodayPage() {
   return <Suspense fallback={null}><TodayContent /></Suspense>
@@ -53,13 +54,17 @@ function TodayContent() {
 
   useEffect(() => { load() }, [load])
 
-  const rows = useMemo(
-    () => buildTodayAccounts(accounts, trades, payouts, localTodayKey()),
+  const workspace = useMemo(
+    () => scopeDecisionWorkspace(accounts, trades, payouts),
     [accounts, trades, payouts],
   )
+  const rows = useMemo(
+    () => buildTodayAccounts(workspace.accounts, workspace.trades, workspace.payouts, localTodayKey()),
+    [workspace],
+  )
   const complianceItems = useMemo(
-    () => buildComplianceItems({ accounts, trades, payouts, instrumentSpecs, userRiskProfile }),
-    [accounts, instrumentSpecs, payouts, trades, userRiskProfile],
+    () => buildComplianceItems({ accounts: workspace.accounts, trades: workspace.trades, payouts: workspace.payouts, instrumentSpecs, userRiskProfile }),
+    [instrumentSpecs, userRiskProfile, workspace],
   )
   const complianceSummary = summarizeCompliance(complianceItems)
   const rotation = useMemo(
@@ -111,7 +116,7 @@ function TodayContent() {
   }
 
   const quickLogRequested = searchParams.get("log") === "1"
-  const quickLogAccountId = rows.find((row) => !row.breached && row.rulesAvailable)?.account.id ?? accounts[0]?.id ?? ""
+  const quickLogAccountId = rows.find((row) => !row.breached && row.rulesAvailable)?.account.id ?? workspace.accounts[0]?.id ?? ""
   const rotationHref = rotation.posture === "protect"
     ? "/payouts"
     : rotation.accountId
@@ -125,7 +130,7 @@ function TodayContent() {
       description="Your risk, rules, and next payout move—before the session starts."
       actions={<>
         <Button variant="outline" size="icon" onClick={load} disabled={loading} aria-label="Refresh"><RefreshCw className={cn("h-4 w-4", loading && "animate-spin")} /></Button>
-        {accounts.length > 0 && <AddTradeModal accounts={accounts} selectedAccountId={quickLogAccountId} onAddTrade={addTrade} requestedOpen={quickLogRequested} onOpenChange={(open) => { if (!open && quickLogRequested) router.replace("/today", { scroll: false }) }} />}
+        {workspace.accounts.length > 0 && <AddTradeModal accounts={workspace.accounts} selectedAccountId={quickLogAccountId} onAddTrade={addTrade} requestedOpen={quickLogRequested} onOpenChange={(open) => { if (!open && quickLogRequested) router.replace("/today", { scroll: false }) }} />}
       </>}
     >
       <DemoDataBanner accounts={accounts} />

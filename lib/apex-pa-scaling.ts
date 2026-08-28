@@ -5,14 +5,22 @@
  */
 
 import type { Account } from "@/lib/types"
+import { getAccountRules } from "@/lib/rules"
 
 type SizeKey = 25000 | 50000 | 100000 | 150000
 
-function toSizeKey(accountSize: number): SizeKey {
-  if (accountSize <= 25000) return 25000
-  if (accountSize <= 50000) return 50000
-  if (accountSize <= 100000) return 100000
-  return 150000
+function resolveSizeKey(account: Account): SizeKey | null {
+  try {
+    getAccountRules(account)
+  } catch {
+    return null
+  }
+  return account.accountSize === 25000 ||
+    account.accountSize === 50000 ||
+    account.accountSize === 100000 ||
+    account.accountSize === 150000
+    ? account.accountSize
+    : null
 }
 
 export interface ApexPaScalingTierRow {
@@ -74,7 +82,9 @@ export function getApexPaScalingTier(
 ): ApexPaScalingTierResult | null {
   if (account.firm !== "Apex" || account.type !== "PA") return null
 
-  const tiers = TIERS[toSizeKey(account.accountSize)]
+  const sizeKey = resolveSizeKey(account)
+  if (sizeKey == null) return null
+  const tiers = TIERS[sizeKey]
   const profit = accountStats.currentBalance - account.startingBalance
 
   let idx = 0

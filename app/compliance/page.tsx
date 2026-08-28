@@ -9,6 +9,7 @@ import { useDashboardData } from "@/hooks/use-dashboard-data"
 import { buildComplianceItems, summarizeCompliance, type ComplianceKind } from "@/lib/compliance-center"
 import { cn } from "@/lib/utils"
 import { DemoDataBanner } from "@/components/demo-data-banner"
+import { scopeDecisionWorkspace } from "@/lib/workspace-scope"
 
 const filters: Array<{ value: "all" | ComplianceKind; label: string }> = [
   { value: "all", label: "All" },
@@ -25,7 +26,8 @@ function Stat({ label, value, supporting }: { label: string; value: string; supp
 export default function CompliancePage() {
   const { accounts, trades, payouts, instrumentSpecs, userRiskProfile, loading, error } = useDashboardData()
   const [filter, setFilter] = useState<"all" | ComplianceKind>("all")
-  const items = useMemo(() => buildComplianceItems({ accounts, trades, payouts, instrumentSpecs, userRiskProfile }), [accounts, instrumentSpecs, payouts, trades, userRiskProfile])
+  const workspace = useMemo(() => scopeDecisionWorkspace(accounts, trades, payouts), [accounts, payouts, trades])
+  const items = useMemo(() => buildComplianceItems({ accounts: workspace.accounts, trades: workspace.trades, payouts: workspace.payouts, instrumentSpecs, userRiskProfile }), [instrumentSpecs, userRiskProfile, workspace])
   const summary = useMemo(() => summarizeCompliance(items), [items])
   const visible = filter === "all" ? items : items.filter((entry) => entry.kind === filter)
 

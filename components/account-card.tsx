@@ -20,6 +20,7 @@ import {
   isAccountBreached,
   lastEffectiveTradeDate,
 } from "@/lib/accounts-overview"
+import { DISPLAY_THRESHOLDS } from "@/lib/display-thresholds"
 import { InfoHint } from "@/components/info-hint"
 import { ChevronRight, AlertTriangle, CheckCircle2 } from "lucide-react"
 import { AccountCardInsightBanner } from "@/components/account-card-insight-banner"
@@ -99,19 +100,19 @@ function getAccountHealth({
     return { label: "Consistency Risk", severity: "elevated" }
   }
   // Locked In: fully eligible for payout and sitting comfortably above floor
-  if (hasPayouts && isPayoutEligible && drawdownRemaining >= maxDrawdown * 0.55) {
+  if (hasPayouts && isPayoutEligible && drawdownRemaining >= maxDrawdown * DISPLAY_THRESHOLDS.payoutReadyRoomFraction) {
     return { label: "Locked In", severity: "positive" }
   }
-  if (hasPayouts && (lucidEligible || (remainingToMinPayout !== null && remainingToMinPayout <= 350))) {
+  if (hasPayouts && (lucidEligible || (remainingToMinPayout !== null && remainingToMinPayout <= DISPLAY_THRESHOLDS.nearPayoutDollars))) {
     return { label: "Near Payout", severity: "positive" }
   }
   if (evalPassed) {
     return { label: "Target Met", severity: "positive" }
   }
-  if (account.type === "Eval" && evalProfitProgress >= 65) {
+  if (account.type === "Eval" && evalProfitProgress >= DISPLAY_THRESHOLDS.passingPacePercent) {
     return { label: "Passing Pace", severity: "positive" }
   }
-  if (drawdownRemaining < maxDrawdown * 0.45) {
+  if (drawdownRemaining < maxDrawdown * DISPLAY_THRESHOLDS.stableRoomFraction) {
     return { label: "Watchful", severity: "elevated" }
   }
   return { label: "Stable", severity: "neutral" }

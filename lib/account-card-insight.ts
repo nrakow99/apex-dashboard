@@ -6,6 +6,8 @@ import {
 } from "@/lib/storage"
 import { getAccountRules, resolveTradeifyProgram } from "@/lib/rules"
 import { parseLocalDate } from "@/lib/date-utils"
+import { DISPLAY_THRESHOLDS } from "@/lib/display-thresholds"
+import { AT_RISK_DRAWDOWN_FRACTION } from "@/lib/accounts-overview"
 
 export type AccountInsightTone = "neutral" | "positive" | "warning" | "muted"
 
@@ -71,12 +73,7 @@ function hasEvalConsistencyRisk(
     return !info.isValid && info.totalProfit > 0
   }
 
-  const dailyData = calculateDailyPnLData(account.id, trades, account, payouts)
-  const totalProfit = dailyData.reduce((sum, d) => sum + Math.max(0, d.pnl), 0)
-  if (totalProfit <= 0) return false
-
-  const largestWinningDay = Math.max(0, ...dailyData.map((d) => d.pnl))
-  return largestWinningDay > totalProfit * 0.5
+  return false
 }
 
 function avgPositiveDayPnl(account: Account, trades: Trade[], payouts: Payout[]): number | null {
@@ -161,7 +158,7 @@ function buildEvalInsight(ctx: AccountInsightContext): AccountCardInsight {
     }
   }
 
-  if (!evalPassed && effectiveProfitTarget != null && remaining > 0 && remaining <= effectiveProfitTarget * 0.15) {
+  if (!evalPassed && effectiveProfitTarget != null && remaining > 0 && remaining <= effectiveProfitTarget * DISPLAY_THRESHOLDS.nearProfitTargetFraction) {
     return {
       message: `Near target — $${fmtUsd(remaining)} remaining`,
       tone: "positive",
@@ -214,7 +211,7 @@ function buildPaInsight(ctx: AccountInsightContext): AccountCardInsight {
   }
 
   if (!rules.hasPayouts) {
-    if (drawdownRemaining < maxDrawdown * 0.18) {
+    if (drawdownRemaining < maxDrawdown * AT_RISK_DRAWDOWN_FRACTION) {
       return { message: "Protect buffer · drawdown near limit", tone: "warning" }
     }
     return { message: "Account stable", tone: "neutral" }
@@ -326,13 +323,13 @@ function buildPaInsight(ctx: AccountInsightContext): AccountCardInsight {
           tone: "positive",
         }
       }
-      if (rules.hasDLL && drawdownRemaining < maxDrawdown * 0.2) {
+      if (rules.hasDLL && drawdownRemaining < maxDrawdown * DISPLAY_THRESHOLDS.drawdownWarningRemainingFraction) {
         return { message: "Protect DLL", tone: "warning" }
       }
     }
   }
 
-  if (drawdownRemaining < maxDrawdown * 0.18) {
+  if (drawdownRemaining < maxDrawdown * AT_RISK_DRAWDOWN_FRACTION) {
     return { message: "Protect buffer · drawdown near limit", tone: "warning" }
   }
 

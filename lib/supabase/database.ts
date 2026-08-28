@@ -15,6 +15,8 @@ import type {
   AccountCost,
   AccountCostCategory,
   DailySessionPlan,
+  TradeImportBatch,
+  TradeImportSource,
 } from "@/lib/types"
 import { metaToDbPayload, type TradeMeta } from "@/lib/trade-meta"
 import { normalizeSymbol } from "@/lib/instrument-specs"
@@ -31,6 +33,7 @@ interface AccountRow {
   id: string
   user_id: string
   name: string
+  is_demo?: boolean | null
   firm: string
   type: "Eval" | "PA" | "Live"
   status: "Active" | "Inactive" | "Breached" | "Passed"
@@ -145,6 +148,17 @@ interface TradeRow {
   created_at: string
 }
 
+interface TradeImportBatchRow {
+  id: string
+  account_id: string
+  source: TradeImportSource
+  filenames: string[] | null
+  row_count: number
+  coverage_start: string | null
+  coverage_end: string | null
+  created_at: string
+}
+
 interface PayoutRow {
   id: string
   user_id: string
@@ -169,6 +183,9 @@ function rowToAccount(row: AccountRow): Account {
   return {
     id: row.id,
     name: row.name,
+    // Prefix fallback keeps an older database safe until the migration lands.
+    // Once is_demo exists, renaming an account cannot change its data scope.
+    isDemo: row.is_demo ?? row.name.startsWith("DEMO ·"),
     firm: row.firm as Firm,
     type: row.type,
     status: row.status === "Inactive" ? "Active" : (row.status as "Active" | "Passed" | "Breached"),
@@ -228,7 +245,7 @@ function rowToTrade(row: TradeRow): Trade {
     entryPrice: row.entry_price != null ? Number(row.entry_price) : undefined,
     exitPrice: row.exit_price != null ? Number(row.exit_price) : undefined,
     contracts: row.contracts != null ? Number(row.contracts) : undefined,
-    importSource: row.import_source === "screenshot" ? "screenshot" : null,
+    importSource: row.import_source === "screenshot" || row.import_source === "csv" ? row.import_source : null,
     rawSymbol: row.raw_symbol ?? null,
     isAggregate: row.is_aggregate ?? false,
     pnlHigh: row.pnl_high != null ? Number(row.pnl_high) : null,
@@ -249,6 +266,19 @@ function rowToTrade(row: TradeRow): Trade {
         : null,
     importBatchId: row.import_batch_id ?? null,
     importKey: row.import_key ?? null,
+  }
+}
+
+function rowToTradeImportBatch(row: TradeImportBatchRow): TradeImportBatch {
+  return {
+    id: row.id,
+    accountId: row.account_id,
+    source: row.source,
+    filenames: Array.isArray(row.filenames) ? row.filenames : [],
+    rowCount: Number(row.row_count),
+    coverageStart: row.coverage_start,
+    coverageEnd: row.coverage_end,
+    createdAt: row.created_at,
   }
 }
 
@@ -456,6 +486,16 @@ export async function fetchTrades(): Promise<{ data: Trade[] | null; error: Erro
   return { data: (data as TradeRow[]).map(rowToTrade), error: null }
 }
 
+export async function fetchTradeImportBatches(): Promise<{ data: TradeImportBatch[] | null; error: Error | null }> {
+  const supabase = createClient()
+  const { data, error } = await supabase
+    .from("trade_import_batches")
+    .select("*")
+    .order("created_at", { ascending: false })
+  if (error) return { data: null, error: new Error(error.message) }
+  return { data: (data as TradeImportBatchRow[]).map(rowToTradeImportBatch), error: null }
+}
+
 export async function fetchPayouts(): Promise<{ data: Payout[] | null; error: Error | null }> {
   const supabase = createClient()
   const { data, error } = await supabase
@@ -578,6 +618,7 @@ export async function createAccount(account: {
     .insert({
       user_id: user.id,
       name: account.name,
+      is_demo: false,
       firm: account.firm,
       type: account.type,
       status: "Active",
@@ -644,6 +685,30 @@ export async function createCsvTrades(
   if (!user) return { data: null, error: new Error("Not authenticated") }
   if (rows.length === 0) return { data: [], error: null }
 
+  const accountIds = [...new Set(rows.map((row) => row.accountId))]
+  if (accountIds.length !== 1) return { data: null, error: new Error("A CSV import must target one account") }
+
+  const { data: rpcData, error: rpcError } = await supabase.rpc("import_csv_trade_rows", {
+    p_account_id: accountIds[0],
+    p_filename: rows[0].filename,
+    p_rows: rows.map((row) => ({
+      trade_date: row.date,
+      symbol: normalizeSymbol(row.symbol),
+      pnl: row.pnl,
+      contracts: row.contracts,
+      notes: `Imported from CSV: ${row.filename}`,
+    })),
+  })
+  if (!rpcError) {
+    const summary = Array.isArray(rpcData) ? rpcData[0] : rpcData
+    const batchId = (summary as { batch_id?: string } | null)?.batch_id
+    if (!batchId) return { data: null, error: new Error("CSV import did not return a batch identifier") }
+    const { data, error } = await supabase.from("trades").select("*").eq("import_batch_id", batchId)
+    if (error) return { data: null, error: new Error(error.message) }
+    return { data: (data as TradeRow[]).map(rowToTrade), error: null }
+  }
+  if (!rpcUnavailable(rpcError)) return { data: null, error: new Error(rpcError.message) }
+
   const { data, error } = await supabase.from("trades").insert(rows.map((row) => ({
     user_id: user.id,
     account_id: row.accountId,
@@ -655,6 +720,14 @@ export async function createCsvTrades(
   }))).select()
   if (error) return { data: null, error: new Error(error.message) }
   return { data: (data as TradeRow[]).map(rowToTrade), error: null }
+}
+
+export async function deleteTradeImportBatch(batchId: string): Promise<{ deletedCount: number; error: Error | null }> {
+  const supabase = createClient()
+  const { data, error } = await supabase.rpc("delete_trade_import_batch", { p_batch_id: batchId })
+  if (error) return { deletedCount: 0, error: new Error(error.message) }
+  const result = Array.isArray(data) ? data[0] : data
+  return { deletedCount: Number((result as { deleted_count?: number } | null)?.deleted_count ?? 0), error: null }
 }
 
 export async function createPayout(payout: {
