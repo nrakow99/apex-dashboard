@@ -2,14 +2,11 @@
 
 import { useCallback, useEffect, useSyncExternalStore } from "react"
 import { fetchOnboardingSettings, saveOnboardingSettings } from "@/lib/supabase/database"
+import type { ActivationState } from "@/lib/onboarding"
 
-export interface OnboardingState {
-  started: boolean
-  dismissed: boolean
-  visitedPaths: string[]
-}
+export type OnboardingState = ActivationState
 
-const DEFAULT_STATE: OnboardingState = { started: false, dismissed: false, visitedPaths: [] }
+const DEFAULT_STATE: OnboardingState = { started: false, dismissed: false, activated: false, goal: null, historyChoice: null, visitedPaths: [] }
 let currentState = DEFAULT_STATE
 let hydrated = false
 let loadPromise: Promise<void> | null = null

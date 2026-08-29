@@ -192,7 +192,7 @@ export function ScreenshotImportModal({
   onImported,
 }: ScreenshotImportModalProps) {
   const inputRef = useRef<HTMLInputElement>(null)
-  const [open, setOpen] = useState(false)
+  const [open, setOpen] = useState(() => typeof window !== "undefined" && window.location.pathname === "/trades" && new URLSearchParams(window.location.search).get("onboarding") === "screenshot")
   const [step, setStep] = useState<"upload" | "review">("upload")
   const [accountId, setAccountId] = useState(selectedAccountId)
   const [files, setFiles] = useState<File[]>([])

@@ -1,76 +1,48 @@
-import type { RiskProfile } from "./types"
+export type OnboardingGoal = "protect-funded" | "reach-payout" | "manage-multiple" | "pass-eval"
+export type OnboardingHistoryChoice = "csv" | "screenshot" | "start-now"
+export type ActivationStage = "value" | "goal" | "account" | "history" | "result" | "complete"
 
-export interface OnboardingInputs {
-  accountCount: number
-  tradeCount: number
-  fundedAccountCount: number
-  riskProfile: RiskProfile | null
-  visitedPaths: readonly string[]
+export interface ActivationState {
+  started: boolean
+  dismissed: boolean
+  activated: boolean
+  goal: OnboardingGoal | null
+  historyChoice: OnboardingHistoryChoice | null
+  visitedPaths: string[]
 }
 
-export interface OnboardingStep {
-  id: "account" | "risk" | "history" | "today" | "payouts"
+export interface ActivationInputs {
+  realAccountCount: number
+  realTradeCount: number
+}
+
+export const ONBOARDING_GOALS: Array<{
+  id: OnboardingGoal
   title: string
   description: string
-  href: string
-  action: string
-  complete: boolean
+  resultLabel: string
+}> = [
+  { id: "protect-funded", title: "Protect funded accounts", description: "Keep loss-room visible and avoid trading capital that should be protected.", resultLabel: "Account protection" },
+  { id: "reach-payout", title: "Reach the next payout", description: "See the verified blocker between each funded account and its next request.", resultLabel: "Payout readiness" },
+  { id: "manage-multiple", title: "Manage multiple firms", description: "Route risk across accounts instead of treating every firm as a separate workspace.", resultLabel: "Capital routing" },
+  { id: "pass-eval", title: "Finish an evaluation", description: "Track the target and floor without inventing requirements that do not apply.", resultLabel: "Evaluation progress" },
+]
+
+export function activationStage(state: ActivationState, input: ActivationInputs): ActivationStage {
+  if (state.activated) return "complete"
+  if (!state.started) return "value"
+  if (!state.goal) return "goal"
+  if (input.realAccountCount === 0) return "account"
+  if (input.realTradeCount === 0 && !state.historyChoice) return "history"
+  return "result"
 }
 
-export function buildOnboardingSteps(input: OnboardingInputs): OnboardingStep[] {
-  const visited = new Set(input.visitedPaths)
-  return [
-    {
-      id: "account",
-      title: "Add a real account",
-      description: "Choose the exact firm, program, size, stage, and drawdown type so verified rules resolve correctly.",
-      href: "/accounts",
-      action: input.accountCount > 0 ? "Review accounts" : "Add account",
-      complete: input.accountCount > 0,
-    },
-    {
-      id: "risk",
-      title: "Set your default risk",
-      description: "A complete risk profile converts remaining drawdown into estimated trades of headroom without guessing.",
-      href: "/settings",
-      action: input.riskProfile ? "Review risk" : "Set risk",
-      complete: input.riskProfile != null,
-    },
-    {
-      id: "history",
-      title: "Bring in trade history",
-      description: "Log a trade or import reviewed screenshot rows so balances, consistency, and payout cycles reflect reality.",
-      href: "/trades",
-      action: input.tradeCount > 0 ? "Review history" : "Add history",
-      complete: input.tradeCount > 0,
-    },
-    {
-      id: "today",
-      title: "Run the daily check",
-      description: "Use Today before trading to see the tightest floor, daily room, rule availability, and next payout move.",
-      href: "/today",
-      action: "Open Today",
-      complete: visited.has("/today"),
-    },
-    {
-      id: "payouts",
-      title: input.fundedAccountCount > 0 ? "Verify payout readiness" : "Learn the payout workflow",
-      description: input.fundedAccountCount > 0
-        ? "Confirm every verified requirement before recording or requesting a withdrawal."
-        : "See how funded accounts will be prioritized and why unavailable rules always fail closed.",
-      href: "/payouts",
-      action: "Open Payouts",
-      complete: visited.has("/payouts"),
-    },
-  ]
+export function activationProgress(stage: ActivationStage): { current: number; total: number; percent: number } {
+  const index: Record<ActivationStage, number> = { value: 0, goal: 1, account: 2, history: 3, result: 4, complete: 4 }
+  const current = index[stage]
+  return { current, total: 4, percent: Math.round((current / 4) * 100) }
 }
 
-export function onboardingProgress(steps: readonly OnboardingStep[]) {
-  const completed = steps.filter((step) => step.complete).length
-  return {
-    completed,
-    total: steps.length,
-    percent: steps.length === 0 ? 0 : Math.round((completed / steps.length) * 100),
-    isComplete: steps.length > 0 && completed === steps.length,
-  }
+export function goalResultLabel(goal: OnboardingGoal | null): string {
+  return ONBOARDING_GOALS.find((item) => item.id === goal)?.resultLabel ?? "Daily decision"
 }

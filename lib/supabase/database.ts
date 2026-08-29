@@ -80,6 +80,9 @@ interface UserSettingsRow {
   onboarding_started?: boolean | null
   onboarding_dismissed?: boolean | null
   onboarding_visited_paths?: string[] | null
+  onboarding_activated?: boolean | null
+  onboarding_goal?: string | null
+  onboarding_history_choice?: string | null
 }
 
 interface AccountCostRow {
@@ -112,6 +115,9 @@ interface UserEntitlementRow {
 export interface UserOnboardingSettings {
   started: boolean
   dismissed: boolean
+  activated: boolean
+  goal: import("@/lib/onboarding").OnboardingGoal | null
+  historyChoice: import("@/lib/onboarding").OnboardingHistoryChoice | null
   visitedPaths: string[]
 }
 
@@ -1010,7 +1016,7 @@ export async function fetchOnboardingSettings(): Promise<{
   if (!user) return { data: null, error: new Error("Not authenticated") }
   const { data, error } = await supabase
     .from("user_settings")
-    .select("onboarding_started,onboarding_dismissed,onboarding_visited_paths")
+    .select("onboarding_started,onboarding_dismissed,onboarding_visited_paths,onboarding_activated,onboarding_goal,onboarding_history_choice")
     .eq("user_id", user.id)
     .maybeSingle()
   if (error) return { data: null, error: new Error(error.message) }
@@ -1020,6 +1026,9 @@ export async function fetchOnboardingSettings(): Promise<{
     data: {
       started: Boolean(row.onboarding_started),
       dismissed: Boolean(row.onboarding_dismissed),
+      activated: Boolean(row.onboarding_activated),
+      goal: row.onboarding_goal === "protect-funded" || row.onboarding_goal === "reach-payout" || row.onboarding_goal === "manage-multiple" || row.onboarding_goal === "pass-eval" ? row.onboarding_goal : null,
+      historyChoice: row.onboarding_history_choice === "csv" || row.onboarding_history_choice === "screenshot" || row.onboarding_history_choice === "start-now" ? row.onboarding_history_choice : null,
       visitedPaths: Array.isArray(row.onboarding_visited_paths)
         ? row.onboarding_visited_paths.filter((path): path is string => typeof path === "string")
         : [],
@@ -1038,6 +1047,9 @@ export async function saveOnboardingSettings(
     user_id: user.id,
     onboarding_started: state.started,
     onboarding_dismissed: state.dismissed,
+    onboarding_activated: state.activated,
+    onboarding_goal: state.goal,
+    onboarding_history_choice: state.historyChoice,
     onboarding_visited_paths: [...new Set(state.visitedPaths)],
   }, { onConflict: "user_id" })
   return { error: error ? new Error(error.message) : null }

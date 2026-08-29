@@ -31,6 +31,8 @@ import { cn } from "@/lib/utils"
 
 interface AddAccountModalProps {
   onAddAccount: (account: Omit<Account, "id">) => void
+  requestedOpen?: boolean
+  onOpenChange?: (open: boolean) => void
 }
 
 const ACCOUNT_SIZES = [25000, 50000, 100000, 150000]
@@ -87,7 +89,7 @@ const INITIAL_FORM = {
   alphaTier: "standard" as AlphaTier,
 }
 
-export function AddAccountModal({ onAddAccount }: AddAccountModalProps) {
+export function AddAccountModal({ onAddAccount, requestedOpen = false, onOpenChange }: AddAccountModalProps) {
   const [open, setOpen] = useState(false)
   const [form, setForm] = useState(INITIAL_FORM)
 
@@ -171,6 +173,7 @@ export function AddAccountModal({ onAddAccount }: AddAccountModalProps) {
       alphaTier: isAlpha ? form.alphaTier : undefined,
     })
     setOpen(false)
+    onOpenChange?.(false)
     setForm(INITIAL_FORM)
   }
 
@@ -178,7 +181,7 @@ export function AddAccountModal({ onAddAccount }: AddAccountModalProps) {
   const showApexTypeSelector = !isTradeify
 
   return (
-    <Dialog open={open} onOpenChange={setOpen}>
+    <Dialog open={open || requestedOpen} onOpenChange={(next) => { setOpen(next); onOpenChange?.(next) }}>
       <DialogTrigger asChild>
         <Button variant="outline" className="gap-2">
           <Plus className="h-4 w-4" />

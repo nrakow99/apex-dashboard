@@ -102,6 +102,7 @@ export default function Dashboard() {
   const [manualIntradayModalMode, setManualIntradayModalMode] = useState<ManualDrawdownMode>("remaining")
   const [activatePaOpen, setActivatePaOpen] = useState(false)
   const [activatePaEval, setActivatePaEval] = useState<Account | null>(null)
+  const [onboardingAccountRequested, setOnboardingAccountRequested] = useState(false)
 
   // Load data from Supabase on mount
   const loadData = useCallback(async () => {
@@ -158,6 +159,11 @@ export default function Dashboard() {
   useEffect(() => {
     loadData()
   }, [loadData])
+
+  useEffect(() => {
+    if (typeof window === "undefined") return
+    setOnboardingAccountRequested(new URLSearchParams(window.location.search).get("onboarding") === "account")
+  }, [])
 
   useEffect(() => {
     if (accounts.length === 0 || typeof window === "undefined") return
@@ -998,7 +1004,16 @@ export default function Dashboard() {
               />
             </>
           )}
-          <AddAccountModal onAddAccount={handleAddAccount} />
+          <AddAccountModal
+            onAddAccount={handleAddAccount}
+            requestedOpen={onboardingAccountRequested}
+            onOpenChange={(open) => {
+              setOnboardingAccountRequested(open)
+              if (!open && typeof window !== "undefined" && new URLSearchParams(window.location.search).get("onboarding") === "account") {
+                window.history.replaceState({}, "", "/accounts")
+              }
+            }}
+          />
         </> : selectedAccount ? <>
           {accounts.length > 1 && <select
             aria-label="Select account"

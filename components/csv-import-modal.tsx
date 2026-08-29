@@ -18,7 +18,7 @@ interface Props {
 
 export function CsvImportModal({ accounts, selectedAccountId, existingTrades, onImported }: Props) {
   const inputRef = useRef<HTMLInputElement>(null)
-  const [open, setOpen] = useState(false)
+  const [open, setOpen] = useState(() => typeof window !== "undefined" && window.location.pathname === "/trades" && new URLSearchParams(window.location.search).get("onboarding") === "csv")
   const [accountId, setAccountId] = useState(selectedAccountId)
   const [filename, setFilename] = useState("")
   const [result, setResult] = useState<CsvParseResult | null>(null)
