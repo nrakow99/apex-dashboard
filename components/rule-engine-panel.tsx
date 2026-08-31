@@ -78,7 +78,7 @@ function RuleCard({
 }) {
   return (
     <div className={cn(
-      "rounded-[2px] border border-[var(--hairline)] bg-[var(--raised)] p-4",
+      "self-start rounded-[2px] border border-[var(--hairline)] bg-[var(--raised)] p-4",
       status === "danger" && "border-l-4 border-l-[var(--text)]",
       status === "warning" && "border-l-2 border-l-[var(--text)]",
       className
@@ -181,7 +181,7 @@ export function RuleEnginePanel({
     if (count === 2) return "grid-cols-1 sm:grid-cols-2"
     if (count === 3) return "grid-cols-1 md:grid-cols-3"
     if (count === 4) return "grid-cols-1 sm:grid-cols-2"
-    return "grid-cols-1 md:grid-cols-2 xl:grid-cols-3"
+    return "grid-cols-1 md:grid-cols-2"
   }, [account, consistencyInfo, tradeifyProgram, apexPaScaling, tradeifyScaling])
 
   // Daily loss (today only); EOD PA uses tier DLL from scaling when available
@@ -215,7 +215,7 @@ export function RuleEnginePanel({
   const hasConsistencyActivity = stats.tradingDays > 0
 
   return (
-    <Card className="h-full rounded-[2px] border-[var(--hairline)] bg-[var(--surface)] p-4 sm:p-6">
+    <Card className="self-start rounded-[2px] border-[var(--hairline)] bg-[var(--surface)] p-4 sm:p-6">
       <div className="mb-5 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div>
           <p className="text-[10px] font-medium uppercase tracking-[0.16em] text-[var(--muted)]">Compliance</p>
@@ -233,7 +233,7 @@ export function RuleEnginePanel({
         </div>
       </div>
 
-      <div className={cn("grid gap-2 sm:gap-4", ruleGridClass)}>
+      <div className={cn("grid items-start gap-2 sm:gap-4", ruleGridClass)}>
 
         {/* ── Active Floor ─────────────────────────────────────────────────── */}
         <RuleCard title={getRuleEngineFloorCardTitle(account)} status={drawdownStatus}>

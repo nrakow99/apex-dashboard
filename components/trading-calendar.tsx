@@ -11,6 +11,7 @@ import { getAccountRules, resolveTradeifyProgram } from "@/lib/rules"
 import { getRuleStartingBalance } from "@/lib/account-quantity"
 import { buildMetaMapFromTrades, DIRECTION_LABELS, type TradeMeta } from "@/lib/trade-meta"
 import { resolveSession, SESSION_LABELS } from "@/lib/sessions"
+import { buildTradingCalendarWeeks } from "@/lib/trading-calendar-weeks"
 
 interface TradingCalendarProps {
   account: Account
@@ -80,14 +81,6 @@ export function TradingCalendar({ account, dailyData, trades }: TradingCalendarP
       ? startingBalance + rules.bufferAmount
       : 0
 
-  const getDaysInMonth = (date: Date) => {
-    return new Date(date.getFullYear(), date.getMonth() + 1, 0).getDate()
-  }
-
-  const getFirstDayOfMonth = (date: Date) => {
-    return new Date(date.getFullYear(), date.getMonth(), 1).getDay()
-  }
-
   const formatDateKey = (year: number, month: number, day: number) => {
     return `${year}-${String(month + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}`
   }
@@ -117,9 +110,15 @@ export function TradingCalendar({ account, dailyData, trades }: TradingCalendarP
     return trades.filter((t) => t.date === date)
   }
 
-  const daysInMonth = getDaysInMonth(currentDate)
-  const firstDayOfMonth = getFirstDayOfMonth(currentDate)
   const monthName = currentDate.toLocaleDateString("en-US", { month: "long", year: "numeric" })
+  const calendarWeeks = useMemo(
+    () => buildTradingCalendarWeeks(currentDate.getFullYear(), currentDate.getMonth(), dailyData),
+    [currentDate, dailyData],
+  )
+  const monthTradingWeeks = calendarWeeks.filter((week) => week.pnl != null)
+  const monthPnL = monthTradingWeeks.length > 0
+    ? monthTradingWeeks.reduce((total, week) => total + (week.pnl ?? 0), 0)
+    : null
 
   const prevMonth = () => {
     setCurrentDate(new Date(currentDate.getFullYear(), currentDate.getMonth() - 1, 1))
@@ -144,148 +143,186 @@ export function TradingCalendar({ account, dailyData, trades }: TradingCalendarP
   const selectedDayStats = selectedDate ? getDayStats(selectedDate) : null
 
   const cellShell = cn(
-    "relative flex flex-col items-center justify-center gap-0.5 rounded-[2px] transition-colors",
-    "min-h-[32px] aspect-square sm:min-h-[58px] sm:aspect-square sm:min-w-0",
-    "lg:aspect-auto lg:h-[72px] lg:w-full lg:justify-center lg:p-1.5 xl:h-[78px]",
+    "relative flex min-w-0 flex-col rounded-[2px] transition-colors",
+    "min-h-[38px] aspect-square sm:min-h-[64px] sm:aspect-square",
+    "md:aspect-auto md:h-[82px] md:w-full xl:h-[88px]",
   )
+
+  const weekRangeLabel = (firstDateKey: string | null, lastDateKey: string | null) => {
+    if (!firstDateKey || !lastDateKey) return "Week"
+    const first = parseLocalDate(firstDateKey)
+    const last = parseLocalDate(lastDateKey)
+    const firstLabel = first.toLocaleDateString("en-US", { month: "short", day: "numeric" })
+    return firstDateKey === lastDateKey ? firstLabel : `${firstLabel}–${last.getDate()}`
+  }
 
   return (
     <Card className="activity-panel flex flex-col rounded-[2px] border-[var(--hairline)] bg-[var(--surface)] p-3 sm:p-6">
-      <div className="mb-1 flex flex-shrink-0 flex-col gap-0.5 sm:gap-2 lg:mb-2 lg:gap-2">
-        <div className="flex items-center justify-between gap-2">
-          <h2 className="text-base font-semibold sm:text-lg">Trading Calendar</h2>
+      <div className="mb-4 flex flex-shrink-0 flex-col gap-4 border-b border-[var(--hairline)] pb-4 sm:flex-row sm:items-end sm:justify-between">
+        <div>
+          <p className="text-[9px] font-medium uppercase tracking-[0.16em] text-[var(--muted)]">Performance log</p>
+          <h2 className="mt-1 text-lg font-medium tracking-[-0.02em]">Trading calendar</h2>
+          <p className="mt-1 text-xs text-[var(--muted)]">Daily results with a Sunday-to-Saturday weekly close.</p>
         </div>
-        <div className="flex items-center justify-center gap-1.5 sm:justify-end sm:gap-3">
-          <Button variant="ghost" size="icon" onClick={prevMonth} className="h-7 w-7 sm:h-9 sm:w-9">
-            <ChevronLeft className="h-4 w-4" />
-          </Button>
-          <span className="min-w-[110px] text-center text-sm font-medium sm:min-w-[160px] sm:text-base">
-            {monthName}
-          </span>
-          <Button variant="ghost" size="icon" onClick={nextMonth} className="h-7 w-7 sm:h-9 sm:w-9">
-            <ChevronRight className="h-4 w-4" />
-          </Button>
+        <div className="flex items-end justify-between gap-4 sm:justify-end">
+          <div className="text-left sm:text-right">
+            <p className="text-[9px] uppercase tracking-[0.14em] text-[var(--muted)]">Month P&amp;L</p>
+            <p className={cn(
+              "mt-1 font-mono text-sm font-medium tabular-nums",
+              monthPnL == null
+                ? "text-[var(--faint)]"
+                : monthPnL > 0
+                  ? "text-[var(--gain)]"
+                  : monthPnL < 0
+                    ? "text-[var(--loss)]"
+                    : "text-[var(--text)]",
+            )}>
+              {monthPnL == null ? "—" : formatPnL(monthPnL)}
+            </p>
+          </div>
+          <div className="flex items-center border border-[var(--hairline)] bg-[var(--raised)] p-0.5">
+            <Button variant="ghost" size="icon" onClick={prevMonth} aria-label="Previous month" className="h-8 w-8 rounded-[2px]">
+              <ChevronLeft className="h-4 w-4" />
+            </Button>
+            <span className="min-w-[126px] text-center text-sm font-medium sm:min-w-[152px]">
+              {monthName}
+            </span>
+            <Button variant="ghost" size="icon" onClick={nextMonth} aria-label="Next month" className="h-8 w-8 rounded-[2px]">
+              <ChevronRight className="h-4 w-4" />
+            </Button>
+          </div>
         </div>
       </div>
 
       {/* Weekday Headers */}
-      <div className="mb-0.5 grid flex-shrink-0 grid-cols-7 gap-0.5 sm:mb-1.5 sm:gap-1.5 lg:gap-1.5">
+      <div className="mb-1.5 grid flex-shrink-0 grid-cols-7 gap-0.5 sm:gap-1.5 md:grid-cols-[repeat(7,minmax(0,1fr))_minmax(108px,.82fr)]">
         {weekDays.map((day) => (
           <div
             key={day}
-            className="py-0.5 sm:py-1.5 text-center text-[9px] sm:text-xs font-medium text-muted-foreground lg:text-[11px]"
+            className="px-1 py-1 text-left text-[9px] font-medium uppercase tracking-[0.12em] text-[var(--muted)] sm:px-2 sm:text-[10px]"
           >
             <span className="sm:hidden">{day.slice(0, 1)}</span>
             <span className="hidden sm:inline">{day}</span>
           </div>
         ))}
+        <div className="hidden px-2 py-1 text-left text-[9px] font-medium uppercase tracking-[0.12em] text-[var(--muted)] md:block">
+          Week P&amp;L
+        </div>
       </div>
 
       {/* Calendar Grid */}
-      <div className="grid min-h-0 flex-1 grid-cols-7 gap-0.5 sm:gap-1.5 lg:gap-1.5 lg:content-start">
-        {Array.from({ length: firstDayOfMonth }).map((_, i) => (
-          <div key={`empty-${i}`} className={cn(cellShell, "pointer-events-none invisible border-0 bg-transparent shadow-none")} aria-hidden />
-        ))}
-        {Array.from({ length: daysInMonth }).map((_, i) => {
-          const day = i + 1
-          const dateKey = formatDateKey(currentDate.getFullYear(), currentDate.getMonth(), day)
-          const dayStats = getDayStats(dateKey)
-          const isSelected = selectedDate === dateKey
-          const dow = new Date(currentDate.getFullYear(), currentDate.getMonth(), day).getDay()
-          const isWeekend = dow === 0 || dow === 6
-          const hasTrades = dayStats && dayStats.tradeCount > 0
-          const qualifiesForPayout =
-            showQualifyingStars &&
-            dayStats != null &&
-            dayStats.pnl > 0 &&
-            dayStats.pnl >= minQualifyingProfit
+      <div className="min-h-0 flex-1 space-y-0.5 sm:space-y-1.5">
+        {calendarWeeks.map((week, weekIndex) => (
+          <div key={weekIndex} className="grid grid-cols-7 gap-0.5 sm:gap-1.5 md:grid-cols-[repeat(7,minmax(0,1fr))_minmax(108px,.82fr)]">
+            {week.days.map((calendarDay, dayIndex) => {
+              if (calendarDay.day == null || calendarDay.dateKey == null) {
+                return <div key={`empty-${weekIndex}-${dayIndex}`} className={cn(cellShell, "border border-[var(--hairline)] bg-[var(--ground)] opacity-40")} aria-hidden />
+              }
 
-          const dailyPayoutReady =
-            account.firm === "Tradeify" &&
-            tradeifyProgram === "select_daily" &&
-            dayStats != null &&
-            dayStats.pnl > 0 &&
-            (dailyData.find((d) => d.date === dateKey)?.balance ?? 0) > bufferLine
+              const day = calendarDay.day
+              const dateKey = calendarDay.dateKey
+              const dayStats = getDayStats(dateKey)
+              const isSelected = selectedDate === dateKey
+              const isWeekend = dayIndex === 0 || dayIndex === 6
+              const hasTrades = dayStats && dayStats.tradeCount > 0
+              const qualifiesForPayout =
+                showQualifyingStars &&
+                dayStats != null &&
+                dayStats.pnl > 0 &&
+                dayStats.pnl >= minQualifyingProfit
 
-          const consistencyWarn =
-            isTradeifyEval && hasTrades && tradeifyConsistencyWarnDates.has(dateKey)
+              const dailyPayoutReady =
+                account.firm === "Tradeify" &&
+                tradeifyProgram === "select_daily" &&
+                dayStats != null &&
+                dayStats.pnl > 0 &&
+                (dailyData.find((d) => d.date === dateKey)?.balance ?? 0) > bufferLine
 
-          return (
-            <button
-              key={day}
-              type="button"
-              onClick={() => handleDayClick(day)}
-              disabled={!hasTrades}
-              className={cn(
-                cellShell,
-                "p-1 sm:p-1.5",
-                hasTrades && "border border-[var(--hairline)] bg-[var(--raised)] hover:border-[var(--faint)] hover:bg-[var(--surface)]",
-                (qualifiesForPayout || dailyPayoutReady) && "border-l-2 border-l-[var(--text)]",
-                // empty weekday
-                !hasTrades && !isWeekend && "cursor-default border border-[var(--hairline)] bg-[var(--surface)]",
-                // empty weekend
-                !hasTrades && isWeekend && "cursor-default border border-[var(--hairline)] bg-[var(--ground)]",
-                isSelected && "ring-1 ring-[var(--text)] ring-offset-1 ring-offset-background",
-                consistencyWarn &&
-                  "border-l-4 border-l-[var(--text)]",
-                hasTrades && "cursor-pointer",
-              )}
-            >
-              {consistencyWarn && !qualifiesForPayout && !dailyPayoutReady && (
-                <div
-                  className="absolute left-0.5 top-0.5 h-1.5 w-1.5 rounded-full bg-white sm:h-2 sm:w-2"
-                  title={`Day exceeds ${rules.consistencyPercent}% consistency share`}
-                />
-              )}
-              {(qualifiesForPayout || dailyPayoutReady) && (
-                <div className="absolute right-0.5 top-0.5 sm:right-1 sm:top-1 lg:right-0.5 lg:top-0.5">
-                  <Star
-                    className={cn(
-                      "h-2 w-2 sm:h-3 sm:w-3",
-                      "fill-white text-white",
-                    )}
-                  />
-                </div>
-              )}
-              <span
-                className={cn(
-                  "text-[13px] font-semibold leading-none sm:text-base lg:text-[15px] xl:text-[16px]",
-                  hasTrades && "text-white",
-                  !hasTrades && "text-[var(--faint)]",
-                )}
-              >
-                {day}
-              </span>
-              {hasTrades && (
-                <>
-                  <span
-                    className={cn(
-                      "mt-0 max-w-full truncate font-mono text-[9px] font-bold sm:mt-0.5 sm:text-[11px] lg:text-[12px]",
-                      dayStats.pnl > 0
-                        ? "text-[var(--gain)]"
-                        : dayStats.pnl < 0
-                          ? "text-[var(--loss)]"
-                          : "text-muted-foreground",
-                    )}
-                  >
-                    {formatPnL(dayStats.pnl)}
+              const consistencyWarn =
+                isTradeifyEval && hasTrades && tradeifyConsistencyWarnDates.has(dateKey)
+
+              return (
+                <button
+                  key={dateKey}
+                  type="button"
+                  onClick={() => handleDayClick(day)}
+                  disabled={!hasTrades}
+                  className={cn(
+                    cellShell,
+                    "justify-between p-1.5 text-left sm:p-2",
+                    hasTrades && "cursor-pointer border border-[var(--hairline)] bg-[var(--raised)] hover:border-[var(--faint)] hover:bg-[var(--surface)]",
+                    (qualifiesForPayout || dailyPayoutReady) && "border-l-2 border-l-[var(--text)]",
+                    !hasTrades && !isWeekend && "cursor-default border border-[var(--hairline)] bg-[var(--surface)]",
+                    !hasTrades && isWeekend && "cursor-default border border-[var(--hairline)] bg-[var(--ground)]",
+                    isSelected && "ring-1 ring-[var(--text)] ring-offset-1 ring-offset-background",
+                    consistencyWarn && "border-l-4 border-l-[var(--text)]",
+                  )}
+                >
+                  {consistencyWarn && !qualifiesForPayout && !dailyPayoutReady && (
+                    <div
+                      className="absolute right-1.5 top-1.5 h-1.5 w-1.5 rounded-full bg-white sm:h-2 sm:w-2"
+                      title={`Day exceeds ${rules.consistencyPercent}% consistency share`}
+                    />
+                  )}
+                  {(qualifiesForPayout || dailyPayoutReady) && (
+                    <div className="absolute right-1.5 top-1.5">
+                      <Star className="h-2.5 w-2.5 fill-white text-white sm:h-3 sm:w-3" />
+                    </div>
+                  )}
+                  <span className={cn(
+                    "font-mono text-[11px] font-medium leading-none sm:text-xs",
+                    hasTrades ? "text-[var(--text)]" : "text-[var(--faint)]",
+                  )}>
+                    {day}
                   </span>
-                  <div className="mt-0.5 hidden items-center gap-1 sm:flex lg:mt-0.5 lg:gap-0.5">
-                    <span className="text-[10px] tabular-nums text-muted-foreground lg:text-[10px] xl:text-[11px]">
-                      {dayStats.tradeCount} trade{dayStats.tradeCount > 1 ? "s" : ""}
-                    </span>
-                    <span className="text-[10px] text-muted-foreground/50 lg:text-[10px]">·</span>
-                    <span
-                      className="text-[10px] font-medium tabular-nums text-muted-foreground lg:text-[10px] xl:text-[11px]"
-                    >
-                      {dayStats.winPercent}%
-                    </span>
-                  </div>
-                </>
-              )}
-            </button>
-          )
-        })}
+                  {hasTrades && (
+                    <div className="min-w-0">
+                      <span className={cn(
+                        "block max-w-full truncate font-mono text-[9px] font-semibold tabular-nums sm:text-xs",
+                        dayStats.pnl > 0
+                          ? "text-[var(--gain)]"
+                          : dayStats.pnl < 0
+                            ? "text-[var(--loss)]"
+                            : "text-[var(--text)]",
+                      )}>
+                        {formatPnL(dayStats.pnl)}
+                      </span>
+                      <span className="mt-1 hidden text-[9px] tabular-nums text-[var(--muted)] sm:block">
+                        {dayStats.tradeCount} trade{dayStats.tradeCount > 1 ? "s" : ""} · {dayStats.winPercent}% win
+                      </span>
+                    </div>
+                  )}
+                </button>
+              )
+            })}
+
+            <div className="col-span-7 flex min-h-9 items-center justify-between rounded-[2px] border border-[var(--hairline)] bg-[var(--ground)] px-2.5 py-1.5 md:col-span-1 md:h-[82px] md:min-h-0 md:flex-col md:items-start md:justify-between md:p-2 xl:h-[88px]">
+              <div>
+                <p className="text-[8px] font-medium uppercase tracking-[0.13em] text-[var(--muted)] md:text-[9px]">Week {weekIndex + 1}</p>
+                <p className="mt-0.5 text-[9px] text-[var(--faint)]">{weekRangeLabel(week.firstDateKey, week.lastDateKey)}</p>
+              </div>
+              <div className="text-right md:text-left">
+                <p className={cn(
+                  "font-mono text-xs font-semibold tabular-nums",
+                  week.pnl == null
+                    ? "text-[var(--faint)]"
+                    : week.pnl > 0
+                      ? "text-[var(--gain)]"
+                      : week.pnl < 0
+                        ? "text-[var(--loss)]"
+                        : "text-[var(--text)]",
+                )}>
+                  {week.pnl == null ? "—" : formatPnL(week.pnl)}
+                </p>
+                <p className="mt-0.5 text-[8px] text-[var(--muted)] md:text-[9px]">
+                  {week.pnl == null
+                    ? "No trades"
+                    : `${week.activeDays} day${week.activeDays === 1 ? "" : "s"} · ${week.tradeCount} trade${week.tradeCount === 1 ? "" : "s"}`}
+                </p>
+              </div>
+            </div>
+          </div>
+        ))}
       </div>
 
       {/* Empty month message */}

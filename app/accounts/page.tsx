@@ -1268,7 +1268,7 @@ export default function Dashboard() {
               {detailSection === "rules" && <div id="rule-status" className={cn(
                 "mb-6 grid items-start gap-4",
                 selectedAccount.type === "PA" && payoutEligibility && selectedRules!.hasPayouts
-                  ? "xl:grid-cols-[minmax(0,1.55fr)_minmax(340px,.75fr)]"
+                  ? "xl:grid-cols-2"
                   : "grid-cols-1",
               )}>
                 <RuleEnginePanel
