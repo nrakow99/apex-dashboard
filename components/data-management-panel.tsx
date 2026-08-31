@@ -45,7 +45,7 @@ export function DataManagementPanel({ accounts, trades, payouts, accountCosts }:
       <div className="grid gap-px bg-[var(--hairline)] sm:grid-cols-2 xl:grid-cols-3">
         {checks.map(([label, value]) => <div key={label} className="flex items-center justify-between gap-4 bg-[var(--surface)] px-5 py-4"><span className="text-xs text-[var(--muted)]">{label}</span><span className="font-mono text-sm">{value}</span></div>)}
       </div>
-      <div className="flex flex-col gap-3 border-t border-[var(--hairline)] px-5 py-4 text-xs text-[var(--muted)] sm:flex-row sm:items-center sm:justify-between"><p>{health.issueCount === 0 ? "No structural data issues detected." : `${health.issueCount} review item${health.issueCount === 1 ? "" : "s"} detected. Possible duplicates are candidates, not automatic deletions.`}</p><Button asChild variant="ghost" size="sm"><Link href="/trades">Review trade records</Link></Button></div>
+      <div className="flex flex-col gap-3 border-t border-[var(--hairline)] px-5 py-4 text-xs text-[var(--muted)] sm:flex-row sm:items-center sm:justify-between"><p>{health.issueCount === 0 ? "No structural data issues detected." : `${health.issueCount} review item${health.issueCount === 1 ? "" : "s"} detected. Possible duplicates are candidates, not automatic deletions.`}</p><Button asChild variant="ghost" size="sm"><Link href="/review">Review trade records</Link></Button></div>
     </section>
   )
 }

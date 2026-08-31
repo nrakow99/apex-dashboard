@@ -3,7 +3,7 @@
 import type { ReactNode } from "react"
 import Link from "next/link"
 import { usePathname, useRouter } from "next/navigation"
-import { BookOpen, Crosshair, Layers3, LayoutDashboard, LogOut, Plus, Settings, ShieldAlert, ShieldCheck, WalletCards } from "lucide-react"
+import { BookOpen, Layers3, LayoutDashboard, LogOut, Plus, Settings, ShieldCheck, WalletCards } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { createClient } from "@/lib/supabase/client"
 import { OnboardingGuide } from "@/components/onboarding-guide"
@@ -20,20 +20,11 @@ interface AppShellProps {
 }
 
 const navigation = [
-  { section: "Command", items: [
+  { section: "Operate", items: [
     { href: "/today", label: "Today", icon: LayoutDashboard },
-    { href: "/compliance", label: "Compliance", icon: ShieldAlert },
     { href: "/accounts", label: "Accounts", icon: Layers3 },
-  ] },
-  { section: "Review", items: [
-    { href: "/trades", label: "Trades", icon: BookOpen },
-    { href: "/analytics", label: "Edge", icon: Crosshair },
-  ] },
-  { section: "Capital", items: [
     { href: "/payouts", label: "Payouts", icon: WalletCards },
-  ] },
-  { section: "System", items: [
-    { href: "/settings", label: "Settings", icon: Settings },
+    { href: "/review", label: "Review", icon: BookOpen },
   ] },
 ]
 
@@ -96,6 +87,9 @@ export function AppShell({ eyebrow, title, description, leading, actions, childr
 
         <div className="border-t border-[var(--hairline)] p-4">
           <ThemeToggle showLabel className="mb-1 border-transparent bg-transparent" />
+          <Link href="/settings" className={cn("mb-1 flex h-11 w-full items-center gap-3 rounded-[2px] px-3 text-sm transition-colors", isActivePath(pathname, "/settings") ? "bg-[var(--raised)] text-white" : "text-[var(--muted)] hover:bg-[var(--raised)] hover:text-white")}>
+            <Settings className="h-[17px] w-[17px]" /> Workspace settings
+          </Link>
           <button onClick={signOut} className="flex h-11 w-full items-center gap-3 rounded-[2px] px-3 text-sm text-[var(--muted)] transition-colors hover:bg-[var(--raised)] hover:text-white">
             <LogOut className="h-[17px] w-[17px]" />
             Sign out
@@ -111,6 +105,7 @@ export function AppShell({ eyebrow, title, description, leading, actions, childr
             <ShieldCheck className="h-4 w-4" />
             <span className="text-sm font-semibold">PropDash</span>
             <span className="ml-auto text-[8px] uppercase tracking-[0.16em] text-[var(--muted)]">Payout intelligence</span>
+            <Link href="/settings" aria-label="Workspace settings" className="flex h-8 w-8 items-center justify-center rounded-[2px] border border-[var(--hairline)]"><Settings className="h-3.5 w-3.5" /></Link>
             <ThemeToggle className="h-8 w-8" />
           </div>
           <div className="flex h-12 items-center gap-1 overflow-x-auto border-t border-[var(--hairline)] px-2" aria-label="Mobile navigation">

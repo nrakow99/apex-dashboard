@@ -11,6 +11,7 @@ import { SESSION_LABELS, type SessionId } from "@/lib/sessions"
 import { cn, formatPnL, pnlColorClass } from "@/lib/utils"
 import { DemoDataBanner } from "@/components/demo-data-banner"
 import { scopeDecisionWorkspace } from "@/lib/workspace-scope"
+import { ReviewTabs } from "@/components/review-tabs"
 import { DISPLAY_THRESHOLDS } from "@/lib/display-thresholds"
 
 type Period = "30" | "90" | "all"
@@ -69,7 +70,7 @@ function patternLabel(pattern: EvidencePattern, sessionLabel: (label: string) =>
   return `${label} · ${pattern.dimension}`
 }
 
-export default function AnalyticsPage() {
+export function AnalyticsWorkspace({ reviewMode = false }: { reviewMode?: boolean }) {
   const { accounts, trades, loading, error } = useDashboardData()
   const [accountId, setAccountId] = useState("all")
   const [period, setPeriod] = useState<Period>("90")
@@ -91,12 +92,13 @@ export default function AnalyticsPage() {
   ].filter(Boolean) as string[]
 
   return (
-    <AppShell eyebrow="Decision intelligence" title="Edge" description="See which behaviors deserve more capital—and which patterns are quietly taxing every account." actions={<div className="flex items-center gap-1">{(["30", "90", "all"] as Period[]).map((value) => <button key={value} type="button" onClick={() => setPeriod(value)} className={cn("h-9 rounded-[2px] border px-3 text-xs transition-colors", period === value ? "border-white bg-white text-black" : "border-[var(--hairline)] bg-[var(--raised)] text-[var(--muted)] hover:text-white")}>{value === "all" ? "All time" : `${value} days`}</button>)}</div>}>
+    <AppShell eyebrow={reviewMode ? "Review" : "Decision intelligence"} title={reviewMode ? "Review" : "Edge"} description={reviewMode ? "Bring results in, complete useful context, and turn history into evidence." : "See which behaviors deserve more capital—and which patterns are quietly taxing every account."} actions={<div className="flex items-center gap-1">{(["30", "90", "all"] as Period[]).map((value) => <button key={value} type="button" onClick={() => setPeriod(value)} className={cn("h-9 rounded-[2px] border px-3 text-xs transition-colors", period === value ? "border-white bg-white text-black" : "border-[var(--hairline)] bg-[var(--raised)] text-[var(--muted)] hover:text-white")}>{value === "all" ? "All time" : `${value} days`}</button>)}</div>}>
+      {reviewMode && <ReviewTabs />}
       <DemoDataBanner accounts={accounts} />
       {error && <div role="alert" className="mb-5 border-l-2 border-white bg-[var(--raised)] px-4 py-3 text-sm">Some analytics data could not load: {error}</div>}
       <div className="mb-4 flex flex-col justify-between gap-3 sm:flex-row sm:items-center"><p className="text-xs text-[var(--muted)]">Historical evidence, not a market signal. Mirrored account records remain separate so cross-firm concentration stays visible.</p><select value={accountId} onChange={(event) => setAccountId(event.target.value)} aria-label="Analyze account" className="h-9 min-w-[190px] rounded-[2px] border border-[var(--hairline)] bg-[var(--raised)] px-3 text-xs outline-none"><option value="all">All accounts</option>{workspace.accounts.map((account) => <option key={account.id} value={account.id}>{account.name}</option>)}</select></div>
 
-      {loading ? <div className="border border-[var(--hairline)] bg-[var(--surface)] px-5 py-16 text-center text-sm text-[var(--muted)]">Building your edge brief…</div> : analytics.records === 0 ? <div className="border border-[var(--hairline)] bg-[var(--surface)] px-6 py-16 text-center"><p className="text-base font-medium">No evidence in this view</p><p className="mt-2 text-sm text-[var(--muted)]">Import history or expand the time range. PropDash will not invent an edge without supporting records.</p><Button asChild className="mt-5"><Link href="/trades">Bring in history</Link></Button></div> : <>
+      {loading ? <div className="border border-[var(--hairline)] bg-[var(--surface)] px-5 py-16 text-center text-sm text-[var(--muted)]">Building your edge brief…</div> : analytics.records === 0 ? <div className="border border-[var(--hairline)] bg-[var(--surface)] px-6 py-16 text-center"><p className="text-base font-medium">No evidence in this view</p><p className="mt-2 text-sm text-[var(--muted)]">Import history or expand the time range. PropDash will not invent an edge without supporting records.</p><Button asChild className="mt-5"><Link href="/review">Bring in history</Link></Button></div> : <>
         <section className="mb-6 grid gap-px border border-[var(--hairline)] bg-[var(--hairline)] xl:grid-cols-[1.25fr_1fr_1fr]">
           <div className="bg-[var(--surface)] p-5 sm:p-6">
             <p className="text-[9px] uppercase tracking-[0.17em] text-[var(--faint)]">Evidence-backed strength</p>
@@ -133,4 +135,8 @@ export default function AnalyticsPage() {
       </>}
     </AppShell>
   )
+}
+
+export default function AnalyticsPage() {
+  return <AnalyticsWorkspace />
 }

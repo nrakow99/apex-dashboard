@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react"
 import Link from "next/link"
-import { BookOpen, Command, Crosshair, Layers3, LayoutDashboard, Search, Settings, ShieldAlert, WalletCards } from "lucide-react"
+import { BookOpen, Command, Layers3, LayoutDashboard, Search, Settings, WalletCards } from "lucide-react"
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog"
 import { useDashboardData } from "@/hooks/use-dashboard-data"
 import { cn } from "@/lib/utils"
@@ -10,11 +10,9 @@ import { cn } from "@/lib/utils"
 const destinations = [
   { href: "/today", label: "Today", description: "Daily risk and next actions", icon: LayoutDashboard },
   { href: "/today?log=1", label: "Quick log a trade", description: "Account, symbol, and net P&L", icon: Command },
-  { href: "/compliance", label: "Compliance", description: "Urgent issues and payout blockers", icon: ShieldAlert },
   { href: "/accounts", label: "Accounts", description: "Balances, floors, and account details", icon: Layers3 },
-  { href: "/trades", label: "Trade history", description: "Search, review, and import records", icon: BookOpen },
-  { href: "/analytics", label: "Edge", description: "Behavior, concentration, and proven patterns", icon: Crosshair },
   { href: "/payouts", label: "Payouts", description: "Readiness, scenarios, and ledger", icon: WalletCards },
+  { href: "/review", label: "Review", description: "Trade history, imports, behavior, and Edge", icon: BookOpen },
   { href: "/settings", label: "Settings", description: "Risk defaults, data, and workspace", icon: Settings },
 ]
 

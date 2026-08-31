@@ -21,6 +21,7 @@ import { cn, formatPnL, pnlColorClass } from "@/lib/utils"
 import { DemoDataBanner } from "@/components/demo-data-banner"
 import { ImportBatchHistory } from "@/components/import-batch-history"
 import { scopeDecisionWorkspace } from "@/lib/workspace-scope"
+import { ReviewTabs } from "@/components/review-tabs"
 
 const filters: { value: TradeWorkspaceFilter; label: string }[] = [
   { value: "all", label: "All" },
@@ -34,7 +35,7 @@ function Stat({ label, value, supporting, valueClass }: { label: string; value: 
   return <div className="border border-[var(--hairline)] bg-[var(--surface)] p-4"><p className="text-[9px] uppercase tracking-[0.15em] text-[var(--muted)]">{label}</p><p className={cn("mt-2 font-mono text-xl font-medium", valueClass)}>{value}</p><p className="mt-1 text-[10px] text-[var(--muted)]">{supporting}</p></div>
 }
 
-export default function TradesPage() {
+export function TradesWorkspace({ reviewMode = false }: { reviewMode?: boolean }) {
   const { accounts, trades, userRiskProfile, importBatches, importBatchesAvailable, loading, error, reload, setTrades } = useDashboardData()
   const { toast } = useToast()
   const [accountId, setAccountId] = useState("all")
@@ -93,11 +94,12 @@ export default function TradesPage() {
 
   return (
     <AppShell
-      eyebrow="Journal"
-      title="Trades"
-      description="Search every account record, finish reviews, and keep imported history clean."
+      eyebrow={reviewMode ? "Review" : "Journal"}
+      title={reviewMode ? "Review" : "Trades"}
+      description={reviewMode ? "Bring results in, complete useful context, and turn history into evidence." : "Search every account record, finish reviews, and keep imported history clean."}
       actions={workspace.accounts.length > 0 ? <AddTradeModal accounts={activeAccounts.length ? activeAccounts : workspace.accounts} selectedAccountId={defaultAccountId} userDefaultRiskProfile={userRiskProfile} onAddTrade={handleAdd} /> : <Button asChild><Link href="/accounts">Add an account</Link></Button>}
     >
+      {reviewMode && <ReviewTabs />}
       <DemoDataBanner accounts={accounts} />
       {error && <div role="alert" className="mb-5 border-l-2 border-white bg-[var(--raised)] px-4 py-3 text-sm">Some workspace data could not load: {error}</div>}
 
@@ -150,4 +152,8 @@ export default function TradesPage() {
       <DeleteConfirmationModal open={deleting != null} onOpenChange={(open) => { if (!open) setDeleting(null) }} title="Delete trade record?" description="This permanently removes the record from account metrics and payout calculations." warningText="This action cannot be undone." itemDetails={deleting ? <div className="flex items-center justify-between"><span className="font-mono text-sm">{deleting.symbol} · {deleting.date}</span><span className={cn("font-mono text-sm", pnlColorClass(deleting.pnl))}>{formatPnL(deleting.pnl)}</span></div> : undefined} onConfirm={handleDelete} isDeleting={isDeleting} confirmText="Delete trade" />
     </AppShell>
   )
+}
+
+export default function TradesPage() {
+  return <TradesWorkspace />
 }

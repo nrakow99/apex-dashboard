@@ -71,7 +71,7 @@ export function buildComplianceItems(input: ComplianceInputs): ComplianceItem[] 
       accountName: null,
       title: "Trade history is empty",
       description: "Balances, consistency windows, qualifying days, and payout readiness need real trade records.",
-      href: "/trades",
+      href: "/review",
       action: "Add history",
       rank: 40,
     }))
