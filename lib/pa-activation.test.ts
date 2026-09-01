@@ -3,6 +3,7 @@ import {
   buildEvalToPaConversionUpdates,
   getPaActivationRuleSummary,
 } from "./pa-activation"
+import { getAccountRules } from "./rules"
 import type { Account } from "./types"
 
 // Golden-file coverage for Eval → PA activation across all five firms.
@@ -150,6 +151,22 @@ describe("getPaActivationRuleSummary — every firm renders a summary without th
     const dailyLines = getPaActivationRuleSummary(evalAccount({ firm: "Tradeify" }), "select_daily")
     expect(flexLines.some((l) => l.includes("winning days"))).toBe(true)
     expect(dailyLines.some((l) => l.includes("Daily payout"))).toBe(true)
+  })
+
+  it("renders winning-day copy from non-default resolved values", () => {
+    const lines = getPaActivationRuleSummary(
+      evalAccount({ firm: "Tradeify" }),
+      "select_flex",
+      undefined,
+      (input) => ({
+        ...getAccountRules(input),
+        minProfitDays: 7,
+        winningDayThreshold: 321,
+        payoutMaxPercent: 0.37,
+        payoutAbsoluteCap: 4321,
+      }),
+    )
+    expect(lines).toContain("7 winning days ($321+) · up to 37% of total profit (cap $4,321)")
   })
 
   it("Topstep: standard vs consistency path produce different summary lines and never throw", () => {

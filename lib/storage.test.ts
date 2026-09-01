@@ -517,12 +517,7 @@ describe("Alpha Futures Qualified — MLL does not reset on payout (positive gua
 //      "violated the rule" — hit by every firm/stage using this basis
 //      (Apex PA, Lucid Eval, Tradeify Eval, Topstep XFA-consistency, Alpha
 //      Eval Standard/Advanced, Alpha Qualified Zero/Standard).
-//   2. add-account-modal.tsx passed a literal maxDrawdown: 0 placeholder
-//      into getAccountRules to probe for a computed default, but the
-//      generic "Live" fallback in rules.ts reads account.maxDrawdown back
-//      as ITS default (`?? 2000`) — 0 defeats that `??`, so every firm's
-//      brand-new Live account permanently persisted maxDrawdown: 0.
-//   3. tradeifyLockParams's minimumFloor used the POST-lock breakeven+$100
+//   2. tradeifyLockParams's minimumFloor used the POST-lock breakeven+$100
 //      value instead of the pre-lock trailing minimum (size - maxDrawdown),
 //      so Tradeify Flex/Daily PA accounts read as already-breached from
 //      the moment they're created, before the peak ever reaches the lock
@@ -566,7 +561,7 @@ function freshAccount(firm: Firm, type: AccountType): Account {
 }
 
 const FIRMS: Firm[] = ["Apex", "Lucid", "Tradeify", "Topstep", "Alpha"]
-const TYPES: AccountType[] = ["Eval", "PA", "Live"]
+const TYPES: AccountType[] = ["Eval", "PA"]
 
 describe("Zero-activity fresh account — every firm × every type", () => {
   for (const firm of FIRMS) {

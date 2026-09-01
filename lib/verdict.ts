@@ -181,9 +181,13 @@ function rankEligible(accounts: AccountVerdict[]): AccountVerdict[] {
     .filter((verdict) => verdict.primary === "eligible")
     .sort((a, b) => {
       if (a.tradesOfRoom != null || b.tradesOfRoom != null) {
-        return (b.tradesOfRoom ?? -1) - (a.tradesOfRoom ?? -1)
+        const roomOrder = (b.tradesOfRoom ?? -1) - (a.tradesOfRoom ?? -1)
+        if (roomOrder !== 0) return roomOrder
+      } else {
+        const roomOrder = (b.dollarsOfRoom ?? -1) - (a.dollarsOfRoom ?? -1)
+        if (roomOrder !== 0) return roomOrder
       }
-      return (b.dollarsOfRoom ?? -1) - (a.dollarsOfRoom ?? -1)
+      return a.account.name.localeCompare(b.account.name) || a.account.id.localeCompare(b.account.id)
     })
 
   const ranks = new Map(ranked.map((verdict, index) => [verdict.account.id, index + 1]))
@@ -266,19 +270,23 @@ export function comparePortfolioVerdicts(
     .flatMap((item) => {
       const before = previousById.get(item.account.id)
       if (!before) return []
+      const dollarsOfRoomChange = before.dollarsOfRoom == null || item.dollarsOfRoom == null
+        ? null
+        : item.dollarsOfRoom - before.dollarsOfRoom
+      const tradesOfRoomChange = before.tradesOfRoom == null || item.tradesOfRoom == null
+        ? null
+        : item.tradesOfRoom - before.tradesOfRoom
+      const materiallyChanged = before.primary !== item.primary ||
+        (dollarsOfRoomChange != null && Math.abs(dollarsOfRoomChange) >= 0.01) ||
+        (tradesOfRoomChange != null && tradesOfRoomChange !== 0)
+      if (!materiallyChanged) return []
       return [{
         accountId: item.account.id,
         accountName: item.account.name,
         previous: before.primary,
         current: item.primary,
-        dollarsOfRoomChange:
-          before.dollarsOfRoom == null || item.dollarsOfRoom == null
-            ? null
-            : item.dollarsOfRoom - before.dollarsOfRoom,
-        tradesOfRoomChange:
-          before.tradesOfRoom == null || item.tradesOfRoom == null
-            ? null
-            : item.tradesOfRoom - before.tradesOfRoom,
+        dollarsOfRoomChange,
+        tradesOfRoomChange,
       }]
     })
 }

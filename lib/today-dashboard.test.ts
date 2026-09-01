@@ -65,4 +65,19 @@ describe("buildTodayAccounts", () => {
     expect(row.drawdownPercent).toBeNull()
     expect(row.payoutMissing).toEqual(["Rule configuration required"])
   })
+
+  it("fails an unsupported Live account closed instead of exposing a fabricated drawdown", () => {
+    const [row] = buildTodayAccounts([account({ type: "Live" })], [], [], "2026-08-23")
+    expect(row.rulesAvailable).toBe(false)
+    expect(row.drawdownRemaining).toBeNull()
+    expect(row.dailyRemaining).toBeNull()
+  })
+
+  it("applies a historical result to account room without treating it as today's P&L", () => {
+    const [row] = buildTodayAccounts([account()], [trade({ date: "2026-08-22", pnl: -250 })], [], "2026-08-23")
+    expect(row.todayPnl).toBe(0)
+    expect(row.tradeCountToday).toBe(0)
+    expect(row.drawdownRemaining).toBe(1750)
+    expect(row.dailyRemaining).toBe(1000)
+  })
 })

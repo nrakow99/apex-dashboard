@@ -20,7 +20,8 @@ import {
 import { Loader2 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import type { Account, AccountType, Firm, DrawdownType, TradeifyProgram, TopstepPayoutPath, AlphaTier, InstrumentSpec } from "@/lib/types"
-import { getAccountRules } from "@/lib/rules"
+import { resolveAccountRules } from "@/lib/rules"
+import { initialTradeifyProgram, supportedAccountSizes } from "@/lib/account-config"
 import { defaultTradeifyAccountName } from "@/lib/tradeify-rules"
 import {
   formatAccountBundleHelper,
@@ -30,16 +31,6 @@ import {
 } from "@/lib/account-quantity"
 import { RiskProfileFormFields } from "@/components/risk-profile-fields"
 import { findInstrumentSpec, pointsToTicks, ticksToPoints } from "@/lib/instrument-specs"
-
-const ACCOUNT_SIZES = [25000, 50000, 100000, 150000]
-
-/** Same table as add-account-modal.tsx — keep in sync. 50000 is valid for
- *  every combination, so it's always a safe fallback size. */
-function validSizesFor(firm: Firm, alphaTier: AlphaTier): number[] {
-  if (firm === "Topstep") return [50000, 100000, 150000]
-  if (firm === "Alpha") return alphaTier === "zero" ? [25000, 50000, 100000] : [50000, 100000, 150000]
-  return ACCOUNT_SIZES
-}
 
 function SegmentedControl<T extends string>({
   options,
@@ -124,7 +115,7 @@ export function EditAccountModal({
     maxDrawdown: "",
     dailyLossLimit: "",
     profitTarget: "",
-    program: "select_eval" as TradeifyProgram,
+    program: "select_eval" as TradeifyProgram | "",
     topstepPayoutPath: "standard" as TopstepPayoutPath,
     hasDailyLossLimit: false,
     alphaTier: "standard" as AlphaTier,
@@ -153,9 +144,7 @@ export function EditAccountModal({
         maxDrawdown: account.maxDrawdown.toString(),
         dailyLossLimit: (account.dailyLossLimit ?? "").toString(),
         profitTarget: account.profitTarget?.toString() ?? "",
-        program:
-          account.program ??
-          (account.type === "Eval" ? "select_eval" : "select_flex"),
+        program: initialTradeifyProgram(account) ?? "",
         topstepPayoutPath: account.topstepPayoutPath ?? "standard",
         hasDailyLossLimit: account.hasDailyLossLimit ?? false,
         alphaTier: account.alphaTier ?? "standard",
@@ -189,27 +178,27 @@ export function EditAccountModal({
   const isTopstep = form.firm === "Topstep"
   const isAlpha = form.firm === "Alpha"
   const forcesEod = isTradeify || isTopstep || isAlpha
-  const tradeifyType: AccountType =
-    form.program === "select_eval" ? "Eval" : "PA"
-  const effectiveType = isTradeify ? tradeifyType : form.type
+  const effectiveType = form.type
+  const selectedTradeifyProgram = form.program || null
 
   // Render-safe clamp: never let a stale accountSize from a previous
   // firm/tier reach getAccountRules (Topstep throws below 50K, Alpha Zero
   // throws above 100K) — the useEffect below settles form.accountSize
   // itself, but this guards the render that happens before that effect runs.
-  const validSizes = validSizesFor(form.firm, form.alphaTier)
+  const validSizes = supportedAccountSizes(form.firm, form.alphaTier)
   const effectiveAccountSize = validSizes.includes(form.accountSize) ? form.accountSize : 50000
 
-  const rules = getAccountRules({
+  const ruleResolution = resolveAccountRules({
     firm: form.firm,
     type: effectiveType,
     drawdownType: forcesEod ? "EOD" : form.drawdownType,
     accountSize: effectiveAccountSize,
-    program: isTradeify ? form.program : undefined,
+    program: isTradeify ? selectedTradeifyProgram : undefined,
     hasDailyLossLimit: isTopstep ? form.hasDailyLossLimit : undefined,
     topstepPayoutPath: isTopstep ? form.topstepPayoutPath : undefined,
     alphaTier: isAlpha ? form.alphaTier : undefined,
   })
+  const rules = ruleResolution.supported ? ruleResolution.rules : null
 
   useEffect(() => {
     if (forcesEod && form.drawdownType === "Intraday") {
@@ -218,7 +207,7 @@ export function EditAccountModal({
   }, [forcesEod, form.drawdownType])
 
   useEffect(() => {
-    if (!validSizesFor(form.firm, form.alphaTier).includes(form.accountSize)) {
+    if (!supportedAccountSizes(form.firm, form.alphaTier).includes(form.accountSize)) {
       setForm((f) => ({ ...f, accountSize: 50000 }))
     }
   }, [form.firm, form.alphaTier, form.accountSize])
@@ -246,9 +235,9 @@ export function EditAccountModal({
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    if (!account || riskOverrideIncomplete) return
+    if (!account || riskOverrideIncomplete || !rules) return
     await onSave(account.id, {
-      name: form.name || (isTradeify ? defaultTradeifyAccountName(effectiveAccountSize, form.program) : form.name),
+      name: form.name || (isTradeify ? defaultTradeifyAccountName(effectiveAccountSize, selectedTradeifyProgram!) : form.name),
       firm: form.firm,
       type: effectiveType,
       status: form.status,
@@ -264,7 +253,7 @@ export function EditAccountModal({
           : effectiveType === "Eval" && rules.hasProfitTarget
             ? rules.profitTarget
             : null,
-      program: isTradeify ? form.program : null,
+      program: isTradeify ? selectedTradeifyProgram : null,
       // Always send the current form value (not conditionally omitted) so a
       // save always round-trips these fields — including firm switches away
       // from Topstep/Alpha, which correctly clears them via null/false.
@@ -311,6 +300,7 @@ export function EditAccountModal({
                 setForm((f) => ({
                   ...f,
                   firm: v,
+                  type: v === "Tradeify" ? "Eval" : f.type,
                   drawdownType: v === "Apex" ? f.drawdownType : "EOD",
                   program: v === "Tradeify" ? "select_eval" : f.program,
                 }))
@@ -348,11 +338,15 @@ export function EditAccountModal({
               <Label>Program</Label>
               <Select
                 value={form.program}
-                onValueChange={(v) => set("program", v as TradeifyProgram)}
+                onValueChange={(v) => setForm((current) => ({
+                  ...current,
+                  program: v as TradeifyProgram,
+                  type: v === "select_eval" ? "Eval" : "PA",
+                }))}
                 disabled={isSaving}
               >
                 <SelectTrigger className="bg-background h-9">
-                  <SelectValue />
+                  <SelectValue placeholder="Choose a supported program" />
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="select_eval">Select Evaluation</SelectItem>
@@ -371,7 +365,7 @@ export function EditAccountModal({
                   <SelectContent>
                     <SelectItem value="Eval">Eval</SelectItem>
                     <SelectItem value="PA">PA / Funded</SelectItem>
-                    <SelectItem value="Live">Live</SelectItem>
+                    {form.type === "Live" && <SelectItem value="Live" disabled>Live (rules unsupported)</SelectItem>}
                   </SelectContent>
                 </Select>
               </div>
@@ -470,7 +464,7 @@ export function EditAccountModal({
           )}
 
           {/* Topstep: payout path (funded stage only) + DLL election (either stage) */}
-          {isTopstep && (
+          {isTopstep && rules && (
             <>
               {effectiveType === "PA" && (
                 <div className="space-y-2">
@@ -520,7 +514,7 @@ export function EditAccountModal({
                 disabled={isSaving}
               />
             </div>
-            {rules.hasDLL && (
+            {rules?.hasDLL && (
               <div className="space-y-2">
                 <Label>Daily Loss Limit ($)</Label>
                 <Input
@@ -582,7 +576,8 @@ export function EditAccountModal({
             <Button type="button" variant="ghost" onClick={() => onOpenChange(false)} disabled={isSaving}>
               Cancel
             </Button>
-            <Button type="submit" disabled={isSaving || riskOverrideIncomplete}>
+            {!ruleResolution.supported && <p className="mr-auto text-xs text-[var(--muted)]">{ruleResolution.reason} Choose a verified account type to continue.</p>}
+            <Button type="submit" disabled={isSaving || riskOverrideIncomplete || !rules}>
               {isSaving ? <><Loader2 className="h-4 w-4 mr-2 animate-spin" />Saving...</> : "Save Changes"}
             </Button>
           </div>

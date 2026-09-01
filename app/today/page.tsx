@@ -21,6 +21,7 @@ import { buildTodayAccounts } from "@/lib/today-dashboard"
 import { buildComplianceItems } from "@/lib/compliance-center"
 import { scopeDecisionWorkspace } from "@/lib/workspace-scope"
 import { buildPortfolioVerdict, comparePortfolioVerdicts, type VerdictDelta, verdictLabel } from "@/lib/verdict"
+import { saveAccountTrades } from "@/lib/today-trade-save"
 
 export default function TodayPage() {
   return <Suspense fallback={null}><TodayContent /></Suspense>
@@ -37,16 +38,20 @@ function TodayContent() {
   const [deltas, setDeltas] = useState<VerdictDelta[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [tradeSaveNotice, setTradeSaveNotice] = useState<string | null>(null)
 
-  const load = useCallback(async () => {
+  const load = useCallback(async (options?: { preserveOnFailure?: boolean }) => {
     setLoading(true)
     setError(null)
     const [accountResult, tradeResult, payoutResult, specsResult, settingsResult] = await Promise.all([
       fetchAccounts(), fetchTrades(), fetchPayouts(), fetchInstrumentSpecs(), fetchUserSettings(),
     ])
     const failure = accountResult.error ?? tradeResult.error ?? payoutResult.error
-    if (failure) setError(failure.message)
-    else {
+    if (failure) {
+      if (!options?.preserveOnFailure) setError(failure.message)
+      setLoading(false)
+      return false
+    } else {
       setAccounts(accountResult.data ?? [])
       setTrades(tradeResult.data ?? [])
       setPayouts(payoutResult.data ?? [])
@@ -54,6 +59,7 @@ function TodayContent() {
       setUserRiskProfile(settingsResult.data ?? null)
     }
     setLoading(false)
+    return true
   }, [])
 
   useEffect(() => { void load() }, [load])
@@ -70,16 +76,26 @@ function TodayContent() {
   const quickLogAccountId = verdict.accounts.filter((item) => item.primary === "eligible").sort((a, b) => (a.rank ?? 999) - (b.rank ?? 999))[0]?.account.id ?? workspace.accounts[0]?.id ?? ""
 
   const addTrade = async (trade: { date: string; symbol: string; pnl: number; notes?: string }, meta: TradeMeta, accountIds: string[]) => {
-    const results = await Promise.all(accountIds.map((accountId) => createTrade({ ...trade, accountId }, meta)))
-    const inserted = results.flatMap((result) => result.data ? [result.data] : [])
-    if (inserted.length > 0) {
+    setTradeSaveNotice(null)
+    const result = await saveAccountTrades<Trade>({
+      accountIds,
+      create: (accountId) => createTrade({ ...trade, accountId }, meta),
+      applyInserted: (inserted) => {
       const nextTrades = [...workspace.trades, ...inserted]
       const nextRows = buildTodayAccounts(workspace.accounts, nextTrades, workspace.payouts, today)
       const nextCompliance = buildComplianceItems({ accounts: workspace.accounts, trades: nextTrades, payouts: workspace.payouts, instrumentSpecs, userRiskProfile })
       const nextVerdict = buildPortfolioVerdict({ rows: nextRows, complianceItems: nextCompliance, instrumentSpecs, userRiskProfile })
       setDeltas(comparePortfolioVerdicts(verdict, nextVerdict, inserted.map((item) => item.accountId)))
-    }
-    await load()
+      setTrades((current) => [...current, ...inserted])
+      },
+      reload: () => load({ preserveOnFailure: true }),
+    })
+    const failedNames = result.failedAccountIds.map((id) => workspace.accounts.find((account) => account.id === id)?.name ?? id)
+    const messages = []
+    if (failedNames.length) messages.push(`Not saved: ${failedNames.join(", ")}. Only these accounts remain selected for retry.`)
+    if (!result.reloadSucceeded) messages.push("Saved trades remain applied locally, but fresh account data could not be loaded.")
+    setTradeSaveNotice(messages.join(" ") || null)
+    return { failedAccountIds: result.failedAccountIds }
   }
 
   return <AppShell
@@ -92,6 +108,7 @@ function TodayContent() {
     </>}
   >
     <DemoDataBanner accounts={accounts} />
+    {tradeSaveNotice && <div role="status" className="mb-5 border-l-2 border-white bg-[var(--raised)] px-4 py-3 text-sm">{tradeSaveNotice}</div>}
     {error ? <Card className="rounded-[2px] border-[var(--hairline)] bg-[var(--surface)] p-6"><p className="text-sm">Today’s account data is unavailable.</p><p className="mt-1 text-xs text-[var(--muted)]">{error}</p></Card> : loading ? <p className="text-sm text-[var(--muted)]">Building today’s verdict…</p> : <>
       <PortfolioVerdictPanel verdict={verdict} />
       <VerdictDeltaPanel deltas={deltas} onDismiss={() => setDeltas([])} />

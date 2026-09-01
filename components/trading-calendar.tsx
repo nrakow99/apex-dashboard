@@ -7,8 +7,7 @@ import { Button } from "@/components/ui/button"
 import { ChevronLeft, ChevronRight, X, Star } from "lucide-react"
 import { cn, formatPnL } from "@/lib/utils"
 import type { Account, DailyPnL, Trade } from "@/lib/types"
-import { getAccountRules, resolveTradeifyProgram } from "@/lib/rules"
-import { getRuleStartingBalance } from "@/lib/account-quantity"
+import { buildCalendarRuleState } from "@/lib/calendar-rule-state"
 import { buildMetaMapFromTrades, DIRECTION_LABELS, type TradeMeta } from "@/lib/trade-meta"
 import { resolveSession, SESSION_LABELS } from "@/lib/sessions"
 import { buildTradingCalendarWeeks } from "@/lib/trading-calendar-weeks"
@@ -35,51 +34,9 @@ export function TradingCalendar({ account, dailyData, trades }: TradingCalendarP
     [trades],
   )
 
-  const rules = getAccountRules(account)
-  const tradeifyProgram = resolveTradeifyProgram(account)
-  const isTradeifyFlex = account.firm === "Tradeify" && tradeifyProgram === "select_flex"
-  const isTradeifyEval =
-    account.firm === "Tradeify" &&
-    (tradeifyProgram === "select_eval" || account.type === "Eval")
-  const consistencyPercent = rules.consistencyPercent
-
-  const isEvalAccount = account.type === "Eval"
-  const showQualifyingStars =
-    !isEvalAccount &&
-    ((account.firm === "Apex" &&
-      rules.hasPayouts &&
-      rules.minProfitDays > 0 &&
-      rules.minDailyProfit > 0) ||
-      (account.firm === "Lucid" &&
-        account.type === "PA" &&
-        rules.hasPayouts &&
-        rules.minProfitDays > 0) ||
-      isTradeifyFlex)
-  const minQualifyingProfit = isTradeifyFlex
-    ? rules.winningDayThreshold
-    : rules.minDailyProfit
-
-  const tradeifyConsistencyWarnDates = useMemo(() => {
-    if (!isTradeifyEval) return new Set<string>()
-    const consistencyFraction = consistencyPercent / 100
-    if (consistencyFraction <= 0) return new Set<string>()
-    const sorted = [...dailyData].sort((a, b) => a.date.localeCompare(b.date))
-    let cumulative = 0
-    const warn = new Set<string>()
-    for (const d of sorted) {
-      cumulative += d.pnl
-      if (cumulative > 0 && d.pnl > 0 && d.pnl > cumulative * consistencyFraction) {
-        warn.add(d.date)
-      }
-    }
-    return warn
-  }, [consistencyPercent, dailyData, isTradeifyEval])
-
-  const startingBalance = getRuleStartingBalance(account)
-  const bufferLine =
-    account.firm === "Tradeify" && tradeifyProgram === "select_daily"
-      ? startingBalance + rules.bufferAmount
-      : 0
+  const calendarRuleState = useMemo(() => buildCalendarRuleState(account, dailyData), [account, dailyData])
+  const { rules, tradeifyProgram, isTradeifyEval, showQualifyingStars, minQualifyingProfit, bufferLine } = calendarRuleState
+  const tradeifyConsistencyWarnDates = calendarRuleState.consistencyWarnDates
 
   const formatDateKey = (year: number, month: number, day: number) => {
     return `${year}-${String(month + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}`

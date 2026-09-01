@@ -10,6 +10,15 @@ export type ActivationStats = {
   isSafe: boolean
 }
 
+export function formatWinningDayPayoutRule(rules: {
+  minProfitDays: number
+  winningDayThreshold: number
+  payoutMaxPercent: number
+  payoutAbsoluteCap: number
+}, basis: string): string {
+  return `${rules.minProfitDays} winning days ($${rules.winningDayThreshold}+) · up to ${Math.round(rules.payoutMaxPercent * 100)}% of ${basis} (cap $${rules.payoutAbsoluteCap.toLocaleString()})`
+}
+
 /** Stats used for eval pass / Activate PA eligibility (matches dashboard intraday manual drawdown display). */
 export function getEvalActivationStats(
   account: Account,
@@ -146,10 +155,11 @@ export function getPaActivationRuleSummary(
   evalAccount: Account,
   tradeifyProgram?: "select_flex" | "select_daily",
   topstepPayoutPath?: TopstepPayoutPath,
+  resolveRules: typeof getAccountRules = getAccountRules,
 ): string[] {
   const rulesInput = paActivationRulesInput(evalAccount, tradeifyProgram, topstepPayoutPath)
   const program = rulesInput.program
-  const paRules = getAccountRules(rulesInput)
+  const paRules = resolveRules(rulesInput)
   const lines: string[] = [
     `Max drawdown: $${paRules.maxDrawdown.toLocaleString()}`,
   ]
@@ -167,9 +177,7 @@ export function getPaActivationRuleSummary(
       )
     }
     if (evalAccount.firm === "Tradeify" && program === "select_flex") {
-      lines.push(
-        `5 winning days ($${paRules.winningDayThreshold}+) · up to 50% of total profit (cap $${paRules.payoutAbsoluteCap.toLocaleString()})`,
-      )
+      lines.push(formatWinningDayPayoutRule(paRules, "total profit"))
       lines.push("No minimum balance to request payout")
     }
     if (evalAccount.firm === "Tradeify" && program === "select_daily") {
@@ -180,13 +188,11 @@ export function getPaActivationRuleSummary(
     }
     if (evalAccount.firm === "Topstep" && rulesInput.topstepPayoutPath === "consistency") {
       lines.push(
-        `Consistency path: ${paRules.minTradingDays} trading days · ${paRules.consistencyPercent}% consistency rule · up to 50% of balance (cap $${paRules.payoutAbsoluteCap.toLocaleString()})`,
+        `Consistency path: ${paRules.minTradingDays} trading days · ${paRules.consistencyPercent}% consistency rule · up to ${Math.round(paRules.payoutMaxPercent * 100)}% of balance (cap $${paRules.payoutAbsoluteCap.toLocaleString()})`,
       )
     }
     if (evalAccount.firm === "Topstep" && rulesInput.topstepPayoutPath !== "consistency") {
-      lines.push(
-        `Standard path: ${paRules.minProfitDays} winning days ($${paRules.winningDayThreshold}+) · up to 50% of balance (cap $${paRules.payoutAbsoluteCap.toLocaleString()})`,
-      )
+      lines.push(`Standard path: ${formatWinningDayPayoutRule(paRules, "balance")}`)
     }
     if (evalAccount.firm === "Alpha") {
       lines.push(

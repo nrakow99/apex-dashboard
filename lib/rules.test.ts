@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest"
-import { getAccountRules, resolveTradeifyProgram } from "./rules"
+import { getAccountRules, resolveAccountRules, resolveTradeifyProgram } from "./rules"
 import { toTopstepSizeKey, TOPSTEP_XFA_BASE_PAYOUT_CAP, topstepXfaPayoutCap } from "./topstep-rules"
 import { toAlphaZeroSizeKey, toAlphaMidSizeKey } from "./alpha-futures-rules"
 import type { Firm, AccountType, DrawdownType } from "./types"
@@ -68,6 +68,27 @@ const acct = (
   accountSize: number,
   extra: Record<string, unknown> = {},
 ) => ({ firm, type, drawdownType, accountSize, ...extra }) as Parameters<typeof getAccountRules>[0]
+
+describe("unsupported account stages fail closed", () => {
+  it("never fabricates Live rules for any firm", () => {
+    for (const firm of ["Apex", "Lucid", "Tradeify", "Topstep", "Alpha"] as Firm[]) {
+      expect(() => getAccountRules(acct(firm, "Live", "EOD", 50000, {
+        program: firm === "Tradeify" ? "select_flex" : undefined,
+        alphaTier: firm === "Alpha" ? "standard" : undefined,
+      }))).toThrow(/do not have a verified rule configuration/)
+    }
+  })
+
+  it("returns an explicit unsupported resolution for Live and invalid sizes", () => {
+    expect(resolveAccountRules(acct("Apex", "Live", "EOD", 50000))).toMatchObject({ supported: false })
+    expect(resolveAccountRules(acct("Topstep", "Eval", "EOD", 25000))).toMatchObject({ supported: false })
+  })
+
+  it("does not swallow unexpected rule resolver exceptions", () => {
+    const unexpected = new TypeError("broken rule table")
+    expect(() => resolveAccountRules(acct("Apex", "Eval", "EOD", 50000), () => { throw unexpected })).toThrow(unexpected)
+  })
+})
 
 describe("Apex — Eval", () => {
   it("intraday 50K", () => {

@@ -755,7 +755,7 @@ export function getPayoutEligibility(
         missingConditions.push(
           topstepConsistencyInfo.totalProfit <= 0
             ? "No net profit"
-            : "Largest day exceeds 40% of total profit",
+            : `Largest day exceeds ${rules.consistencyPercent}% of total profit`,
         )
       }
     }
@@ -906,7 +906,7 @@ export function getPayoutEligibility(
       if (consistencyInfo.totalProfit <= 0) {
         missingConditions.push("No net profits since last payout")
       } else {
-        missingConditions.push("Largest day exceeds 50% of total profit")
+        missingConditions.push(`Largest day exceeds ${rules.consistencyPercent}% of total profit`)
       }
     } else if (consistencyInfo.additionalProfitNeeded > 0) {
       missingConditions.push(

@@ -24,6 +24,10 @@ import {
 import { TradeFormBody } from "@/components/trade-form-body"
 import { format } from "date-fns"
 
+export interface AddTradeSubmissionResult {
+  failedAccountIds: string[]
+}
+
 /** Parse a YYYY-MM-DD string as local midnight (avoids UTC day-shift). */
 function parseDateStr(dateStr: string): Date {
   const [y, m, d] = dateStr.split("-").map(Number)
@@ -43,7 +47,7 @@ interface AddTradeModalProps {
     trade: { date: string; symbol: string; pnl: number; notes?: string },
     meta: TradeMeta,
     accountIds: string[],
-  ) => void | Promise<void>
+  ) => void | AddTradeSubmissionResult | Promise<void | AddTradeSubmissionResult>
   requestedOpen?: boolean
   onOpenChange?: (open: boolean) => void
 }
@@ -83,6 +87,7 @@ export function AddTradeModal({
   const [accountIds, setAccountIds] = useState<string[]>(
     selectedAccountId ? [selectedAccountId] : [],
   )
+  const [saveNotice, setSaveNotice] = useState<string | null>(null)
 
   const toggleDiscipline = (tag: DisciplineTag) => {
     setMeta((prev) => {
@@ -110,7 +115,8 @@ export function AddTradeModal({
     if (formData.pnl.trim() === "" || !Number.isFinite(parsedPnl)) return
     setSaving(true)
     try {
-      await onAddTrade(
+      setSaveNotice(null)
+      const result = await onAddTrade(
         {
           date: formData.date,
           symbol: formData.symbol.trim().toUpperCase(),
@@ -120,6 +126,12 @@ export function AddTradeModal({
         meta,
         accountIds,
       )
+      if (result?.failedAccountIds.length) {
+        const failedNames = result.failedAccountIds.map((id) => accounts.find((account) => account.id === id)?.name ?? id)
+        setAccountIds(result.failedAccountIds)
+        setSaveNotice(`Saved accounts were removed from this retry. Still failed: ${failedNames.join(", ")}.`)
+        return
+      }
       if (typeof window !== "undefined") {
         window.localStorage.setItem("propdash:last-trade-symbol", formData.symbol.trim().toUpperCase())
       }
@@ -154,6 +166,7 @@ export function AddTradeModal({
           const initial = selectedAccountId ? [selectedAccountId] : []
           setFormData((prev) => ({ ...prev, accountId: selectedAccountId }))
           setAccountIds(initial)
+          setSaveNotice(null)
         }
         if (isOpen && typeof window !== "undefined") {
           const rememberedSymbol = window.localStorage.getItem("propdash:last-trade-symbol")
@@ -177,6 +190,7 @@ export function AddTradeModal({
         </div>
 
         <form id="add-trade-form" onSubmit={handleSubmit} className={TRADE_MODAL_FORM}>
+          {saveNotice && <div role="status" className="border-l-2 border-white bg-[var(--raised)] px-3 py-2 text-xs">{saveNotice}</div>}
           <TradeFormBody
             formData={formData}
             setFormData={setFormData}

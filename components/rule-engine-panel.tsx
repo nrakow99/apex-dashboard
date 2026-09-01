@@ -16,7 +16,7 @@ import {
   getRuleEngineFloorRowLabel,
 } from "@/lib/floor-display-labels"
 import { getApexPaScalingTier } from "@/lib/apex-pa-scaling"
-import { DISPLAY_THRESHOLDS } from "@/lib/display-thresholds"
+import { deriveRuleStatus } from "@/lib/rule-status"
 import { CheckCircle2, AlertTriangle } from "lucide-react"
 
 interface AccountStats {
@@ -190,26 +190,13 @@ export function RuleEnginePanel({
     account.firm === "Apex" && account.type === "PA" && apexPaScaling
       ? apexPaScaling.dailyLossLimit
       : rules.dailyLossLimit
-  const dailyLossRemaining = effectiveDll + Math.min(0, todayPnL)
-  const dailyLossStatus: "good" | "warning" | "danger" =
-    !rules.hasDLL
-      ? "good"
-      : todayPnL >= -effectiveDll * (1 - DISPLAY_THRESHOLDS.dailyLossGoodRemainingFraction)
-        ? "good"
-        : todayPnL >= -effectiveDll
-          ? "warning"
-          : "danger"
-
-  // Drawdown / floor
-  const drawdownPercent = rules.maxDrawdown > 0
-    ? (stats.drawdownRemaining / rules.maxDrawdown) * 100
-    : 0
-  const drawdownStatus: "good" | "warning" | "danger" =
-    drawdownPercent > DISPLAY_THRESHOLDS.drawdownGoodRemainingFraction * 100
-      ? "good"
-      : drawdownPercent > DISPLAY_THRESHOLDS.drawdownWarningRemainingFraction * 100
-        ? "warning"
-        : "danger"
+  const { dailyLossRemaining, dailyLossStatus, drawdownPercent, drawdownStatus } = deriveRuleStatus({
+    hasDailyLossLimit: rules.hasDLL,
+    dailyLossLimit: effectiveDll,
+    todayPnl: todayPnL,
+    maxDrawdown: rules.maxDrawdown,
+    drawdownRemaining: stats.drawdownRemaining,
+  })
 
   const firmLabel = account.firm
   const hasConsistencyActivity = stats.tradingDays > 0

@@ -21,6 +21,11 @@ import {
   toAlphaMidSizeKey,
   alphaMllFloor,
 } from "./alpha-futures-rules"
+import {
+  assertSupportedAccountConfiguration,
+  inferLegacyTradeifyProgram,
+  UnsupportedAccountConfigurationError,
+} from "./account-config"
 
 export interface AccountRules {
   // Drawdown
@@ -194,10 +199,7 @@ export function resolveTradeifyProgram(account: {
 }): TradeifyProgram | null {
   if (account.firm !== "Tradeify") return null
   if (account.program) return account.program
-  if (account.type === "Eval") return "select_eval"
-  // Legacy funded rows: infer Daily from DLL, else Flex
-  if ((account.dailyLossLimit ?? 0) > 0) return "select_daily"
-  return "select_flex"
+  return inferLegacyTradeifyProgram(account)
 }
 
 export function getAccountRules(account: {
@@ -214,6 +216,7 @@ export function getAccountRules(account: {
   topstepPayoutPath?: TopstepPayoutPath | null
   alphaTier?: AlphaTier | null
 }): AccountRules {
+  assertSupportedAccountConfiguration(account)
   const firm = account.firm ?? "Apex"
 
   const base: AccountRules = {
@@ -677,12 +680,26 @@ export function getAccountRules(account: {
     }
   }
 
-  // ── Live / fallback ───────────────────────────────────────────────────────
-  return {
-    ...base,
-    maxDrawdown: account.maxDrawdown ?? 2000,
-    hasDLL: account.dailyLossLimit != null && account.dailyLossLimit > 0,
-    dailyLossLimit: account.dailyLossLimit ?? 0,
+  // Validation above rejects every expected unsupported configuration.
+  // Reaching this point means a supported branch is missing or malformed.
+  throw new Error(`Rule resolution reached an unexpected state for ${firm} ${account.type}.`)
+}
+
+export type AccountRulesResolution =
+  | { supported: true; rules: AccountRules }
+  | { supported: false; reason: string }
+
+export function resolveAccountRules(
+  account: Parameters<typeof getAccountRules>[0],
+  resolver: typeof getAccountRules = getAccountRules,
+): AccountRulesResolution {
+  try {
+    return { supported: true, rules: resolver(account) }
+  } catch (error) {
+    if (error instanceof UnsupportedAccountConfigurationError) {
+      return { supported: false, reason: error.message }
+    }
+    throw error
   }
 }
 

@@ -131,6 +131,23 @@ describe("buildPortfolioVerdict", () => {
     expect(result.accounts.find((item) => item.account.id === "smaller")?.rank).toBe(2)
   })
 
+  it("breaks equal-room ties by account name and then id", () => {
+    const result = buildPortfolioVerdict({
+      rows: [row("z", { account: account("z", { name: "Zulu" }) }), row("a", { account: account("a", { name: "Alpha" }) })],
+      complianceItems: [], instrumentSpecs: [spec], userRiskProfile: profile,
+    })
+    expect(result.accounts.find((item) => item.account.id === "a")?.rank).toBe(1)
+    expect(result.accounts.find((item) => item.account.id === "z")?.rank).toBe(2)
+  })
+
+  it("keeps a breached payout-ready account blocked", () => {
+    const result = buildPortfolioVerdict({
+      rows: [row("both", { breached: true, payoutReady: true })],
+      complianceItems: [], instrumentSpecs: [spec], userRiskProfile: profile,
+    })
+    expect(result.accounts[0].primary).toBe("blocked")
+  })
+
   it("carries consistency as a constraint instead of an exclusive verdict", () => {
     const result = buildPortfolioVerdict({
       rows: [row("watch")],
@@ -164,5 +181,11 @@ describe("comparePortfolioVerdicts", () => {
       dollarsOfRoomChange: -500,
       tradesOfRoomChange: -2,
     })])
+  })
+
+  it("omits delta rows when classification and displayed headroom did not materially change", () => {
+    const before = buildPortfolioVerdict({ rows: [row("a")], complianceItems: [], instrumentSpecs: [spec], userRiskProfile: profile })
+    const after = buildPortfolioVerdict({ rows: [row("a", { drawdownRemaining: 1600.001 })], complianceItems: [], instrumentSpecs: [spec], userRiskProfile: profile })
+    expect(comparePortfolioVerdicts(before, after, ["a"])).toEqual([])
   })
 })

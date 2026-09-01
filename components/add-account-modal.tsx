@@ -21,6 +21,7 @@ import {
 import { Plus } from "lucide-react"
 import type { Account, AccountType, Firm, DrawdownType, TradeifyProgram, TopstepPayoutPath, AlphaTier } from "@/lib/types"
 import { getAccountRules } from "@/lib/rules"
+import { supportedAccountSizes } from "@/lib/account-config"
 import { defaultTradeifyAccountName } from "@/lib/tradeify-rules"
 import {
   formatAccountBundleHelper,
@@ -33,17 +34,6 @@ interface AddAccountModalProps {
   onAddAccount: (account: Omit<Account, "id">) => void
   requestedOpen?: boolean
   onOpenChange?: (open: boolean) => void
-}
-
-const ACCOUNT_SIZES = [25000, 50000, 100000, 150000]
-
-/** Every firm/tier's valid account sizes — drives the Account Size dropdown.
- *  50000 is valid for every combination below, so it's always a safe
- *  fallback when a firm/tier switch invalidates the currently selected size. */
-function validSizesFor(firm: Firm, alphaTier: AlphaTier): number[] {
-  if (firm === "Topstep") return [50000, 100000, 150000]
-  if (firm === "Alpha") return alphaTier === "zero" ? [25000, 50000, 100000] : [50000, 100000, 150000]
-  return ACCOUNT_SIZES
 }
 
 function SegmentedControl<T extends string>({
@@ -105,7 +95,7 @@ export function AddAccountModal({ onAddAccount, requestedOpen = false, onOpenCha
   // reach getAccountRules (e.g. Topstep throws below 50K, Alpha Zero throws
   // above 100K) — the useEffect below settles form.accountSize itself, but
   // this guards the render that happens before that effect runs.
-  const validSizes = validSizesFor(form.firm, form.alphaTier)
+  const validSizes = supportedAccountSizes(form.firm, form.alphaTier)
   const effectiveAccountSize = validSizes.includes(form.accountSize) ? form.accountSize : 50000
 
   const rules = getAccountRules({
@@ -117,14 +107,8 @@ export function AddAccountModal({ onAddAccount, requestedOpen = false, onOpenCha
     hasDailyLossLimit: isTopstep ? form.hasDailyLossLimit : undefined,
     topstepPayoutPath: isTopstep ? form.topstepPayoutPath : undefined,
     alphaTier: isAlpha ? form.alphaTier : undefined,
-    // Deliberately NOT passing maxDrawdown/dailyLossLimit: every firm/type
-    // with a real rule table ignores these inputs entirely, but the generic
-    // "Live" fallback in getAccountRules reads account.maxDrawdown back as
-    // its own default (`?? 2000`). Passing a literal 0 here — instead of
-    // just omitting the field — used to defeat that `??` (0 is not
-    // null/undefined) and permanently persist maxDrawdown: 0 on every new
-    // Live account, which then reads as a breached account with a 0/0
-    // drawdown bar from the moment it's created.
+    // Deliberately omit stored rule fields. Verified configurations resolve
+    // from the domain tables; unsupported configurations fail closed.
   })
 
   useEffect(() => {
@@ -134,7 +118,7 @@ export function AddAccountModal({ onAddAccount, requestedOpen = false, onOpenCha
   }, [forcesEod, form.drawdownType])
 
   useEffect(() => {
-    if (!validSizesFor(form.firm, form.alphaTier).includes(form.accountSize)) {
+    if (!supportedAccountSizes(form.firm, form.alphaTier).includes(form.accountSize)) {
       setForm((f) => ({ ...f, accountSize: 50000 }))
     }
   }, [form.firm, form.alphaTier, form.accountSize])
@@ -253,7 +237,6 @@ export function AddAccountModal({ onAddAccount, requestedOpen = false, onOpenCha
                 options={[
                   { value: "Eval", label: "Eval" },
                   { value: "PA", label: "PA / Funded" },
-                  { value: "Live", label: "Live" },
                 ]}
                 value={form.type}
                 onChange={(v) => set("type", v)}
